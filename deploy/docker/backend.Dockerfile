@@ -13,7 +13,13 @@ WORKDIR /app
 
 COPY backend/pyproject.toml backend/uv.lock ./
 ARG UV_DEFAULT_INDEX_URL=https://pypi.org/simple
-RUN sed -i "s|https://pypi.org/simple|$UV_DEFAULT_INDEX_URL|g" uv.lock && \
+RUN if [ "$UV_DEFAULT_INDEX_URL" != "https://pypi.org/simple" ]; then \
+      mirror_base="${UV_DEFAULT_INDEX_URL%/simple}"; \
+      sed -i \
+        -e "s|https://pypi.org/simple|$UV_DEFAULT_INDEX_URL|g" \
+        -e "s|https://files.pythonhosted.org|$mirror_base|g" \
+        uv.lock; \
+    fi && \
     uv sync --default-index "$UV_DEFAULT_INDEX_URL" --frozen --no-dev --no-install-project
 
 COPY backend/ ./
