@@ -4,7 +4,7 @@
 
 ## 当前范围
 
-Phase 1 已交付可运行的 Monorepo 基础框架。Phase 2 已完成荣耀俱乐部公开页面的低频采集 PoC 和 2 页/20 帖门禁。Phase 3 已实现京东评价 PoC 的失败关闭框架、版本映射、持久化、命令、API、前端和离线测试，但当前正常页面出现登录墙，真实商品/店铺/接口验证与真实数据序列尚未通过。
+Phase 1 已交付可运行的 Monorepo 基础框架。Phase 2 已完成荣耀俱乐部公开页面的低频采集 PoC 和 2 页/20 帖门禁。Phase 3 京东评价采集因外部访问限制正式标记为 **POSTPONED**：已有失败关闭框架和探测能力会保留，但第一版不再依赖京东数据。当前开始 Phase 4 荣耀俱乐部数据治理与样本扩容。
 
 当前不包含登录/验证码或反爬绕过、AI 模型调用、Embedding/聚类、RAG、正式评分、付费权限和 Kubernetes。未现场验证的京东 endpoint 会明确失败，不生成虚假反馈或分析结果。
 
@@ -186,7 +186,7 @@ npm run build
 
 ## 后续路线
 
-荣耀俱乐部 Phase 2 结果见 [荣耀 PoC](docs/honor-club-poc.md)，京东探测、停止原因和未验证项见 [京东 PoC](docs/jd-poc.md)。真实京东样本经人工确认后，下一阶段是 Phase 4 数据清洗与治理；确认前不要开始 AI。完整阶段见 [路线图](docs/roadmap.md)。
+荣耀俱乐部 Phase 2 结果见 [荣耀 PoC](docs/honor-club-poc.md)，京东停止原因和未验证项见 [京东 PoC](docs/jd-poc.md)，可视浏览器证据见 [京东评价接口发现报告](docs/jd-interface-discovery.md)。真实京东样本经人工确认后，下一阶段才是 Phase 4 数据清洗与治理；确认前不要开始 AI。完整阶段见 [路线图](docs/roadmap.md)。
 
 ## 数据合规
 

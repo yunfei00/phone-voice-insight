@@ -49,6 +49,7 @@ coverage.xml
 *.py.cover
 .hypothesis/
 .pytest_cache/
+.pytest-*/
 cover/
 
 # Translations
@@ -232,6 +233,7 @@ Thumbs.db
 # Local artifacts
 staticfiles/
 *.sqlite3
+.local/
 
 # Deployment backups and generated secrets
 *.env.backup

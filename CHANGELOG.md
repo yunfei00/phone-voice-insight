@@ -6,6 +6,8 @@
 
 ### Added
 
+- 京东 Phase 3.1 可视浏览器辅助探测工具：独立 Chrome profile、XHR/fetch 元数据索引、候选结构检测、最多 3 条递归脱敏样本，以及默认关闭的 live 开关。
+- 京东接口发现报告；本次隔离会话分类为 `C JD_REVIEW_ACCESS_BLOCKED`，未启用 SourceTarget，也未采集真实评价。
 - 京东 PoC 失败关闭框架：商品身份门禁、严格 SSRF 校验、固定身份 4 秒限速、登录/重定向阻断、JSON/JSONP 安全解析。
 - JD 评价/追评标准化、评分与 SKU 属性契约、`SourceProductVariant` 映射、逐页 checkpoint、去重和隐私 allowlist。
 - `jd_poc` 受限命令、默认关闭的 JD live smoke test、脱敏合成 fixtures，以及 API/前端 rating/product_variant 筛选与展示。
@@ -17,6 +19,7 @@
 
 ### Changed
 
+- 京东 Phase 3 因外部访问限制调整为 `POSTPONED`；保留已有 collector、探测工具和离线测试，第一版产品改为只依赖荣耀俱乐部数据。
 - 荣耀俱乐部完成 2 页/20 帖门禁与重复运行去重；客户端兼容同源、同帖的 `mobile=2` 重定向并逐跳验证。
 - `NormalizedReview` 新增 `rating`、`variant_external_id`、`variant_attributes`，通用持久化层写入 rating/product_variant。
 - 扩展 `NormalizedReview` 与作者角色，新增 `MODERATOR`、`EXPERT`。
@@ -25,7 +28,7 @@
 
 ### Known issues
 
-- 2026-08-08 京东正常页面探测被重定向到登录页。真实商品/店铺/评论接口未验证，JD SourceTarget 默认停用，未采集真实京东评价。
+- 2026-08-08 京东独立可视 Chrome 探测仍受登录/访问限制，369 条脱敏响应索引中有 70 条 HTTP 403，未确认评价接口。JD SourceTarget 默认停用，未采集真实京东评价。
 
 ## [0.1.0] - 2026-07-30
 

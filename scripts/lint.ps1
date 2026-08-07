@@ -3,11 +3,11 @@ $root = Split-Path -Parent $PSScriptRoot
 
 Push-Location (Join-Path $root "backend")
 try {
-    uv run ruff check . ../collectors ../ai
+    uv run ruff check . ../collectors ../ai ../tools
     if ($LASTEXITCODE -ne 0) { throw "Ruff check failed with exit code $LASTEXITCODE" }
-    uv run ruff format --check . ../collectors ../ai
+    uv run ruff format --check . ../collectors ../ai ../tools
     if ($LASTEXITCODE -ne 0) { throw "Ruff format check failed with exit code $LASTEXITCODE" }
-    uv run mypy .
+    uv run mypy . ../collectors ../ai ../tools
     if ($LASTEXITCODE -ne 0) { throw "mypy failed with exit code $LASTEXITCODE" }
 } finally {
     Pop-Location
