@@ -2,11 +2,11 @@
 
 手机用户口碑洞察平台（Phone Voice Insight，PVI）用于整合手机产品在公开渠道中的真实用户反馈。首个目标产品是荣耀 Power2，首批来源为京东自营商品评价与荣耀俱乐部帖子/回复。
 
-## 第一版范围
+## 当前范围
 
-Phase 1 只交付可运行的 Monorepo 基础框架：Django REST API、Vue 后台、PostgreSQL、Redis、Celery、基础模型、管理后台、采集与 AI 契约、测试、Docker Compose、CI 和开发文档。
+Phase 1 已交付可运行的 Monorepo 基础框架。Phase 2 在该框架上增加荣耀俱乐部公开页面的低频采集 PoC，包括荣耀 Power2 话题、帖子、回复、角色识别、去重、checkpoint、Celery/API 和前端操作闭环。
 
-当前明确不包含真实网站采集、登录/验证码或反爬处理、AI 模型调用、Embedding/聚类、RAG、正式评分、付费权限和 Kubernetes。未实现采集器会明确失败，不生成虚假反馈或分析结果。
+当前不包含京东真实采集、登录/验证码或反爬处理、AI 模型调用、Embedding/聚类、RAG、正式评分、付费权限和 Kubernetes。未实现来源会明确失败，不生成虚假反馈或分析结果。
 
 ## 技术栈
 
@@ -27,7 +27,7 @@ flowchart LR
     A --> Q["Celery 队列"]
     Q --> W["Celery Worker"]
     B["Celery Beat"] --> Q
-    W -. "后续接入" .-> C["合规采集器"]
+    W --> C["荣耀俱乐部合规采集器"]
     W -. "后续接入" .-> AI["AI 分析层"]
 ```
 
@@ -39,7 +39,7 @@ flowchart LR
 phone-voice-insight/
 ├── backend/                 # Django、DRF、Celery、模型、API 和测试
 ├── frontend/                # Vue 3 管理端和测试
-├── collectors/              # 采集器契约及未实现来源骨架
+├── collectors/              # 采集器契约、荣耀俱乐部实现及其他来源骨架
 ├── ai/                      # Schema、示例和版本化 Prompt
 ├── docs/                    # 需求、架构、契约、开发与部署文档
 ├── deploy/                  # Dockerfile 和 Nginx 预留配置
@@ -159,7 +159,7 @@ npm run test
 npm run build
 ```
 
-测试不会连接京东、荣耀俱乐部或任何真实 AI 服务。后端测试使用 SQLite 并 mock Redis 健康检查；开发和部署配置仍使用 PostgreSQL/Redis。
+默认测试不会连接京东、荣耀俱乐部或任何真实 AI 服务；荣耀在线 smoke test 仅在显式设置 `RUN_HONOR_LIVE_TESTS=1` 时运行，最多访问 1 个话题页和 1 个帖子页。后端测试使用 SQLite 并 mock Redis 健康检查；开发和部署配置仍使用 PostgreSQL/Redis。
 
 ## 访问地址
 
@@ -178,15 +178,15 @@ npm run build
 ## 当前完成情况
 
 - 已建立产品、来源、采集任务、统一反馈、分析结果和报告快照模型及迁移。
-- 初始化数据包含荣耀、荣耀 Power2、5 个产品别名、2 个内存/存储版本、京东与荣耀俱乐部；不含虚假反馈和 AI 结果。
-- 已提供要求的只读 API、采集任务创建 API、分页/筛选、健康检查、OpenAPI、Swagger/ReDoc 和 Admin。
-- 已提供 Celery `system_ping` 与明确失败的 `run_collection_task`。
-- Vue 管理端包含总览、产品、采集任务、原始反馈、AI 空状态和系统状态页面。
-- 采集器和 AI 层只有可验证契约，不访问外部服务。
+- 初始化数据幂等创建荣耀 Power2 官方话题入口；不含虚假反馈和 AI 结果。
+- 荣耀俱乐部采集器可低频读取公开 HTML，解析主题、回复与站内角色，并执行相关性过滤、去重和 checkpoint。
+- Celery 任务、`POST /api/v1/collection-tasks/{id}/run/` 与前端执行/轮询已形成真实采集闭环。
+- 原始反馈页面支持 `record_type`、`author_role`、`is_official` 筛选和结构化详情。
+- 京东采集与 AI 分析仍保持未实现边界。
 
 ## 后续路线
 
-下一阶段为“荣耀俱乐部采集 PoC”，先确认合规边界，再做低频公开内容采集、分页/checkpoint 与契约测试。完整阶段见 [路线图](docs/roadmap.md)。
+荣耀俱乐部 Phase 2 PoC 的入口、结构、测试方式和限制见 [PoC 文档](docs/honor-club-poc.md)。扩大页数前需先人工确认样本质量；不要直接开始京东采集。完整阶段见 [路线图](docs/roadmap.md)。
 
 ## 数据合规
 

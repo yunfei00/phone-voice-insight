@@ -16,6 +16,7 @@ const filters = reactive({
   source: undefined as number | undefined,
   search: '',
   record_type: '',
+  author_role: '',
   is_official: '' as '' | 'true' | 'false',
 })
 
@@ -27,6 +28,7 @@ async function loadReviews(): Promise<void> {
       ...filters,
       is_official: filters.is_official || undefined,
       record_type: filters.record_type || undefined,
+      author_role: filters.author_role || undefined,
       search: filters.search || undefined,
     })
     reviews.value = response.results
@@ -88,6 +90,18 @@ onMounted(async () => {
           <el-option label="仅官方" value="true" />
           <el-option label="仅用户" value="false" />
         </el-select>
+        <el-select
+          v-model="filters.author_role"
+          clearable
+          placeholder="作者角色"
+          @change="applyFilters"
+        >
+          <el-option label="普通用户" value="USER" />
+          <el-option label="官方" value="OFFICIAL" />
+          <el-option label="版主" value="MODERATOR" />
+          <el-option label="达人" value="EXPERT" />
+          <el-option label="未知" value="UNKNOWN" />
+        </el-select>
         <el-input
           v-model="filters.search"
           clearable
@@ -111,9 +125,7 @@ onMounted(async () => {
         <el-table-column prop="rating" label="评分" width="80" />
         <el-table-column label="角色" width="90">
           <template #default="{ row }: { row: ReviewRecord }">
-            <el-tag :type="row.is_official ? 'warning' : 'info'">{{
-              row.is_official ? '官方' : '用户'
-            }}</el-tag>
+            <el-tag :type="row.is_official ? 'warning' : 'info'">{{ row.author_role }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="published_at" label="发布时间" min-width="170" />
@@ -145,6 +157,27 @@ onMounted(async () => {
           <el-descriptions-item label="发布时间">{{
             selected.published_at || '—'
           }}</el-descriptions-item>
+          <el-descriptions-item label="角色">{{ selected.author_role }}</el-descriptions-item>
+          <el-descriptions-item label="External ID">{{
+            selected.external_id || '—'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="Parent External ID">{{
+            selected.parent_external_id || '—'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="来源 URL">
+            <a
+              v-if="selected.source_url"
+              :href="selected.source_url"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {{ selected.source_url }}
+            </a>
+            <span v-else>—</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="Raw data">
+            <pre>{{ JSON.stringify(selected.raw_data, null, 2) }}</pre>
+          </el-descriptions-item>
         </el-descriptions>
       </template>
     </el-drawer>
@@ -158,9 +191,15 @@ onMounted(async () => {
 
 .filters {
   display: grid;
-  grid-template-columns: 160px 160px 140px minmax(240px, 1fr);
+  grid-template-columns: 150px 150px 130px 140px minmax(240px, 1fr);
   gap: 12px;
   margin-bottom: 18px;
+}
+
+pre {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .pagination {

@@ -49,10 +49,15 @@ class NormalizedReview:
     external_id: str | None
     parent_external_id: str | None
     record_type: str
-    content: str
-    published_at: datetime | None
-    is_official: bool
-    raw_data: dict[str, Any]
+    title: str = ""
+    content: str = ""
+    published_at: datetime | None = None
+    author_role: str = "UNKNOWN"
+    is_official: bool = False
+    is_append_review: bool = False
+    software_version: str = ""
+    source_url: str = ""
+    raw_data: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

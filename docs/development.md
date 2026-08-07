@@ -57,6 +57,29 @@ npm run dev
 
 API 地址只通过 `VITE_API_BASE_URL` 配置。刷新任意前端路由由 Vite fallback 或 Nginx `try_files` 返回 `index.html`。
 
+## 荣耀俱乐部 PoC
+
+迁移会幂等创建荣耀 Power2 话题入口。仅在确认当前网络允许匿名访问公开页面后执行；命令固定单并发并保持至少 3 秒间隔：
+
+```powershell
+cd backend
+$env:DJANGO_SETTINGS_MODULE = "config.settings.local"
+uv run python manage.py migrate
+uv run python manage.py honor_club_poc --target-id 1 --limit 1 --dry-run
+uv run python manage.py honor_club_poc --target-id 1 --limit 10
+```
+
+`--dry-run` 会请求和解析但不写 ReviewRecord。`--limit` 第一轮不得超过 10；不要自行扩大至多页或全站。出现 403、429、验证码、登录墙或异常跳转时停止，不加入 Cookie、代理或绕过逻辑。
+
+默认 pytest 使用脱敏 fixtures。显式在线 smoke test 最多访问一个话题和一个帖子：
+
+```powershell
+$env:RUN_HONOR_LIVE_TESTS = "1"
+uv run pytest ..\collectors\honor_club\tests\test_parser.py -k live
+```
+
+详细数据结构、checkpoint 和限制见 [荣耀俱乐部 PoC](honor-club-poc.md)。
+
 ## Docker 环境
 
 ```powershell
@@ -89,5 +112,5 @@ docker compose run --rm backend python manage.py createsuperuser
 - Redis 显示 error：确认 Redis 运行且 URL 数据库编号正确；健康接口仍会返回 `degraded`。
 - 8000/5173/5432/6379 冲突：修改 `.env` 的主机端口变量。
 - 前端 CORS 失败：把实际前端 origin 加入 `CORS_ALLOWED_ORIGINS`，不要使用通配符。
-- 采集任务失败：Phase 1 预期返回 `collector not implemented`，不是环境故障。
+- 荣耀采集任务失败：先查看 `error_message`；若为访问阻断必须停止。京东仍会明确返回 `collector not implemented`。
 - `ConnectionTimeout localhost:5432`：PostgreSQL 没有启动；运行 `docker compose up -d postgres redis`，或使用 `backend.ps1 -UseSQLite` 做本地预览。

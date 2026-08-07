@@ -1,6 +1,7 @@
 import apiClient from './client'
 import type {
   CollectionTask,
+  CollectionTaskRunResponse,
   DataSource,
   HealthStatus,
   PaginatedResponse,
@@ -35,6 +36,12 @@ export const createCollectionTask = async (payload: {
   requested_limit?: number
 }): Promise<CollectionTask> =>
   (await apiClient.post<CollectionTask>('/collection-tasks/', payload)).data
+
+export const getCollectionTask = async (taskId: number): Promise<CollectionTask> =>
+  (await apiClient.get<CollectionTask>(`/collection-tasks/${taskId}/`)).data
+
+export const runCollectionTask = async (taskId: number): Promise<CollectionTaskRunResponse> =>
+  (await apiClient.post<CollectionTaskRunResponse>(`/collection-tasks/${taskId}/run/`)).data
 
 export const getReviews = async (
   params: PageParams = {},

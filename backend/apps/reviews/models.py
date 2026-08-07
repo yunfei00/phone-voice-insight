@@ -20,6 +20,8 @@ class RecordType(models.TextChoices):
 class AuthorRole(models.TextChoices):
     USER = "USER", "用户"
     OFFICIAL = "OFFICIAL", "官方"
+    MODERATOR = "MODERATOR", "版主"
+    EXPERT = "EXPERT", "达人"
     UNKNOWN = "UNKNOWN", "未知"
 
 

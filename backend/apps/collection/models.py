@@ -30,8 +30,8 @@ ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
         CollectionStatus.CANCELLED,
     },
     CollectionStatus.PAUSED: {CollectionStatus.RUNNING, CollectionStatus.CANCELLED},
-    CollectionStatus.SUCCESS: set(),
-    CollectionStatus.FAILED: {CollectionStatus.RUNNING},
+    CollectionStatus.SUCCESS: {CollectionStatus.PENDING},
+    CollectionStatus.FAILED: {CollectionStatus.PENDING, CollectionStatus.RUNNING},
     CollectionStatus.CANCELLED: set(),
 }
 

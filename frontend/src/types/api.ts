@@ -63,6 +63,19 @@ export interface DataSource {
 
 export type CollectionStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUCCESS' | 'FAILED' | 'CANCELLED'
 
+export interface CollectionRun {
+  id: number
+  run_number: number
+  status: CollectionStatus
+  started_at: string | null
+  finished_at: string | null
+  success_count: number
+  skipped_count: number
+  failure_count: number
+  checkpoint_json: Record<string, unknown>
+  error_message: string
+}
+
 export interface CollectionTask {
   id: number
   source_target: number
@@ -76,7 +89,18 @@ export interface CollectionTask {
   skipped_count: number
   failure_count: number
   error_message: string
+  started_at: string | null
+  finished_at: string | null
+  last_checkpoint: Record<string, unknown>
+  runs: CollectionRun[]
   created_at: string
+  updated_at: string
+}
+
+export interface CollectionTaskRunResponse {
+  task_id: number
+  status: 'PENDING'
+  celery_task_id: string
 }
 
 export interface ReviewRecord {
@@ -92,7 +116,11 @@ export interface ReviewRecord {
   published_at: string | null
   author_role: string
   is_official: boolean
+  external_id: string | null
+  parent_external_id: string
   source_url: string
+  raw_data: Record<string, unknown>
+  collected_at: string
   status: string
 }
 

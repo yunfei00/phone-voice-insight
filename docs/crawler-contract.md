@@ -21,7 +21,7 @@
 
 ## 限速
 
-每个来源独立设置保守速率、随机小幅抖动和最大并发；收到限流或服务异常立即退避。不得以吞吐量为目标压测第三方网站。
+每个来源独立设置保守速率和最大并发；收到限流或服务异常立即停止或退避。不得以吞吐量为目标压测第三方网站。荣耀俱乐部 PoC 固定单并发，请求间隔不低于 3 秒。
 
 ## 合规边界
 
@@ -36,9 +36,20 @@
 - 高频、攻击式、破坏性访问；
 - 在日志或仓库保存账号秘密。
 
-## 荣耀俱乐部 Phase 2 计划
+## 荣耀俱乐部 Phase 2 实现
 
-先确认公开帖子/回复边界与页面/API 稳定性，选择单个经审核入口完成低频分页 PoC；实现帖子/回复父子关系、官方回复识别、checkpoint、原始响应样本脱敏和契约测试。PoC 达标后再评估规模化。
+`HONOR_CLUB` 只允许 `https://club.honor.com/cn/threadtopic-*.html` 与 `https://club.honor.com/cn/thread-*.html`，拒绝凭据、端口、查询参数、片段、IP、localhost 和外部域名，避免把数据库目标配置变成 SSRF 入口。
+
+客户端使用固定、诚实的 User-Agent，不保存 Cookie，15 秒超时，单并发且两次请求至少间隔 3 秒。遇到 403、429、5xx、非 HTML、异常跳转、验证码或登录墙时抛出 `CollectorError` 并停止，不尝试绕过。
+
+稳定标识与关系：
+
+- 主题：`thread:{thread_id}`，父记录为空；
+- 楼层：`honor_post:{pid}`，父记录为主题；
+- 内嵌评论：优先 `honor_comment:{comment_id}`，父记录为楼层；无法可靠定位时使用稳定哈希并显式记录父级回退；
+- 官方回复使用 `OFFICIAL_REPLY`，版主和达人仍为普通 `REPLY`，且 `is_official=false`。
+
+持久化使用 `source + external_id + record_type` 数据库唯一约束和稳定 SHA256 内容哈希。每完成一个帖子即更新任务与运行 checkpoint。完整细节见 [荣耀俱乐部 PoC](honor-club-poc.md)。
 
 ## 京东 Phase 3 计划
 

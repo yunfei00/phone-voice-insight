@@ -9,4 +9,4 @@ class ReviewRecordFilter(django_filters.FilterSet):
 
     class Meta:
         model = ReviewRecord
-        fields = ("source", "product", "record_type", "is_official")
+        fields = ("source", "product", "record_type", "author_role", "is_official")

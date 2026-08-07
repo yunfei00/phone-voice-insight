@@ -6,7 +6,7 @@ Monorepo、Django/Vue、数据服务、任务队列、基础模型、API/Admin�
 
 ## Phase 2：荣耀俱乐部采集 PoC
 
-确认合规边界；实现单入口低频帖子/回复采集、官方标记、分页、checkpoint、去重和脱敏样本契约测试。
+已完成本地 PoC 实现与首轮 1 页/10 帖验证：单入口低频帖子/回复采集、官方/版主/达人识别、父子关系、checkpoint、去重、脱敏 fixtures、Celery/API 和前端闭环。扩大到 2 页/20 帖前等待人工确认数据质量。
 
 ## Phase 3：京东采集 PoC
 

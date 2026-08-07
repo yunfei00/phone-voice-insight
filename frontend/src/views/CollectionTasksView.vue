@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
-import { createCollectionTask, getCollectionTasks, getProducts, getSources } from '@/api'
+import {
+  createCollectionTask,
+  getCollectionTask,
+  getCollectionTasks,
+  getProducts,
+  getSources,
+  runCollectionTask,
+} from '@/api'
 import type {
   CollectionStatus,
   CollectionTask,
@@ -16,13 +23,17 @@ const sources = ref<DataSource[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const submitting = ref(false)
+const runningTaskIds = ref(new Set<number>())
+const selected = ref<CollectionTask | null>(null)
 const error = ref('')
+let pollTimer: ReturnType<typeof setInterval> | undefined
+let pollAttempts = 0
 const form = reactive({
   product: undefined as number | undefined,
   source: undefined as number | undefined,
   source_target: undefined as number | undefined,
   task_type: 'INCREMENTAL' as 'FULL' | 'INCREMENTAL',
-  requested_limit: 100,
+  requested_limit: 10,
 })
 
 const targets = computed<SourceTarget[]>(() => {
@@ -61,6 +72,61 @@ async function loadData(): Promise<void> {
   }
 }
 
+function stopPolling(): void {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = undefined
+  }
+  pollAttempts = 0
+}
+
+async function pollActiveTasks(): Promise<void> {
+  const activeTasks = tasks.value.filter((task) => ['PENDING', 'RUNNING'].includes(task.status))
+  if (!activeTasks.length || pollAttempts >= 150) {
+    stopPolling()
+    return
+  }
+  pollAttempts += 1
+  const refreshed = await Promise.all(activeTasks.map((task) => getCollectionTask(task.id)))
+  const byId = new Map(refreshed.map((task) => [task.id, task]))
+  tasks.value = tasks.value.map((task) => byId.get(task.id) || task)
+  if (selected.value && byId.has(selected.value.id)) {
+    selected.value = byId.get(selected.value.id) || null
+  }
+  if (!tasks.value.some((task) => ['PENDING', 'RUNNING'].includes(task.status))) {
+    stopPolling()
+  }
+}
+
+function startPolling(): void {
+  if (pollTimer) return
+  pollAttempts = 0
+  pollTimer = setInterval(() => void pollActiveTasks(), 4000)
+}
+
+async function executeTask(task: CollectionTask): Promise<void> {
+  runningTaskIds.value.add(task.id)
+  error.value = ''
+  try {
+    await runCollectionTask(task.id)
+    task.status = 'PENDING'
+    startPolling()
+  } catch {
+    error.value = `任务 #${task.id} 启动失败，请检查任务状态和 Celery。`
+  } finally {
+    runningTaskIds.value.delete(task.id)
+  }
+}
+
+async function refreshTasks(): Promise<void> {
+  await loadData()
+  if (tasks.value.some((task) => ['PENDING', 'RUNNING'].includes(task.status))) startPolling()
+}
+
+function canRun(task: CollectionTask): boolean {
+  return !['RUNNING', 'PAUSED', 'CANCELLED'].includes(task.status)
+}
+
 async function submitTask(): Promise<void> {
   if (!form.product || !form.source || !form.source_target) {
     error.value = '请选择产品、数据来源和采集目标。'
@@ -74,7 +140,7 @@ async function submitTask(): Promise<void> {
       requested_limit: form.requested_limit,
     })
     dialogVisible.value = false
-    await loadData()
+    await refreshTasks()
   } catch {
     error.value = '任务创建失败，请检查采集入口配置。'
   } finally {
@@ -82,7 +148,8 @@ async function submitTask(): Promise<void> {
   }
 }
 
-onMounted(loadData)
+onMounted(refreshTasks)
+onUnmounted(stopPolling)
 </script>
 
 <template>
@@ -90,13 +157,16 @@ onMounted(loadData)
     <div class="page-header">
       <div>
         <h1 class="page-title">采集任务</h1>
-        <p class="page-description">管理采集计划和运行状态，不包含具体网站页面逻辑。</p>
+        <p class="page-description">创建任务、异步执行荣耀俱乐部采集并查看 checkpoint。</p>
       </div>
-      <el-button type="primary" @click="dialogVisible = true">创建任务</el-button>
+      <div class="header-actions">
+        <el-button :loading="loading" @click="refreshTasks">刷新</el-button>
+        <el-button type="primary" @click="dialogVisible = true">创建任务</el-button>
+      </div>
     </div>
     <el-alert
-      title="Phase 1 的京东与荣耀俱乐部采集器尚未实现；执行任务会明确记录 collector not implemented，不会生成虚假数据。"
-      type="warning"
+      title="荣耀俱乐部 PoC 仅访问公开 HTML，默认单并发、每次请求至少间隔 3 秒；京东采集仍未实现。"
+      type="info"
       show-icon
       :closable="false"
       class="notice"
@@ -115,13 +185,29 @@ onMounted(loadData)
           </template>
         </el-table-column>
         <el-table-column prop="success_count" label="成功" width="80" />
+        <el-table-column prop="skipped_count" label="跳过" width="80" />
         <el-table-column prop="failure_count" label="失败" width="80" />
+        <el-table-column prop="started_at" label="开始时间" min-width="170" />
+        <el-table-column prop="finished_at" label="结束时间" min-width="170" />
         <el-table-column
           prop="error_message"
           label="错误信息"
           min-width="190"
           show-overflow-tooltip
         />
+        <el-table-column label="操作" width="165" fixed="right">
+          <template #default="{ row }: { row: CollectionTask }">
+            <el-button link type="primary" @click="selected = row">详情</el-button>
+            <el-button
+              link
+              type="success"
+              :disabled="!canRun(row)"
+              :loading="runningTaskIds.has(row.id)"
+              @click="executeTask(row)"
+              >执行</el-button
+            >
+          </template>
+        </el-table-column>
       </el-table>
     </div>
 
@@ -181,7 +267,8 @@ onMounted(loadData)
           </el-radio-group>
         </el-form-item>
         <el-form-item label="最多采集条数">
-          <el-input-number v-model="form.requested_limit" :min="1" :max="10000" />
+          <el-input-number v-model="form.requested_limit" :min="1" :max="10" />
+          <small class="hint">首次 PoC 最多执行 10 个帖子。</small>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -189,6 +276,38 @@ onMounted(loadData)
         <el-button type="primary" :loading="submitting" @click="submitTask">创建</el-button>
       </template>
     </el-dialog>
+
+    <el-drawer
+      :model-value="Boolean(selected)"
+      title="采集任务详情"
+      size="min(640px, 94vw)"
+      @close="selected = null"
+    >
+      <el-descriptions v-if="selected" :column="1" border>
+        <el-descriptions-item label="任务">#{{ selected.id }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ selected.status }}</el-descriptions-item>
+        <el-descriptions-item label="来源 / 产品">
+          {{ selected.source_name }} / {{ selected.product_name }}
+        </el-descriptions-item>
+        <el-descriptions-item label="目标">{{ selected.target_name }}</el-descriptions-item>
+        <el-descriptions-item label="统计">
+          成功 {{ selected.success_count }} / 跳过 {{ selected.skipped_count }} / 失败
+          {{ selected.failure_count }}
+        </el-descriptions-item>
+        <el-descriptions-item label="开始时间">{{
+          selected.started_at || '—'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="结束时间">{{
+          selected.finished_at || '—'
+        }}</el-descriptions-item>
+        <el-descriptions-item label="Checkpoint">
+          <pre>{{ JSON.stringify(selected.last_checkpoint, null, 2) }}</pre>
+        </el-descriptions-item>
+        <el-descriptions-item label="错误信息">{{
+          selected.error_message || '—'
+        }}</el-descriptions-item>
+      </el-descriptions>
+    </el-drawer>
   </div>
 </template>
 
@@ -205,5 +324,16 @@ onMounted(loadData)
   display: block;
   margin-top: 8px;
   color: #b45309;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+pre {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 </style>
