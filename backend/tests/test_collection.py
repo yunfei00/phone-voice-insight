@@ -41,11 +41,12 @@ def test_collection_task_create_api(api_client: APIClient, source_target: Source
 
 
 @pytest.mark.django_db
-def test_unimplemented_jd_collection_task_is_persisted_as_failed(source_target: SourceTarget) -> None:
+def test_invalid_jd_collection_task_is_persisted_as_failed(source_target: SourceTarget) -> None:
     task = CollectionTask.objects.create(source_target=source_target)
 
-    with pytest.raises(CollectorError, match="not implemented"):
+    with pytest.raises(CollectorError) as exc_info:
         run_collection_task.run(task.id)
+    assert exc_info.value.code == "INVALID_TARGET"
 
     task.refresh_from_db()
     assert task.status == CollectionStatus.FAILED

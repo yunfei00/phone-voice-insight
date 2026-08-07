@@ -80,7 +80,11 @@ uv run python manage.py honor_club_poc --target-id 1 --limit 10
 
 重复第二条命令验证去重。默认 pytest 只读取脱敏 fixtures；设置 `RUN_HONOR_LIVE_TESTS=1` 才启用最多两次请求的在线 smoke test。
 
-2026-08-07/08 本地真实 PoC 可匿名获取话题页与帖子页，无登录墙或验证码。最终修正前的结构验证解析了 10 个主题和 52 条楼层记录，并覆盖 THREAD、REPLY、OFFICIAL_REPLY；最终数据数字以任务汇报为准。
+2026-08-08 已完成 2 页/20 帖扩展门禁。第一次完整成功运行扫描 20 帖，新增 42、跳过 67、失败 0；本轮新增类型为 THREAD 8、REPLY 33、OFFICIAL_REPLY 1，checkpoint 为 `topic_page=2 / thread_index=8 / last_thread_id=30318317`。当时本地库累计 109 条：THREAD 20、REPLY 80、OFFICIAL_REPLY 9。
+
+用相同范围清空任务 checkpoint 后重复运行：扫描 20 帖，新增 0、跳过 109、失败 0，checkpoint 与首轮一致，证明数据库唯一约束和稳定 external id 去重生效。两次完整运行均未出现验证码、登录墙或访问风控。
+
+扩展门禁的首次尝试在一个旧帖遇到站内 `mobile=2` 正常移动端重定向，并暴露 `/cn/cn/thread-...` 路径。客户端随后改为逐跳校验，只允许同一荣耀 host、同一 canonical thread 和精确 `mobile=2`，且在发起请求前拒绝外部跳转；修复后完整门禁通过。该兼容问题属于页面行为变化，不应记为风控。
 
 ## 11. 已知限制
 
@@ -88,4 +92,4 @@ uv run python manage.py honor_club_poc --target-id 1 --limit 10
 - `昨天`、`前天`、`N 小时前` 等相对时间不基于本机时钟猜测，`published_at` 留空并保留原文。
 - 本轮真实 10 帖 HTML 的嵌套评论容器为空，因此真实样本未产生楼层下评论；父子解析由脱敏 fixture 覆盖。
 - 页面 DOM 改版会触发解析数量变化，需要更新 fixture 和选择器后再运行。
-- 尚未执行 2 页/20 帖扩展验证，也未实现京东或 AI 分析。
+- 2 页/20 帖门禁已经通过；京东真实评论仍因登录墙与接口未验证而没有采集到数据，AI 分析未实现。

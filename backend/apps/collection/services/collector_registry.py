@@ -2,11 +2,12 @@
 
 from collectors.base import BaseCollector, CollectorError
 from collectors.honor_club import HonorClubCollector
+from collectors.jd import JDCollector
 
 
 def get_collector(source_code: str) -> BaseCollector:
     if source_code == "HONOR_CLUB":
         return HonorClubCollector()
     if source_code == "JD":
-        raise CollectorError("JD collector not implemented", code="NOT_IMPLEMENTED")
+        return JDCollector()
     raise CollectorError(f"Unsupported collector source: {source_code}", code="UNSUPPORTED_SOURCE")

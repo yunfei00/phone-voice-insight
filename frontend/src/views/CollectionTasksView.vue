@@ -39,9 +39,14 @@ const form = reactive({
 const targets = computed<SourceTarget[]>(() => {
   const source = sources.value.find((item) => item.id === form.source)
   return (source?.targets || []).filter(
-    (target) => !form.product || target.product === form.product,
+    (target) => target.is_active && (!form.product || target.product === form.product),
   )
 })
+
+const selectedSourceCode = computed(
+  () => sources.value.find((item) => item.id === form.source)?.code || '',
+)
+const requestedLimitMax = computed(() => (selectedSourceCode.value === 'JD' ? 30 : 20))
 
 const statusType: Record<CollectionStatus, 'info' | 'primary' | 'warning' | 'success' | 'danger'> =
   {
@@ -127,6 +132,13 @@ function canRun(task: CollectionTask): boolean {
   return !['RUNNING', 'PAUSED', 'CANCELLED'].includes(task.status)
 }
 
+function handleSourceChange(): void {
+  form.source_target = undefined
+  if (form.requested_limit > requestedLimitMax.value) {
+    form.requested_limit = requestedLimitMax.value
+  }
+}
+
 async function submitTask(): Promise<void> {
   if (!form.product || !form.source || !form.source_target) {
     error.value = '请选择产品、数据来源和采集目标。'
@@ -157,7 +169,7 @@ onUnmounted(stopPolling)
     <div class="page-header">
       <div>
         <h1 class="page-title">采集任务</h1>
-        <p class="page-description">创建任务、异步执行荣耀俱乐部采集并查看 checkpoint。</p>
+        <p class="page-description">创建任务、执行受限采集并查看分页 checkpoint。</p>
       </div>
       <div class="header-actions">
         <el-button :loading="loading" @click="refreshTasks">刷新</el-button>
@@ -165,7 +177,7 @@ onUnmounted(stopPolling)
       </div>
     </div>
     <el-alert
-      title="荣耀俱乐部 PoC 仅访问公开 HTML，默认单并发、每次请求至少间隔 3 秒；京东采集仍未实现。"
+      title="荣耀俱乐部已通过 20 帖门禁；京东框架已就绪，但当前目标因登录墙与接口未验证保持停用。"
       type="info"
       show-icon
       :closable="false"
@@ -233,7 +245,7 @@ onUnmounted(stopPolling)
             v-model="form.source"
             placeholder="选择来源"
             class="full-width"
-            @change="form.source_target = undefined"
+            @change="handleSourceChange"
           >
             <el-option
               v-for="source in sources"
@@ -267,8 +279,8 @@ onUnmounted(stopPolling)
           </el-radio-group>
         </el-form-item>
         <el-form-item label="最多采集条数">
-          <el-input-number v-model="form.requested_limit" :min="1" :max="10" />
-          <small class="hint">首次 PoC 最多执行 10 个帖子。</small>
+          <el-input-number v-model="form.requested_limit" :min="1" :max="requestedLimitMax" />
+          <small class="hint">荣耀最多 20 个帖子；京东 PoC 强制最多 30 条主评价。</small>
         </el-form-item>
       </el-form>
       <template #footer>

@@ -13,9 +13,11 @@
 
 初始化值：荣耀（HONOR）、荣耀 Power2（HONOR_POWER2，Power 系列）、5 个指定别名、12GB+256GB 和 12GB+512GB；未知颜色保持空，不编造。
 
-## SourceTarget
+## SourceTarget / SourceProductVariant
 
-字段：`source`、`product`、`name`、`target_type`、可空 `target_url/external_id`、`config_json`、`is_active`。`target_type` 为 PRODUCT 或 COMMUNITY。Phase 1 不初始化真实网址，由 Admin 审核后录入。
+SourceTarget 字段：`source`、`product`、`name`、`target_type`、可空 `target_url/external_id`、`config_json`、`is_active`。`target_type` 为 PRODUCT 或 COMMUNITY。
+
+SourceProductVariant 保存商城来源 SKU 到通用 ProductVariant 的映射：`source`、`product`、`product_variant`、`external_id`、可空 `source_target`、`attributes_json`、`is_active`，并约束 `source + external_id` 唯一。商城 SKU 字段不写进 ProductVariant。
 
 ## CollectionTask / CollectionRun
 
@@ -27,7 +29,9 @@
 
 字段覆盖来源/入口/产品/版本、外部与父外部 ID、类型、标题/正文、评分、发布时间、软件版本、作者角色、官方/追评标记、来源 URL、SHA-256 内容指纹、原始 JSON、处理状态与采集时间。
 
-`record_type`：REVIEW、APPEND_REVIEW、THREAD、REPLY、OFFICIAL_REPLY。`author_role`：USER、OFFICIAL、UNKNOWN。`status`：RAW、NORMALIZED、INVALID。
+`record_type`：REVIEW、APPEND_REVIEW、THREAD、REPLY、OFFICIAL_REPLY。`author_role`：USER、OFFICIAL、MODERATOR、EXPERT、UNKNOWN。`status`：RAW、NORMALIZED、INVALID。
+
+NormalizedReview 额外携带可空 `rating`、`variant_external_id` 和 `variant_attributes`。通用持久化层先解析 ProductVariant，再同时写入 rating/product_variant；荣耀数据默认保持两者为空。
 
 ### 去重策略
 
@@ -53,7 +57,7 @@ source + external_id + record_type
 
 ## 原始数据保留
 
-`raw_data` 保存可审计的来源字段，但不应无期限复制页面或保存无关内容。原始与标准化记录分层，后续 Schema 升级可重放；保留期限、访问权限与删除流程应在正式采集前确定。
+`raw_data` 保存可审计的来源 allowlist 字段，但不得复制完整商城响应或保存无关用户资料。原始与标准化记录分层，后续 Schema 升级可重放；保留期限、访问权限与删除流程应在正式采集前确定。
 
 ## 隐私脱敏
 

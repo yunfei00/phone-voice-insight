@@ -1,0 +1,22 @@
+{
+  "data": {
+    "items": [
+      {
+        "commentId": "900000001",
+        "text": "<p>续航表现很好 😊</p>\n系统运行流畅。",
+        "score": 5,
+        "createdAt": "2026-08-01 10:20:30",
+        "sku": "100310496358",
+        "color": "旭日橙",
+        "size": "12GB + 512GB",
+        "reference": "荣耀 Power2 12GB+512GB 旭日橙",
+        "useful": 8,
+        "replies": 1,
+        "images": [{"type": "image"}],
+        "videos": [],
+        "append": null
+      }
+    ]
+  },
+  "page": {"number": 1, "size": 10, "hasMore": true}
+}

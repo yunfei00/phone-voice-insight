@@ -4,9 +4,9 @@
 
 ## 当前范围
 
-Phase 1 已交付可运行的 Monorepo 基础框架。Phase 2 在该框架上增加荣耀俱乐部公开页面的低频采集 PoC，包括荣耀 Power2 话题、帖子、回复、角色识别、去重、checkpoint、Celery/API 和前端操作闭环。
+Phase 1 已交付可运行的 Monorepo 基础框架。Phase 2 已完成荣耀俱乐部公开页面的低频采集 PoC 和 2 页/20 帖门禁。Phase 3 已实现京东评价 PoC 的失败关闭框架、版本映射、持久化、命令、API、前端和离线测试，但当前正常页面出现登录墙，真实商品/店铺/接口验证与真实数据序列尚未通过。
 
-当前不包含京东真实采集、登录/验证码或反爬处理、AI 模型调用、Embedding/聚类、RAG、正式评分、付费权限和 Kubernetes。未实现来源会明确失败，不生成虚假反馈或分析结果。
+当前不包含登录/验证码或反爬绕过、AI 模型调用、Embedding/聚类、RAG、正式评分、付费权限和 Kubernetes。未现场验证的京东 endpoint 会明确失败，不生成虚假反馈或分析结果。
 
 ## 技术栈
 
@@ -27,7 +27,7 @@ flowchart LR
     A --> Q["Celery 队列"]
     Q --> W["Celery Worker"]
     B["Celery Beat"] --> Q
-    W --> C["荣耀俱乐部合规采集器"]
+    W --> C["荣耀俱乐部 / 京东受限采集器"]
     W -. "后续接入" .-> AI["AI 分析层"]
 ```
 
@@ -159,7 +159,7 @@ npm run test
 npm run build
 ```
 
-默认测试不会连接京东、荣耀俱乐部或任何真实 AI 服务；荣耀在线 smoke test 仅在显式设置 `RUN_HONOR_LIVE_TESTS=1` 时运行，最多访问 1 个话题页和 1 个帖子页。后端测试使用 SQLite 并 mock Redis 健康检查；开发和部署配置仍使用 PostgreSQL/Redis。
+默认测试不会连接京东、荣耀俱乐部或任何真实 AI 服务；在线 smoke test 只有在显式设置 `RUN_HONOR_LIVE_TESTS=1` 或 `RUN_JD_LIVE_TESTS=1` 时才可能运行。京东 endpoint/字段未验证时仍会 skip，不会回退历史接口。后端测试使用 SQLite 并 mock Redis 健康检查；开发和部署配置仍使用 PostgreSQL/Redis。
 
 ## 访问地址
 
@@ -178,16 +178,16 @@ npm run build
 ## 当前完成情况
 
 - 已建立产品、来源、采集任务、统一反馈、分析结果和报告快照模型及迁移。
-- 初始化数据幂等创建荣耀 Power2 官方话题入口；不含虚假反馈和 AI 结果。
+- 初始化数据幂等创建荣耀 Power2 官方话题入口，并创建默认停用的京东候选入口；不含虚假反馈和 AI 结果。
 - 荣耀俱乐部采集器可低频读取公开 HTML，解析主题、回复与站内角色，并执行相关性过滤、去重和 checkpoint。
 - Celery 任务、`POST /api/v1/collection-tasks/{id}/run/` 与前端执行/轮询已形成真实采集闭环。
-- 原始反馈页面支持 `record_type`、`author_role`、`is_official` 筛选和结构化详情。
-- 京东采集与 AI 分析仍保持未实现边界。
+- 原始反馈页面/API 支持 source、record_type、rating、product_variant、author_role、is_official 组合筛选和结构化详情。
+- 京东 collector 支持安全 URL、限速、JSON/JSONP、评价/追评、评分、来源 SKU 映射、checkpoint 与去重；因登录墙，真实 endpoint/字段配置为空且入口停用。
 
 ## 后续路线
 
-荣耀俱乐部 Phase 2 PoC 的入口、结构、测试方式和限制见 [PoC 文档](docs/honor-club-poc.md)。扩大页数前需先人工确认样本质量；不要直接开始京东采集。完整阶段见 [路线图](docs/roadmap.md)。
+荣耀俱乐部 Phase 2 结果见 [荣耀 PoC](docs/honor-club-poc.md)，京东探测、停止原因和未验证项见 [京东 PoC](docs/jd-poc.md)。真实京东样本经人工确认后，下一阶段是 Phase 4 数据清洗与治理；确认前不要开始 AI。完整阶段见 [路线图](docs/roadmap.md)。
 
 ## 数据合规
 
-项目只处理合法、公开且符合平台规则的数据。禁止破解验证码、绕过登录/权限、盗取 Cookie、共享未授权账号、使用代理池规避限制或进行攻击式高频访问。采集需限速、可追踪、最小化保存；原始数据受控保留，展示与分析前应对个人标识和敏感内容脱敏。详见 [采集契约](docs/crawler-contract.md) 与 [数据契约](docs/data-contract.md)。
+项目只处理合法、公开且符合平台规则的数据。京东评价数据仅表示采集时公开可见样本，不代表平台全部订单、全部用户或全部历史评价。禁止破解验证码、绕过登录/权限、盗取 Cookie、共享未授权账号、使用代理池规避限制或进行攻击式高频访问。采集需限速、可追踪、最小化保存；原始数据受控保留，展示与分析前应对个人标识和敏感内容脱敏。详见 [采集契约](docs/crawler-contract.md) 与 [数据契约](docs/data-contract.md)。

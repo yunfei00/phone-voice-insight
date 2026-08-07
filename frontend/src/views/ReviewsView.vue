@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
-import { getReviews, getSources } from '@/api'
-import type { DataSource, ReviewRecord } from '@/types/api'
+import { getProducts, getReviews, getSources } from '@/api'
+import type { DataSource, Product, ProductVariant, ReviewRecord } from '@/types/api'
 
 const reviews = ref<ReviewRecord[]>([])
 const sources = ref<DataSource[]>([])
+const products = ref<Product[]>([])
 const selected = ref<ReviewRecord | null>(null)
 const loading = ref(false)
 const error = ref('')
@@ -14,11 +15,17 @@ const filters = reactive({
   page: 1,
   page_size: 20,
   source: undefined as number | undefined,
+  product_variant: undefined as number | undefined,
+  rating: undefined as number | undefined,
   search: '',
   record_type: '',
   author_role: '',
   is_official: '' as '' | 'true' | 'false',
 })
+
+const variants = computed<ProductVariant[]>(() =>
+  products.value.flatMap((product) => product.variants),
+)
 
 async function loadReviews(): Promise<void> {
   loading.value = true
@@ -47,7 +54,12 @@ function applyFilters(): void {
 
 onMounted(async () => {
   try {
-    sources.value = (await getSources({ page_size: 100 })).results
+    const [sourcePage, productPage] = await Promise.all([
+      getSources({ page_size: 100 }),
+      getProducts({ page_size: 100 }),
+    ])
+    sources.value = sourcePage.results
+    products.value = productPage.results
   } finally {
     await loadReviews()
   }
@@ -71,6 +83,27 @@ onMounted(async () => {
             :key="source.id"
             :label="source.name"
             :value="source.id"
+          />
+        </el-select>
+        <el-select
+          v-model="filters.product_variant"
+          clearable
+          placeholder="产品版本"
+          @change="applyFilters"
+        >
+          <el-option
+            v-for="variant in variants"
+            :key="variant.id"
+            :label="variant.sku_name"
+            :value="variant.id"
+          />
+        </el-select>
+        <el-select v-model="filters.rating" clearable placeholder="评分" @change="applyFilters">
+          <el-option
+            v-for="rating in [5, 4, 3, 2, 1, 0]"
+            :key="rating"
+            :label="`${rating} 星`"
+            :value="rating"
           />
         </el-select>
         <el-select
@@ -121,6 +154,7 @@ onMounted(async () => {
         <el-table-column prop="source_name" label="来源" width="120" />
         <el-table-column prop="product_name" label="产品" width="150" />
         <el-table-column prop="record_type" label="类型" width="130" />
+        <el-table-column prop="variant_name" label="产品版本" min-width="170" />
         <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip />
         <el-table-column prop="rating" label="评分" width="80" />
         <el-table-column label="角色" width="90">
@@ -152,6 +186,10 @@ onMounted(async () => {
           <el-descriptions-item label="来源">{{ selected.source_name }}</el-descriptions-item>
           <el-descriptions-item label="产品">{{ selected.product_name }}</el-descriptions-item>
           <el-descriptions-item label="类型">{{ selected.record_type }}</el-descriptions-item>
+          <el-descriptions-item label="评分">{{ selected.rating || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="产品版本">{{
+            selected.variant_name || '—'
+          }}</el-descriptions-item>
           <el-descriptions-item label="标题">{{ selected.title || '—' }}</el-descriptions-item>
           <el-descriptions-item label="内容">{{ selected.content }}</el-descriptions-item>
           <el-descriptions-item label="发布时间">{{
@@ -191,7 +229,7 @@ onMounted(async () => {
 
 .filters {
   display: grid;
-  grid-template-columns: 150px 150px 130px 140px minmax(240px, 1fr);
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
   gap: 12px;
   margin-bottom: 18px;
 }

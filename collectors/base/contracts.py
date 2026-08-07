@@ -51,11 +51,14 @@ class NormalizedReview:
     record_type: str
     title: str = ""
     content: str = ""
+    rating: float | None = None
     published_at: datetime | None = None
     author_role: str = "UNKNOWN"
     is_official: bool = False
     is_append_review: bool = False
     software_version: str = ""
+    variant_external_id: str = ""
+    variant_attributes: dict[str, str] = field(default_factory=dict)
     source_url: str = ""
     raw_data: dict[str, Any] = field(default_factory=dict)
 

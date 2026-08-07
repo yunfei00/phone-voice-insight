@@ -1,0 +1,28 @@
+{
+  "data": {
+    "items": [
+      {
+        "commentId": "900000003",
+        "text": "首次使用体验稳定。",
+        "score": 5,
+        "createdAt": "2026-07-20 09:00:00",
+        "sku": "100310496360",
+        "color": "雪原白",
+        "size": "12GB + 512GB",
+        "reference": "荣耀 Power2 12GB+512GB 雪原白",
+        "useful": 0,
+        "replies": 0,
+        "images": [],
+        "videos": [],
+        "append": {
+          "appendId": "910000003",
+          "text": "使用两周后，电量仍然够用。",
+          "createdAt": "2026-08-03 09:00:00",
+          "images": [],
+          "videos": [{"type": "video"}]
+        }
+      }
+    ]
+  },
+  "page": {"number": 1, "size": 10, "hasMore": false}
+}

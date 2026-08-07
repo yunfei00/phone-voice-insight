@@ -109,6 +109,8 @@ export interface ReviewRecord {
   source_name: string
   product: number
   product_name: string
+  product_variant: number | null
+  variant_name: string | null
   record_type: 'REVIEW' | 'APPEND_REVIEW' | 'THREAD' | 'REPLY' | 'OFFICIAL_REPLY'
   title: string
   content: string

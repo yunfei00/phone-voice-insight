@@ -80,6 +80,23 @@ uv run pytest ..\collectors\honor_club\tests\test_parser.py -k live
 
 详细数据结构、checkpoint 和限制见 [荣耀俱乐部 PoC](honor-club-poc.md)。
 
+## 京东 PoC
+
+迁移会创建一个默认停用的荣耀 Power2 京东候选入口。2026-08-08 正常浏览器访问被重定向到登录页，因此不得直接启用；先完成商品标题、HONOR/荣耀品牌、荣耀京东自营旗舰店、当前评论 host/path/参数/字段和 SKU 组合的现场复验。
+
+复验通过并人工启用目标后，只允许按以下顺序执行：
+
+```powershell
+cd backend
+$env:DJANGO_SETTINGS_MODULE = "config.settings.local"
+uv run python manage.py jd_poc --target-id <id> --pages 1 --limit 10 --dry-run
+uv run python manage.py jd_poc --target-id <id> --pages 1 --limit 10
+uv run python manage.py jd_poc --target-id <id> --pages 1 --limit 10
+uv run python manage.py jd_poc --target-id <id> --pages 3 --limit 30
+```
+
+命令强制最多 3 页/30 条。若出现登录、验证码、403、429、异常跳转或结构变化，立即停止，不加入 Cookie、代理、签名逆向或绕过逻辑。当前 endpoint/字段配置为空，命令会失败关闭。详见 [京东 PoC](jd-poc.md)。
+
 ## Docker 环境
 
 ```powershell
@@ -112,5 +129,5 @@ docker compose run --rm backend python manage.py createsuperuser
 - Redis 显示 error：确认 Redis 运行且 URL 数据库编号正确；健康接口仍会返回 `degraded`。
 - 8000/5173/5432/6379 冲突：修改 `.env` 的主机端口变量。
 - 前端 CORS 失败：把实际前端 origin 加入 `CORS_ALLOWED_ORIGINS`，不要使用通配符。
-- 荣耀采集任务失败：先查看 `error_message`；若为访问阻断必须停止。京东仍会明确返回 `collector not implemented`。
+- 荣耀采集任务失败：先查看 `error_message`；若为访问阻断必须停止。京东目标在完成现场复验前保持停用，endpoint 未验证时返回 `ENDPOINT_NOT_VERIFIED`。
 - `ConnectionTimeout localhost:5432`：PostgreSQL 没有启动；运行 `docker compose up -d postgres redis`，或使用 `backend.ps1 -UseSQLite` 做本地预览。

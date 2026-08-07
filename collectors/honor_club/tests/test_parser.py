@@ -1,10 +1,12 @@
 import os
 from pathlib import Path
 
+import httpx
 import pytest
 
-from collectors.base import CollectionCheckpoint, CollectionRequest, CollectorTarget
+from collectors.base import CollectionCheckpoint, CollectionRequest, CollectorError, CollectorTarget
 from collectors.honor_club import HonorClubCollector
+from collectors.honor_club.client import HonorClubClient
 from collectors.honor_club.date_parser import parse_honor_datetime
 from collectors.honor_club.parser import extract_topic_page_count, parse_thread_page, parse_topic_page
 from collectors.honor_club.role_mapper import map_author_role
@@ -132,6 +134,48 @@ def test_invalid_target_is_rejected_without_network() -> None:
 def test_unparseable_partial_date_returns_none_without_reference() -> None:
     assert parse_honor_datetime("1-19 19:14:30") is None
     assert parse_honor_datetime("not-a-date") is None
+
+
+def test_known_mobile_redirect_is_followed_and_canonicalized() -> None:
+    requested_urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_urls.append(str(request.url))
+        if len(requested_urls) == 1:
+            return httpx.Response(
+                302,
+                headers={"location": "cn/thread-30295048-1-1.html?mobile=2"},
+                request=request,
+            )
+        return httpx.Response(200, headers={"content-type": "text/html"}, text="<html>ok</html>", request=request)
+
+    client = HonorClubClient(transport=httpx.MockTransport(handler))
+    response = client.get_html(
+        "https://club.honor.com/cn/thread-30295048-1-1.html",
+        request_interval_seconds=3,
+    )
+
+    assert requested_urls == [
+        "https://club.honor.com/cn/thread-30295048-1-1.html",
+        "https://club.honor.com/cn/thread-30295048-1-1.html?mobile=2",
+    ]
+    assert response.url == "https://club.honor.com/cn/thread-30295048-1-1.html"
+
+
+def test_external_redirect_is_rejected_before_following() -> None:
+    requested_urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_urls.append(str(request.url))
+        return httpx.Response(302, headers={"location": "https://example.com/blocked"}, request=request)
+
+    client = HonorClubClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(CollectorError, match="异常跳转"):
+        client.get_html(
+            "https://club.honor.com/cn/thread-30295048-1-1.html",
+            request_interval_seconds=3,
+        )
+    assert requested_urls == ["https://club.honor.com/cn/thread-30295048-1-1.html"]
 
 
 @pytest.mark.skipif(os.getenv("RUN_HONOR_LIVE_TESTS") != "1", reason="live Honor test disabled")

@@ -9,7 +9,7 @@
 - `parse_records(RawPage) -> list[RawRecord]`
 - `normalize_record(RawRecord) -> NormalizedReview`
 
-输入输出以及 `CollectionCheckpoint`、`CollectorError` 位于 `collectors/base/contracts.py`。未实现方法必须抛出 `CollectorError(code="NOT_IMPLEMENTED")`，不能返回空成功或虚假记录。
+输入输出以及 `CollectionCheckpoint`、`CollectorError` 位于 `collectors/base/contracts.py`。未实现或未现场验证的能力必须显式抛出 `CollectorError`，不能返回空成功或虚假记录。
 
 ## 分页与增量
 
@@ -51,6 +51,8 @@
 
 持久化使用 `source + external_id + record_type` 数据库唯一约束和稳定 SHA256 内容哈希。每完成一个帖子即更新任务与运行 checkpoint。完整细节见 [荣耀俱乐部 PoC](honor-club-poc.md)。
 
-## 京东 Phase 3 计划
+## 京东 Phase 3 实现状态
 
-确认商品评价公开访问与使用规则，录入真实自营商品入口，完成低频评价/追评分页、SKU 映射、外部 ID 去重、checkpoint 和脱敏样本测试。任何验证码、签名或权限阻断都视为停止条件，不实现绕过。
+京东 collector 已实现严格商品 URL 校验、固定身份与 4 秒限速、禁止重定向、JSON/JSONP 安全解析、评价/追评标准化、SKU 属性契约、逐页 checkpoint、去重和隐私 allowlist。`jd_poc` 强制最多 3 页/30 条主评价。
+
+2026-08-08 正常浏览被重定向到登录页，因此商品/店铺/评论接口门禁未通过。已验证 endpoint、host 与字段映射保持为空，SourceTarget 保持停用，真实调用失败关闭。不得把 `club.jd.com` 或 `sclub.jd.com/comment/productPageComments.action` 等历史资料写成当前配置。详情见 [京东 PoC](jd-poc.md)。

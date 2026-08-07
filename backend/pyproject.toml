@@ -35,7 +35,7 @@ dev = [
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
 pythonpath = [".", ".."]
-testpaths = ["tests", "../collectors/honor_club/tests"]
+testpaths = ["tests", "../collectors/honor_club/tests", "../collectors/jd/tests"]
 addopts = "-ra --strict-markers"
 
 [tool.ruff]

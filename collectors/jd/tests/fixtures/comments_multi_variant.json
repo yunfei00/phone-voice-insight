@@ -1,0 +1,31 @@
+{
+  "data": {
+    "items": [
+      {
+        "commentId": "900000004",
+        "text": "机身颜色耐看。",
+        "score": 5,
+        "createdAt": "2026-08-04 12:00:00",
+        "sku": "100310496361",
+        "color": "旭日橙",
+        "size": "12GB + 256GB",
+        "reference": "荣耀 Power2 12GB+256GB 旭日橙",
+        "images": [],
+        "videos": []
+      },
+      {
+        "commentId": "900000005",
+        "text": "存储空间充足。",
+        "score": 4,
+        "createdAt": "2026-08-05 13:00:00",
+        "sku": "100310496362",
+        "color": "幻夜黑",
+        "size": "12GB + 512GB",
+        "reference": "荣耀 Power2 12GB+512GB 幻夜黑",
+        "images": [],
+        "videos": []
+      }
+    ]
+  },
+  "page": {"number": 1, "size": 10, "hasMore": false}
+}

@@ -7,7 +7,14 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
-from collectors.base import CollectionCheckpoint, CollectionRequest, CollectorError, CollectorTarget
+from collectors.base import (
+    BaseCollector,
+    CollectionCheckpoint,
+    CollectionRequest,
+    CollectorError,
+    CollectorTarget,
+    NormalizedReview,
+)
 from collectors.honor_club.normalizer import is_power2_related
 from django.db import transaction
 from django.db.models import Max
@@ -168,7 +175,144 @@ def _request_log(task_id: int, source: str, page: int, thread_id: str, metadata:
     )
 
 
-def run_collection(task_id: int, *, limit_override: int | None = None) -> CollectionSummary:
+def _sample_review(normalized: NormalizedReview, review_id: int | None = None) -> dict[str, Any]:
+    sample = {
+        "external_id": normalized.external_id,
+        "record_type": normalized.record_type,
+        "content_preview": normalized.content[:100],
+        "rating": normalized.rating,
+        "published_at": normalized.published_at.isoformat() if normalized.published_at else None,
+        "variant_external_id": normalized.variant_external_id,
+        "variant_attributes": normalized.variant_attributes,
+        "is_append_review": normalized.is_append_review,
+        "parent_external_id": normalized.parent_external_id,
+    }
+    if review_id is not None:
+        sample["id"] = review_id
+    return sample
+
+
+def _collect_jd_pages(
+    *,
+    source_target: SourceTarget,
+    collector: BaseCollector,
+    target: CollectorTarget,
+    pages: int,
+    limit: int,
+    persist: bool,
+    task: CollectionTask | None = None,
+    run: CollectionRun | None = None,
+) -> CollectionSummary:
+    validation = collector.validate_target(target)
+    if not validation.is_valid:
+        raise CollectorError("; ".join(validation.errors), code="INVALID_TARGET")
+    product_id = str(target.config["product_id"])
+    product_page = collector.fetch_page(
+        CollectionRequest(
+            target=target,
+            checkpoint=CollectionCheckpoint(metadata={"page_kind": "product", "product_id": product_id}),
+        )
+    )
+    collector.parse_records(product_page)
+
+    page_size = min(_int_config(target.config, "page_size", 10, 10), limit)
+    inserted = skipped = failed = scanned = 0
+    type_counts: Counter[str] = Counter()
+    samples: list[dict[str, Any]] = []
+    checkpoint: dict[str, Any] = {}
+    start_page = int((task.last_checkpoint if task else {}).get("page", 1))
+
+    for page in range(start_page, pages + 1):
+        raw_page = collector.fetch_page(
+            CollectionRequest(
+                target=target,
+                checkpoint=CollectionCheckpoint(
+                    page=page,
+                    metadata={
+                        "page_kind": "comments",
+                        "product_id": product_id,
+                        "page_size": page_size,
+                        "sort_mode": "CURRENT_PAGE_DEFAULT",
+                    },
+                ),
+                limit=min(limit - scanned, page_size),
+            )
+        )
+        if task is not None:
+            _request_log(task.id, source_target.source.code, page, "", raw_page.metadata)
+        raw_records = collector.parse_records(raw_page)
+        main_records = [record for record in raw_records if record.record_type == "REVIEW"]
+        if not main_records:
+            if raw_page.metadata.get("is_last_page") is True:
+                break
+            raise CollectorError(
+                "评论页应有数据但返回空, 可能发生访问限制或结构变化",
+                code="POSSIBLE_BLOCK_OR_FORMAT_CHANGE",
+            )
+
+        remaining_main = limit - scanned
+        allowed_main_ids = {record.external_id for record in main_records[:remaining_main]}
+        allowed_comment_ids = {str(value).removeprefix("jd_review:") for value in allowed_main_ids}
+        page_records = [
+            record
+            for record in raw_records
+            if (record.record_type == "REVIEW" and record.external_id in allowed_main_ids)
+            or (record.record_type == "APPEND_REVIEW" and record.payload.get("comment_id") in allowed_comment_ids)
+        ]
+        scanned += min(len(main_records), remaining_main)
+        last_comment_id = ""
+        for raw_record in page_records:
+            normalized = collector.normalize_record(raw_record)
+            if normalized.record_type == "REVIEW":
+                last_comment_id = str(normalized.external_id or "").removeprefix("jd_review:")
+            if persist:
+                result = persist_review(source_target, normalized)
+                if result.inserted:
+                    inserted += 1
+                    type_counts[normalized.record_type] += 1
+                    if len(samples) < 10:
+                        samples.append(_sample_review(normalized, result.review.id))
+                else:
+                    skipped += 1
+            else:
+                type_counts[normalized.record_type] += 1
+                if len(samples) < 10:
+                    samples.append(_sample_review(normalized))
+
+        checkpoint = {
+            "page": page,
+            "page_size": page_size,
+            "last_comment_id": last_comment_id,
+            "sort_mode": "CURRENT_PAGE_DEFAULT",
+        }
+        if task is not None and run is not None:
+            _save_progress(
+                task.id,
+                run.id,
+                inserted=inserted,
+                skipped=skipped,
+                failed=failed,
+                checkpoint=checkpoint,
+            )
+        if scanned >= limit:
+            break
+
+    return CollectionSummary(
+        scanned_threads=scanned,
+        inserted_records=inserted,
+        skipped_records=skipped,
+        failed_records=failed,
+        record_types=dict(type_counts),
+        samples=samples,
+    )
+
+
+def run_collection(
+    task_id: int,
+    *,
+    limit_override: int | None = None,
+    pages_override: int | None = None,
+) -> CollectionSummary:
     task, run = _start_run(task_id)
     source_target = task.source_target
     try:
@@ -179,6 +323,28 @@ def run_collection(task_id: int, *, limit_override: int | None = None) -> Collec
         raise
     target = _build_collector_target(source_target)
     config = target.config
+    if source_target.source.code == "JD":
+        pages = min(max(pages_override or _int_config(config, "max_pages", 3, 3), 1), 3)
+        limit = min(max(limit_override or task.requested_limit or 30, 1), 30)
+        try:
+            summary = _collect_jd_pages(
+                source_target=source_target,
+                collector=collector,
+                target=target,
+                pages=pages,
+                limit=limit,
+                persist=True,
+                task=task,
+                run=run,
+            )
+            _finish_success(task.id, run.id)
+            return summary
+        except Exception as exc:
+            message = f"{exc.code}: {exc}" if isinstance(exc, CollectorError) else f"COLLECTION_ERROR: {exc}"
+            logger.exception("collection_failed collection_task_id=%s source=%s", task.id, source_target.source.code)
+            _finish_failed(task.id, run.id, message)
+            raise
+
     max_pages = _int_config(config, "max_topic_pages", 1, 2)
     configured_threads = _int_config(config, "max_threads", 10, 20)
     requested_limit = limit_override or task.requested_limit or configured_threads
@@ -337,10 +503,19 @@ def run_collection(task_id: int, *, limit_override: int | None = None) -> Collec
     )
 
 
-def preview_target(source_target: SourceTarget, *, limit: int = 1) -> CollectionSummary:
+def preview_target(source_target: SourceTarget, *, limit: int = 1, pages: int = 1) -> CollectionSummary:
     collector = get_collector(source_target.source.code)
     target = _build_collector_target(source_target)
     safe_limit = min(max(limit, 1), 10)
+    if source_target.source.code == "JD":
+        return _collect_jd_pages(
+            source_target=source_target,
+            collector=collector,
+            target=target,
+            pages=min(max(pages, 1), 3),
+            limit=min(max(limit, 1), 30),
+            persist=False,
+        )
     raw_topic = collector.fetch_page(
         CollectionRequest(
             target=target,
