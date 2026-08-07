@@ -12,7 +12,8 @@ COPY --from=uv /uv /uvx /bin/
 WORKDIR /app
 
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+ARG UV_DEFAULT_INDEX_URL=https://pypi.org/simple
+RUN uv sync --default-index "$UV_DEFAULT_INDEX_URL" --frozen --no-dev --no-install-project
 
 COPY backend/ ./
 COPY collectors/ ./collectors/

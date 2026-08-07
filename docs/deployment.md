@@ -16,6 +16,8 @@ docker compose --env-file .env -f docker-compose.prod.yml ps
 
 生产配置只发布统一 Web 入口；PostgreSQL、Redis 和 Django 后端端口仅在 Compose 网络内可见。默认入口绑定 `127.0.0.1:8088`，由宿主机反向代理对外发布。
 
+后端镜像默认从 `https://pypi.org/simple` 安装锁定依赖。如果服务器访问官方 PyPI CDN 持续阻塞，可在 `.env` 设置受信任的镜像，例如 `UV_DEFAULT_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple`；该值只影响镜像构建，不改变运行时依赖版本或锁文件校验。
+
 ## 当前服务器部署
 
 `8.130.97.14` 上的部署目录为 `/opt/apps/phone-voice-insight`，公网入口为：

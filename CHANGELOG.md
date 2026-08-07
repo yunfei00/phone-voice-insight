@@ -16,6 +16,7 @@
 
 - 扩展 `NormalizedReview` 与作者角色，新增 `MODERATOR`、`EXPERT`。
 - Docker 后端镜像包含共享 collectors/ai 包；补充 Phase 2 PoC 文档和开发说明。
+- 后端镜像构建支持通过 `UV_DEFAULT_INDEX_URL` 选择 Python 包索引，改善受限网络下的可重复部署。
 
 ## [0.1.0] - 2026-07-30
 
