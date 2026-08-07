@@ -13,7 +13,8 @@ WORKDIR /app
 
 COPY backend/pyproject.toml backend/uv.lock ./
 ARG UV_DEFAULT_INDEX_URL=https://pypi.org/simple
-RUN uv sync --default-index "$UV_DEFAULT_INDEX_URL" --frozen --no-dev --no-install-project
+RUN sed -i "s|https://pypi.org/simple|$UV_DEFAULT_INDEX_URL|g" uv.lock && \
+    uv sync --default-index "$UV_DEFAULT_INDEX_URL" --frozen --no-dev --no-install-project
 
 COPY backend/ ./
 COPY collectors/ ./collectors/
