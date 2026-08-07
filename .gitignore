@@ -216,3 +216,22 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / Vite
+node_modules/
+frontend/dist/
+frontend/coverage/
+*.tsbuildinfo
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local artifacts
+staticfiles/
+*.sqlite3
+
+# Deployment backups and generated secrets
+*.env.backup

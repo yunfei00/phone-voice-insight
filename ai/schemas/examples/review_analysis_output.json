@@ -1,0 +1,21 @@
+{
+  "product_model": "荣耀 Power2",
+  "is_valid_content": true,
+  "content_type": "USER_REVIEW",
+  "aspects": [
+    {
+      "aspect": "BATTERY",
+      "sentiment": "POSITIVE",
+      "sentiment_score": 0.8,
+      "issue_category": "",
+      "issue_summary": "用户认可日常续航",
+      "evidence_text": "续航能用一整天",
+      "confidence": 0.9
+    }
+  ],
+  "software_version": null,
+  "usage_scenarios": ["日常使用"],
+  "summary": "用户认可日常续航表现。",
+  "confidence": 0.9,
+  "warnings": []
+}

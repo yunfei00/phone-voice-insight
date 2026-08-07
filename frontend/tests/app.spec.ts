@@ -1,0 +1,52 @@
+import { createPinia, setActivePinia } from 'pinia'
+import ElementPlus from 'element-plus'
+import { createApp, nextTick } from 'vue'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import App from '@/App.vue'
+import router from '@/router'
+
+vi.mock('@/api', () => ({
+  getHealth: vi.fn().mockResolvedValue({
+    status: 'ok',
+    service: 'phone-voice-insight-backend',
+    database: 'ok',
+    redis: 'ok',
+  }),
+  getProducts: vi.fn().mockResolvedValue({ count: 1, results: [] }),
+  getSources: vi.fn().mockResolvedValue({ count: 2, results: [] }),
+  getReviews: vi.fn().mockResolvedValue({ count: 0, results: [] }),
+  getCollectionTasks: vi.fn().mockResolvedValue({ count: 0, results: [] }),
+}))
+
+describe('App', () => {
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    await router.push('/dashboard')
+    await router.isReady()
+  })
+
+  it('可以挂载并读取健康检查数据', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const app = createApp(App)
+    app.use(createPinia())
+    app.use(router)
+    app.use(ElementPlus)
+    app.mount(container)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+
+    expect(container.textContent).toContain('Phone Voice Insight')
+    expect(container.textContent).toContain('数据总览')
+    expect(container.textContent).toContain('已连接')
+
+    await router.push('/system')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+    expect(container.textContent).toContain('0.1.0')
+
+    app.unmount()
+    container.remove()
+  })
+})

@@ -1,0 +1,134 @@
+name: ${PROJECT_NAME:-phone-voice-insight}
+
+x-backend-environment: &backend-environment
+  DJANGO_SETTINGS_MODULE: config.settings.production
+  SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
+  DEBUG: "false"
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+  SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+  CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-true}
+  TIME_ZONE: ${TIME_ZONE:-Asia/Shanghai}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  POSTGRES_DB: ${POSTGRES_DB:-phone_voice_insight}
+  POSTGRES_USER: ${POSTGRES_USER:-pvi}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-5}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_DB: ${REDIS_DB:-0}
+  REDIS_URL: redis://redis:6379/${REDIS_DB:-0}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+
+x-backend-service: &backend-service
+  image: ${PROJECT_NAME:-phone-voice-insight}-backend:latest
+  build:
+    context: .
+    dockerfile: deploy/docker/backend.Dockerfile
+  environment: *backend-environment
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-phone_voice_insight}
+      POSTGRES_USER: ${POSTGRES_USER:-pvi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pvi} -d ${POSTGRES_DB:-phone_voice_insight}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  backend:
+    <<: *backend-service
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --timeout ${GUNICORN_TIMEOUT:-60}"
+    volumes:
+      - static_data:/app/staticfiles
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+
+  celery-worker:
+    <<: *backend-service
+    command: celery -A config worker --loglevel=${LOG_LEVEL:-INFO} --hostname=worker@%h
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping --destination worker@$$HOSTNAME | grep -q pong"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+      start_period: 25s
+
+  celery-beat:
+    <<: *backend-service
+    command: celery -A config beat --loglevel=${LOG_LEVEL:-INFO} --pidfile=/tmp/celerybeat.pid
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 $$(cat /tmp/celerybeat.pid)"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 25s
+
+  frontend:
+    image: ${PROJECT_NAME:-phone-voice-insight}-frontend:latest
+    build:
+      context: .
+      dockerfile: deploy/docker/frontend.prod.Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_PUBLIC_BASE: ${VITE_PUBLIC_BASE:-/}
+    ports:
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8088}:80"
+    volumes:
+      - static_data:/usr/share/nginx/html/static:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_data:

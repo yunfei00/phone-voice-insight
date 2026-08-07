@@ -1,0 +1,60 @@
+# 数据契约
+
+## 通用约定
+
+- 数据库主键使用 Django `BigAutoField`，领域外部标识单独保存。
+- 所有业务时间用带时区 `datetime`，API 编码为 ISO 8601，例如 `2026-07-30T15:00:00Z`。
+- 文本与 JSON 使用 UTF-8；外部原始编码应在采集边界转换并记录异常。
+- 带时间戳模型包含 `created_at`、`updated_at`。
+
+## Product
+
+`brand`、`name`、唯一 `normalized_name`、`series`、可空业务信息 `model_code/release_date/description`、`is_active`。别名由 ProductAlias 保存，版本由 ProductVariant 保存。
+
+初始化值：荣耀（HONOR）、荣耀 Power2（HONOR_POWER2，Power 系列）、5 个指定别名、12GB+256GB 和 12GB+512GB；未知颜色保持空，不编造。
+
+## SourceTarget
+
+字段：`source`、`product`、`name`、`target_type`、可空 `target_url/external_id`、`config_json`、`is_active`。`target_type` 为 PRODUCT 或 COMMUNITY。Phase 1 不初始化真实网址，由 Admin 审核后录入。
+
+## CollectionTask / CollectionRun
+
+任务包含入口、任务类型、状态、请求上限、开始/结束时间、checkpoint、成功/跳过/失败计数和错误信息。任务类型为 FULL 或 INCREMENTAL；状态为 PENDING、RUNNING、PAUSED、SUCCESS、FAILED、CANCELLED。
+
+每次尝试创建一个递增 `run_number` 的 CollectionRun，保存独立 checkpoint 和计数。非法状态转换必须拒绝。
+
+## ReviewRecord
+
+字段覆盖来源/入口/产品/版本、外部与父外部 ID、类型、标题/正文、评分、发布时间、软件版本、作者角色、官方/追评标记、来源 URL、SHA-256 内容指纹、原始 JSON、处理状态与采集时间。
+
+`record_type`：REVIEW、APPEND_REVIEW、THREAD、REPLY、OFFICIAL_REPLY。`author_role`：USER、OFFICIAL、UNKNOWN。`status`：RAW、NORMALIZED、INVALID。
+
+### 去重策略
+
+非空外部 ID 优先使用数据库条件唯一约束：
+
+```text
+source + external_id + record_type
+```
+
+外部 ID 缺失时，业务层以规范化正文、父记录、产品、来源和发布时间形成 `content_hash` 辅助匹配；必须允许人工复核，不能只凭短文本哈希永久丢弃记录。
+
+## AnalysisResult
+
+关联 ReviewRecord，保存状态、`model_name/model_version/prompt_version`、有效内容标记、置信度、摘要、原始结构结果与分析时间。同一反馈/模型/模型版本/Prompt 版本唯一。
+
+## AspectResult
+
+关联 AnalysisResult，保存一级维度、情感、情感分、问题分类/摘要、使用场景、原文证据和置信度。
+
+一级维度：BATTERY、CHARGING、HEATING、SIGNAL、PERFORMANCE、SYSTEM_FLUENCY、SYSTEM_BUG、DISPLAY、CAMERA、WEIGHT_AND_FEEL、BUILD_QUALITY、AUDIO_AND_CALL、DURABILITY、VALUE_FOR_MONEY、AFTER_SALES。
+
+情感值：POSITIVE、NEUTRAL、NEGATIVE、MIXED。当前不定义评分公式。
+
+## 原始数据保留
+
+`raw_data` 保存可审计的来源字段，但不应无期限复制页面或保存无关内容。原始与标准化记录分层，后续 Schema 升级可重放；保留期限、访问权限与删除流程应在正式采集前确定。
+
+## 隐私脱敏
+
+只采集分析所需公开内容。展示、导出与模型输入前删除或散列手机号、邮箱、地址、订单号、Cookie、Token、设备唯一标识和非必要昵称。日志禁止记录凭据与完整个人敏感信息。
