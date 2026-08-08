@@ -17,6 +17,22 @@ vi.mock('@/api', () => ({
   getSources: vi.fn().mockResolvedValue({ count: 2, results: [] }),
   getReviews: vi.fn().mockResolvedValue({ count: 0, results: [] }),
   getCollectionTasks: vi.fn().mockResolvedValue({ count: 0, results: [] }),
+  getDataQualitySummary: vi.fn().mockResolvedValue({
+    total: 0,
+    eligible: 0,
+    excluded: 0,
+    eligibility_rate: 0,
+    categories: {
+      official: 0,
+      low_information: 0,
+      promotional: 0,
+      noise: 0,
+      duplicate: 0,
+      product_not_matched: 0,
+      empty: 0,
+    },
+    exclusion_reasons: {},
+  }),
 }))
 
 describe('App', () => {

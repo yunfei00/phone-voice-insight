@@ -11,6 +11,7 @@ describe('router', () => {
         'products',
         'collection-tasks',
         'reviews',
+        'data-quality',
         'analysis',
         'system',
       ]),

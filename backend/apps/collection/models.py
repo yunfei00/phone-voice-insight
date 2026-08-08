@@ -62,6 +62,11 @@ class CollectionTask(TimeStampedModel):
     success_count = models.PositiveIntegerField("成功数", default=0)
     skipped_count = models.PositiveIntegerField("跳过数", default=0)
     failure_count = models.PositiveIntegerField("失败数", default=0)
+    new_threads = models.PositiveIntegerField("新增帖子", default=0)
+    known_threads = models.PositiveIntegerField("已知帖子", default=0)
+    new_records = models.PositiveIntegerField("新增记录", default=0)
+    duplicate_records = models.PositiveIntegerField("重复记录", default=0)
+    stopped_at_known_boundary = models.BooleanField("在已知边界停止", default=False)
     error_message = models.TextField("错误信息", blank=True)
 
     class Meta:
@@ -89,6 +94,11 @@ class CollectionRun(models.Model):
     success_count = models.PositiveIntegerField("成功数", default=0)
     skipped_count = models.PositiveIntegerField("跳过数", default=0)
     failure_count = models.PositiveIntegerField("失败数", default=0)
+    new_threads = models.PositiveIntegerField("新增帖子", default=0)
+    known_threads = models.PositiveIntegerField("已知帖子", default=0)
+    new_records = models.PositiveIntegerField("新增记录", default=0)
+    duplicate_records = models.PositiveIntegerField("重复记录", default=0)
+    stopped_at_known_boundary = models.BooleanField("在已知边界停止", default=False)
     checkpoint_json = models.JSONField("检查点", default=dict, blank=True)
     error_message = models.TextField("错误信息", blank=True)
 

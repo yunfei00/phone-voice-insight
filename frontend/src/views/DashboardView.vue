@@ -5,15 +5,16 @@ import { onMounted } from 'vue'
 import { useSystemStore } from '@/stores/system'
 
 const store = useSystemStore()
-const { health, metrics, loading, error } = storeToRefs(store)
+const { health, metrics, sources, loading, error } = storeToRefs(store)
 
 onMounted(() => store.fetchDashboardData())
 
 const cards = [
-  { key: 'products', label: '产品总数' },
-  { key: 'sources', label: '数据来源' },
-  { key: 'reviews', label: '反馈总数' },
-  { key: 'collectionTasks', label: '采集任务' },
+  { key: 'threads', label: '已采集帖子' },
+  { key: 'replies', label: '已采集回复' },
+  { key: 'rawRecords', label: '原始反馈' },
+  { key: 'eligibleCorpus', label: 'AI 可用语料' },
+  { key: 'excludedRecords', label: '排除数据' },
 ] as const
 </script>
 
@@ -22,7 +23,7 @@ const cards = [
     <div class="page-header">
       <div>
         <h1 class="page-title">数据总览</h1>
-        <p class="page-description">所有数字直接来自后端 API；没有数据时显示 0。</p>
+        <p class="page-description">基于荣耀俱乐部公开用户讨论的荣耀 Power2 用户口碑洞察。</p>
       </div>
       <el-button :loading="loading" @click="store.fetchDashboardData()">刷新</el-button>
     </div>
@@ -35,6 +36,18 @@ const cards = [
         <strong>{{ metrics[card.key] }}</strong>
       </div>
     </div>
+
+    <section class="panel source-panel">
+      <div>
+        <h2>来源状态</h2>
+        <p>系统保留扩展能力，但第一版正式数据只依赖荣耀俱乐部。</p>
+      </div>
+      <div class="status-items">
+        <span>荣耀俱乐部 <el-tag type="success">已启用</el-tag></span>
+        <span>京东 <el-tag type="warning">暂缓</el-tag></span>
+        <span>已配置来源 {{ sources.length }}</span>
+      </div>
+    </section>
 
     <section class="panel status-panel">
       <div>
@@ -62,6 +75,7 @@ const cards = [
         >
       </div>
     </section>
+    <p class="latest">最近采集时间：{{ metrics.latestCollection || '暂无' }}</p>
   </div>
 </template>
 
@@ -73,7 +87,7 @@ const cards = [
 .metric-grid {
   min-height: 130px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -101,6 +115,21 @@ const cards = [
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+}
+
+.source-panel {
+  margin-bottom: 20px;
+}
+
+.source-panel h2,
+.source-panel p {
+  margin-top: 0;
+}
+
+.latest {
+  color: #6b7280;
+  font-size: 13px;
+  text-align: right;
 }
 
 .status-panel h2 {

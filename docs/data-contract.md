@@ -21,7 +21,7 @@ SourceProductVariant 保存商城来源 SKU 到通用 ProductVariant 的映射�
 
 ## CollectionTask / CollectionRun
 
-任务包含入口、任务类型、状态、请求上限、开始/结束时间、checkpoint、成功/跳过/失败计数和错误信息。任务类型为 FULL 或 INCREMENTAL；状态为 PENDING、RUNNING、PAUSED、SUCCESS、FAILED、CANCELLED。
+任务包含入口、任务类型、状态、请求上限、开始/结束时间、checkpoint、成功/跳过/失败计数和错误信息。增量统计额外保存 `new_threads`、`known_threads`、`new_records`、`duplicate_records` 和 `stopped_at_known_boundary`。任务类型为 FULL 或 INCREMENTAL；状态为 PENDING、RUNNING、PAUSED、SUCCESS、FAILED、CANCELLED。
 
 每次尝试创建一个递增 `run_number` 的 CollectionRun，保存独立 checkpoint 和计数。非法状态转换必须拒绝。
 
@@ -42,6 +42,18 @@ source + external_id + record_type
 ```
 
 外部 ID 缺失时，业务层以规范化正文、父记录、产品、来源和发布时间形成 `content_hash` 辅助匹配；必须允许人工复核，不能只凭短文本哈希永久丢弃记录。
+
+## ReviewQuality / ReviewQualityRun
+
+`ReviewQuality` 与 ReviewRecord 一对一，只保存最新治理状态：标准化文本、有效文本、产品相关性、官方/低信息/页面噪声/宣传/重复标记、重复来源、AI 资格、排除原因、质量分、规则标记、处理器版本和人工覆盖。它不得改写 `ReviewRecord.content`。
+
+`ReviewQualityRun` 以 `review + processor_version` 唯一保存版本快照。同一版本重复执行更新同一快照，不增加记录；规则升级后使用新版本，旧结果仍可追踪。
+
+## AnalysisCorpusItem
+
+与 ReviewRecord 和 ReviewQuality 一对一，保存产品、来源、类型、角色、标准化文本、结构化上下文、最终资格、排除原因、质量分和 `corpus_version`。Phase 5 只能查询 `eligible=true` 的指定语料版本。
+
+`quality_score` 范围为 0.0～1.0，仅表示文本作为分析材料的适用性，不代表满意度或手机评分。
 
 ## AnalysisResult
 

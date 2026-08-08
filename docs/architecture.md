@@ -20,8 +20,12 @@ flowchart TB
     subgraph DATA["数据层"]
         PG[("PostgreSQL")]
     end
+    subgraph GOV["治理层"]
+        Q["ReviewQuality"]
+        CORP["AnalysisCorpusItem"]
+    end
     subgraph EXT["后续扩展"]
-        C["collectors"]
+        COL["collectors"]
         AI["AI analysis"]
     end
 
@@ -31,9 +35,9 @@ flowchart TB
     D --> PG
     D --> R
     B --> R --> W
-    W --> PG
-    W -. "Phase 2+" .-> C
-    W -. "Phase 5+" .-> AI
+    W --> COL --> PG
+    PG --> Q --> CORP
+    CORP -. "Phase 5+" .-> AI
 ```
 
 ## 前后端职责
@@ -57,7 +61,9 @@ flowchart LR
     CQ --> CR["CollectionRun"]
     CR -. "后续采集器" .-> RAW["RawRecord + 原始 payload"]
     RAW --> NR["ReviewRecord 统一化与去重"]
-    NR -. "后续 AI" .-> AR["AnalysisResult"]
+    NR --> Q["ReviewQuality + 版本快照"]
+    Q --> CORPUS["AnalysisCorpusItem"]
+    CORPUS -. "Phase 5" .-> AR["AnalysisResult"]
     AR --> ASP["AspectResult + evidence"]
     ASP -. "后续聚合" .-> REP["AggregateReport"]
 ```
@@ -66,9 +72,9 @@ flowchart LR
 
 1. API 创建 PENDING 任务，不假定执行成功。
 2. Worker 锁定任务并切换到 RUNNING，创建递增的 CollectionRun。
-3. 当前阶段抛出 `CollectorNotImplementedError`。
-4. 异常路径原子写入任务和运行记录的 FAILED、完成时间、失败数与安全错误消息。
-5. 后续采集器接入时复用状态机、checkpoint 和计数，不改变 API 主契约。
+3. 荣耀 collector 以单并发和至少 3 秒间隔执行 FULL 或 INCREMENTAL；每个帖子完成后更新 checkpoint 和增量统计。
+4. 治理任务只读取数据库，幂等更新 ReviewQuality、版本快照和 AnalysisCorpusItem，不访问外网。
+5. 异常路径原子写入任务和运行记录的 FAILED、完成时间、失败数与安全错误消息。
 
 ## 模块边界
 
@@ -76,7 +82,7 @@ flowchart LR
 - `products`：品牌、产品、别名、版本。
 - `sources`：平台与具体入口，不保存任务状态。
 - `collection`：任务、运行、checkpoint 和 Celery 入口。
-- `reviews`：统一反馈与去重，不做 AI 推断。
+- `reviews`：统一反馈事实层、确定性治理结果、版本快照和 AI 语料层；不做 AI 推断。
 - `analysis`：版本化分析结果与证据，不做报告聚合。
 - `reports`：时间周期和报告快照。
 - `collectors` / `ai`：可替换的领域实现层，不直接依赖前端。
@@ -87,4 +93,4 @@ flowchart LR
 
 ## 扩展方式
 
-新增来源时实现 `BaseCollector`、新增来源配置和契约测试；新增模型供应商时实现 Schema 适配器并记录版本；新增统计时从 `AspectResult` 生成可重建快照。业务增长后可拆分 Worker 队列、只读 API、对象存储和独立分析服务，而无需改变统一反馈主模型。
+新增来源时实现 `BaseCollector`、新增来源配置和契约测试；Phase 5 通过 `get_analysis_corpus(product_id, corpus_version=...)` 只读取通过治理的版本化语料。新增模型供应商时实现 Schema 适配器并记录版本；业务增长后可拆分 Worker 队列、只读 API、对象存储和独立分析服务，而无需改变统一反馈事实模型。

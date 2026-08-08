@@ -72,6 +72,11 @@ export interface CollectionRun {
   success_count: number
   skipped_count: number
   failure_count: number
+  new_threads: number
+  known_threads: number
+  new_records: number
+  duplicate_records: number
+  stopped_at_known_boundary: boolean
   checkpoint_json: Record<string, unknown>
   error_message: string
 }
@@ -88,6 +93,11 @@ export interface CollectionTask {
   success_count: number
   skipped_count: number
   failure_count: number
+  new_threads: number
+  known_threads: number
+  new_records: number
+  duplicate_records: number
+  stopped_at_known_boundary: boolean
   error_message: string
   started_at: string | null
   finished_at: string | null
@@ -127,8 +137,73 @@ export interface ReviewRecord {
 }
 
 export interface DashboardMetrics {
-  products: number
-  sources: number
-  reviews: number
-  collectionTasks: number
+  threads: number
+  replies: number
+  rawRecords: number
+  eligibleCorpus: number
+  excludedRecords: number
+  latestCollection: string | null
+}
+
+export type ExclusionReason =
+  | 'NONE'
+  | 'EMPTY_CONTENT'
+  | 'OFFICIAL_CONTENT'
+  | 'PRODUCT_NOT_MATCHED'
+  | 'PAGE_NOISE'
+  | 'PROMOTIONAL'
+  | 'LOW_INFORMATION'
+  | 'DUPLICATE'
+  | 'INVALID_ENCODING'
+  | 'PARSER_ARTIFACT'
+  | 'OTHER'
+
+export interface ReviewQuality {
+  id: number
+  review_id: number
+  source_id: number
+  source_name: string
+  product_id: number
+  product_name: string
+  record_type: ReviewRecord['record_type']
+  author_role: string
+  original_title: string
+  original_content: string
+  normalized_text: string
+  context_text: string
+  published_at: string | null
+  has_meaningful_text: boolean
+  is_product_related: boolean
+  is_official_content: boolean
+  is_low_information: boolean
+  is_navigation_or_page_noise: boolean
+  is_promotional: boolean
+  is_duplicate: boolean
+  duplicate_of: number | null
+  eligible_for_ai: boolean
+  exclusion_reason: ExclusionReason
+  quality_score: number
+  flags_json: Record<string, unknown>
+  processor_version: string
+  processed_at: string
+  manual_override: boolean
+  manual_eligible: boolean | null
+  manual_reason: string
+}
+
+export interface DataQualitySummary {
+  total: number
+  eligible: number
+  excluded: number
+  eligibility_rate: number
+  categories: {
+    official: number
+    low_information: number
+    promotional: number
+    noise: number
+    duplicate: number
+    product_not_matched: number
+    empty: number
+  }
+  exclusion_reasons: Record<ExclusionReason, number>
 }

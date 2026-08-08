@@ -31,6 +31,20 @@ class ReviewStatus(models.TextChoices):
     INVALID = "INVALID", "无效"
 
 
+class ExclusionReason(models.TextChoices):
+    NONE = "NONE", "不排除"
+    EMPTY_CONTENT = "EMPTY_CONTENT", "空内容"
+    OFFICIAL_CONTENT = "OFFICIAL_CONTENT", "官方内容"
+    PRODUCT_NOT_MATCHED = "PRODUCT_NOT_MATCHED", "产品不相关"
+    PAGE_NOISE = "PAGE_NOISE", "页面噪声"
+    PROMOTIONAL = "PROMOTIONAL", "宣传内容"
+    LOW_INFORMATION = "LOW_INFORMATION", "低信息"
+    DUPLICATE = "DUPLICATE", "重复"
+    INVALID_ENCODING = "INVALID_ENCODING", "无效编码"
+    PARSER_ARTIFACT = "PARSER_ARTIFACT", "解析残留"
+    OTHER = "OTHER", "其他"
+
+
 class ReviewRecord(TimeStampedModel):
     source = models.ForeignKey(DataSource, on_delete=models.PROTECT, related_name="reviews", verbose_name="来源")
     source_target = models.ForeignKey(
@@ -95,3 +109,145 @@ class ReviewRecord(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.get_record_type_display()} #{self.external_id or self.pk}"
+
+
+class ReviewQuality(TimeStampedModel):
+    review = models.OneToOneField(
+        ReviewRecord,
+        on_delete=models.CASCADE,
+        related_name="quality",
+        verbose_name="反馈记录",
+    )
+    normalized_text = models.TextField("标准化文本", blank=True)
+    has_meaningful_text = models.BooleanField("包含有效文本", default=False)
+    is_product_related = models.BooleanField("产品相关", default=False)
+    is_official_content = models.BooleanField("官方内容", default=False)
+    is_low_information = models.BooleanField("低信息", default=False)
+    is_navigation_or_page_noise = models.BooleanField("页面噪声", default=False)
+    is_promotional = models.BooleanField("宣传内容", default=False)
+    is_duplicate = models.BooleanField("重复", default=False)
+    duplicate_of = models.ForeignKey(
+        ReviewRecord,
+        on_delete=models.SET_NULL,
+        related_name="duplicate_quality_records",
+        null=True,
+        blank=True,
+        verbose_name="重复于",
+    )
+    eligible_for_ai = models.BooleanField("AI 语料可用", default=False, db_index=True)
+    exclusion_reason = models.CharField(
+        "排除原因",
+        max_length=30,
+        choices=ExclusionReason.choices,
+        default=ExclusionReason.NONE,
+        db_index=True,
+    )
+    quality_score = models.FloatField(
+        "语料质量分",
+        default=0.0,
+        validators=(MinValueValidator(0.0), MaxValueValidator(1.0)),
+    )
+    flags_json = models.JSONField("规则标记", default=dict, blank=True)
+    processor_version = models.CharField("处理器版本", max_length=50, db_index=True)
+    processed_at = models.DateTimeField("处理时间")
+    manual_override = models.BooleanField("人工覆盖", default=False)
+    manual_eligible = models.BooleanField("人工可用判断", null=True, blank=True)
+    manual_reason = models.TextField("人工覆盖原因", blank=True)
+
+    class Meta:
+        ordering = ("-processed_at", "-id")
+        indexes = [
+            models.Index(fields=("exclusion_reason", "quality_score"), name="quality_reason_score"),
+            models.Index(fields=("processor_version", "eligible_for_ai"), name="quality_version_eligible"),
+        ]
+        verbose_name = "反馈数据质量"
+        verbose_name_plural = verbose_name
+
+    def __str__(self) -> str:
+        return f"反馈 #{self.review_id} / {self.exclusion_reason}"
+
+
+class ReviewQualityRun(TimeStampedModel):
+    review = models.ForeignKey(
+        ReviewRecord,
+        on_delete=models.CASCADE,
+        related_name="quality_runs",
+        verbose_name="反馈记录",
+    )
+    processor_version = models.CharField("处理器版本", max_length=50)
+    normalized_text = models.TextField("标准化文本", blank=True)
+    eligible_for_ai = models.BooleanField("AI 语料可用", default=False)
+    exclusion_reason = models.CharField(
+        "排除原因",
+        max_length=30,
+        choices=ExclusionReason.choices,
+        default=ExclusionReason.NONE,
+    )
+    quality_score = models.FloatField(
+        "语料质量分",
+        default=0.0,
+        validators=(MinValueValidator(0.0), MaxValueValidator(1.0)),
+    )
+    flags_json = models.JSONField("规则标记", default=dict, blank=True)
+    processed_at = models.DateTimeField("处理时间")
+
+    class Meta:
+        ordering = ("review_id", "-processed_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("review", "processor_version"),
+                name="uniq_quality_run_review_version",
+            )
+        ]
+        verbose_name = "反馈治理版本记录"
+        verbose_name_plural = verbose_name
+
+    def __str__(self) -> str:
+        return f"反馈 #{self.review_id} / {self.processor_version}"
+
+
+class AnalysisCorpusItem(TimeStampedModel):
+    review = models.OneToOneField(
+        ReviewRecord,
+        on_delete=models.CASCADE,
+        related_name="corpus_item",
+        verbose_name="反馈记录",
+    )
+    quality = models.OneToOneField(
+        ReviewQuality,
+        on_delete=models.CASCADE,
+        related_name="corpus_item",
+        verbose_name="治理结果",
+    )
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="corpus_items", verbose_name="产品")
+    source = models.ForeignKey(DataSource, on_delete=models.PROTECT, related_name="corpus_items", verbose_name="来源")
+    record_type = models.CharField("记录类型", max_length=30, choices=RecordType.choices)
+    author_role = models.CharField("作者角色", max_length=20, choices=AuthorRole.choices)
+    normalized_text = models.TextField("标准化文本", blank=True)
+    context_text = models.TextField("分析上下文", blank=True)
+    eligible = models.BooleanField("可用于 AI", default=False, db_index=True)
+    exclusion_reason = models.CharField(
+        "排除原因",
+        max_length=30,
+        choices=ExclusionReason.choices,
+        default=ExclusionReason.NONE,
+        db_index=True,
+    )
+    quality_score = models.FloatField(
+        "语料质量分",
+        default=0.0,
+        validators=(MinValueValidator(0.0), MaxValueValidator(1.0)),
+    )
+    corpus_version = models.CharField("语料版本", max_length=80, db_index=True)
+
+    class Meta:
+        ordering = ("review_id",)
+        indexes = [
+            models.Index(fields=("product", "corpus_version", "eligible"), name="corpus_product_version"),
+            models.Index(fields=("source", "record_type", "eligible"), name="corpus_source_type"),
+        ]
+        verbose_name = "AI 分析语料"
+        verbose_name_plural = verbose_name
+
+    def __str__(self) -> str:
+        return f"语料 #{self.review_id} / {self.corpus_version}"

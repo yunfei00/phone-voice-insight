@@ -1,17 +1,20 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-import { getCollectionTasks, getHealth, getProducts, getReviews, getSources } from '@/api'
-import type { DashboardMetrics, HealthStatus } from '@/types/api'
+import { getDataQualitySummary, getHealth, getReviews, getSources } from '@/api'
+import type { DashboardMetrics, DataSource, HealthStatus } from '@/types/api'
 
 export const useSystemStore = defineStore('system', () => {
   const health = ref<HealthStatus | null>(null)
   const metrics = ref<DashboardMetrics>({
-    products: 0,
-    sources: 0,
-    reviews: 0,
-    collectionTasks: 0,
+    threads: 0,
+    replies: 0,
+    rawRecords: 0,
+    eligibleCorpus: 0,
+    excludedRecords: 0,
+    latestCollection: null,
   })
+  const sources = ref<DataSource[]>([])
   const loading = ref(false)
   const error = ref('')
   const isHealthy = computed(() => health.value?.status === 'ok')
@@ -20,19 +23,26 @@ export const useSystemStore = defineStore('system', () => {
     loading.value = true
     error.value = ''
     try {
-      const [healthData, products, sources, reviews, tasks] = await Promise.all([
-        getHealth(),
-        getProducts({ page_size: 1 }),
-        getSources({ page_size: 1 }),
-        getReviews({ page_size: 1 }),
-        getCollectionTasks({ page_size: 1 }),
-      ])
+      const [healthData, sourcePage, threads, replies, officialReplies, reviews, latest, quality] =
+        await Promise.all([
+          getHealth(),
+          getSources({ page_size: 100 }),
+          getReviews({ page_size: 1, record_type: 'THREAD' }),
+          getReviews({ page_size: 1, record_type: 'REPLY' }),
+          getReviews({ page_size: 1, record_type: 'OFFICIAL_REPLY' }),
+          getReviews({ page_size: 1 }),
+          getReviews({ page_size: 1, ordering: '-collected_at' }),
+          getDataQualitySummary(),
+        ])
       health.value = healthData
+      sources.value = sourcePage.results
       metrics.value = {
-        products: products.count,
-        sources: sources.count,
-        reviews: reviews.count,
-        collectionTasks: tasks.count,
+        threads: threads.count,
+        replies: replies.count + officialReplies.count,
+        rawRecords: reviews.count,
+        eligibleCorpus: quality.eligible,
+        excludedRecords: quality.excluded,
+        latestCollection: latest.results[0]?.collected_at || null,
       }
     } catch {
       health.value = null
@@ -42,5 +52,5 @@ export const useSystemStore = defineStore('system', () => {
     }
   }
 
-  return { health, metrics, loading, error, isHealthy, fetchDashboardData }
+  return { health, metrics, sources, loading, error, isHealthy, fetchDashboardData }
 })

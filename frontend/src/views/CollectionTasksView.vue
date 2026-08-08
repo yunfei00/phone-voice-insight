@@ -46,7 +46,7 @@ const targets = computed<SourceTarget[]>(() => {
 const selectedSourceCode = computed(
   () => sources.value.find((item) => item.id === form.source)?.code || '',
 )
-const requestedLimitMax = computed(() => (selectedSourceCode.value === 'JD' ? 30 : 20))
+const requestedLimitMax = computed(() => (selectedSourceCode.value === 'JD' ? 30 : 200))
 
 const statusType: Record<CollectionStatus, 'info' | 'primary' | 'warning' | 'success' | 'danger'> =
   {
@@ -177,7 +177,7 @@ onUnmounted(stopPolling)
       </div>
     </div>
     <el-alert
-      title="荣耀俱乐部已通过 20 帖门禁；京东框架已就绪，但当前目标因登录墙与接口未验证保持停用。"
+      title="Phase 4 扩容保持单并发和至少 3 秒请求间隔；京东已暂缓且采集入口保持停用。"
       type="info"
       show-icon
       :closable="false"
@@ -199,6 +199,8 @@ onUnmounted(stopPolling)
         <el-table-column prop="success_count" label="成功" width="80" />
         <el-table-column prop="skipped_count" label="跳过" width="80" />
         <el-table-column prop="failure_count" label="失败" width="80" />
+        <el-table-column prop="new_threads" label="新帖" width="80" />
+        <el-table-column prop="known_threads" label="已知帖" width="85" />
         <el-table-column prop="started_at" label="开始时间" min-width="170" />
         <el-table-column prop="finished_at" label="结束时间" min-width="170" />
         <el-table-column
@@ -250,7 +252,7 @@ onUnmounted(stopPolling)
             <el-option
               v-for="source in sources"
               :key="source.id"
-              :label="source.name"
+              :label="source.code === 'JD' ? '京东（暂未启用）' : source.name"
               :value="source.id"
             />
           </el-select>
@@ -280,7 +282,7 @@ onUnmounted(stopPolling)
         </el-form-item>
         <el-form-item label="最多采集条数">
           <el-input-number v-model="form.requested_limit" :min="1" :max="requestedLimitMax" />
-          <small class="hint">荣耀最多 20 个帖子；京东 PoC 强制最多 30 条主评价。</small>
+          <small class="hint">荣耀单任务硬上限 200 个帖子；京东暂未启用。</small>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -305,6 +307,11 @@ onUnmounted(stopPolling)
         <el-descriptions-item label="统计">
           成功 {{ selected.success_count }} / 跳过 {{ selected.skipped_count }} / 失败
           {{ selected.failure_count }}
+        </el-descriptions-item>
+        <el-descriptions-item label="增量统计">
+          新帖 {{ selected.new_threads }} / 已知帖 {{ selected.known_threads }} / 新记录
+          {{ selected.new_records }} / 重复 {{ selected.duplicate_records }} / 已知边界停止
+          {{ selected.stopped_at_known_boundary ? '是' : '否' }}
         </el-descriptions-item>
         <el-descriptions-item label="开始时间">{{
           selected.started_at || '—'

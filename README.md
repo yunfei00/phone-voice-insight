@@ -1,10 +1,10 @@
 # Phone Voice Insight
 
-手机用户口碑洞察平台（Phone Voice Insight，PVI）用于整合手机产品在公开渠道中的真实用户反馈。首个目标产品是荣耀 Power2，首批来源为京东自营商品评价与荣耀俱乐部帖子/回复。
+手机用户口碑洞察平台（Phone Voice Insight，PVI）用于整合手机产品在公开渠道中的真实用户反馈。第一版聚焦荣耀 Power2，正式数据只依赖荣耀俱乐部公开帖子与回复；系统保留未来扩展京东及其他公开或授权数据源的能力。
 
 ## 当前范围
 
-Phase 1 已交付可运行的 Monorepo 基础框架。Phase 2 已完成荣耀俱乐部公开页面的低频采集 PoC 和 2 页/20 帖门禁。Phase 3 京东评价采集因外部访问限制正式标记为 **POSTPONED**：已有失败关闭框架和探测能力会保留，但第一版不再依赖京东数据。当前开始 Phase 4 荣耀俱乐部数据治理与样本扩容。
+Phase 1 已交付可运行的 Monorepo 基础框架。Phase 2 已完成荣耀俱乐部公开页面的低频采集 PoC 和 2 页/20 帖门禁。Phase 3 京东评价采集因外部访问限制正式标记为 **POSTPONED**：已有失败关闭框架和探测能力会保留，但第一版不再依赖京东数据。Phase 4 已完成荣耀俱乐部数据治理、10 页安全扩容和真实增量边界验收。
 
 当前不包含登录/验证码或反爬绕过、AI 模型调用、Embedding/聚类、RAG、正式评分、付费权限和 Kubernetes。未现场验证的京东 endpoint 会明确失败，不生成虚假反馈或分析结果。
 
@@ -27,8 +27,11 @@ flowchart LR
     A --> Q["Celery 队列"]
     Q --> W["Celery Worker"]
     B["Celery Beat"] --> Q
-    W --> C["荣耀俱乐部 / 京东受限采集器"]
-    W -. "后续接入" .-> AI["AI 分析层"]
+    W --> C["荣耀俱乐部采集器"]
+    C --> G["确定性数据治理"]
+    G --> CORPUS["AI 可分析语料"]
+    W -. "未来扩展" .-> JD["京东等授权数据源"]
+    CORPUS -. "Phase 5" .-> AI["AI 分析层"]
 ```
 
 详细边界与数据流见 [架构文档](docs/architecture.md)。
@@ -183,10 +186,11 @@ npm run build
 - Celery 任务、`POST /api/v1/collection-tasks/{id}/run/` 与前端执行/轮询已形成真实采集闭环。
 - 原始反馈页面/API 支持 source、record_type、rating、product_variant、author_role、is_official 组合筛选和结构化详情。
 - 京东 collector 支持安全 URL、限速、JSON/JSONP、评价/追评、评分、来源 SKU 映射、checkpoint 与去重；因登录墙，真实 endpoint/字段配置为空且入口停用。
+- Phase 4 新增独立的 `ReviewQuality`、版本快照和 `AnalysisCorpusItem`，通过确定性规则完成文本标准化、官方/低信息/宣传/噪声/重复/相关性判断与上下文构建，不改写原始反馈。
 
 ## 后续路线
 
-荣耀俱乐部 Phase 2 结果见 [荣耀 PoC](docs/honor-club-poc.md)，京东停止原因和未验证项见 [京东 PoC](docs/jd-poc.md)，可视浏览器证据见 [京东评价接口发现报告](docs/jd-interface-discovery.md)。真实京东样本经人工确认后，下一阶段才是 Phase 4 数据清洗与治理；确认前不要开始 AI。完整阶段见 [路线图](docs/roadmap.md)。
+荣耀俱乐部 Phase 2 结果见 [荣耀 PoC](docs/honor-club-poc.md)，Phase 4 规则见 [数据治理](docs/data-governance.md)，真实扩容与验收结果见 [荣耀 Power2 数据质量报告](docs/data-quality-report-honor-power2.md)。京东停止原因和未验证项见 [京东 PoC](docs/jd-poc.md)，可视浏览器证据见 [京东评价接口发现报告](docs/jd-interface-discovery.md)。下一步仅建议进入 Phase 5 AI 结构化分析，须等待人工确认。完整阶段见 [路线图](docs/roadmap.md)。
 
 ## 数据合规
 

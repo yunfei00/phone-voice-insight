@@ -2,10 +2,12 @@ import apiClient from './client'
 import type {
   CollectionTask,
   CollectionTaskRunResponse,
+  DataQualitySummary,
   DataSource,
   HealthStatus,
   PaginatedResponse,
   Product,
+  ReviewQuality,
   ReviewRecord,
 } from '@/types/api'
 
@@ -47,3 +49,17 @@ export const getReviews = async (
   params: PageParams = {},
 ): Promise<PaginatedResponse<ReviewRecord>> =>
   (await apiClient.get<PaginatedResponse<ReviewRecord>>('/reviews/', { params })).data
+
+export const getReviewQualities = async (
+  params: PageParams = {},
+): Promise<PaginatedResponse<ReviewQuality>> =>
+  (await apiClient.get<PaginatedResponse<ReviewQuality>>('/review-quality/', { params })).data
+
+export const getDataQualitySummary = async (params: PageParams = {}): Promise<DataQualitySummary> =>
+  (await apiClient.get<DataQualitySummary>('/review-quality/summary/', { params })).data
+
+export const overrideReviewQuality = async (
+  qualityId: number,
+  payload: { eligible: boolean; reason: string },
+): Promise<ReviewQuality> =>
+  (await apiClient.post<ReviewQuality>(`/review-quality/${qualityId}/override/`, payload)).data

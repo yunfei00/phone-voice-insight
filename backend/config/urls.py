@@ -9,7 +9,7 @@ from apps.analysis.views import AnalysisResultViewSet
 from apps.collection.views import CollectionTaskViewSet
 from apps.common.views import health
 from apps.products.views import ProductViewSet
-from apps.reviews.views import ReviewRecordViewSet
+from apps.reviews.views import ReviewQualityViewSet, ReviewRecordViewSet
 from apps.sources.views import DataSourceViewSet
 
 router = DefaultRouter()
@@ -17,6 +17,7 @@ router.register("products", ProductViewSet, basename="product")
 router.register("sources", DataSourceViewSet, basename="source")
 router.register("collection-tasks", CollectionTaskViewSet, basename="collection-task")
 router.register("reviews", ReviewRecordViewSet, basename="review")
+router.register("review-quality", ReviewQualityViewSet, basename="review-quality")
 router.register("analysis-results", AnalysisResultViewSet, basename="analysis-result")
 
 urlpatterns = [

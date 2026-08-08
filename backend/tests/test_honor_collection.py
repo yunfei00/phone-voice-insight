@@ -11,7 +11,7 @@ from collectors.base import (
     ValidationResult,
 )
 
-from apps.collection.models import CollectionStatus, CollectionTask
+from apps.collection.models import CollectionStatus, CollectionTask, CollectionTaskType
 from apps.collection.services.collection_runner import run_collection
 from apps.products.models import Product
 from apps.reviews.models import ReviewRecord
@@ -142,3 +142,90 @@ def test_runner_persists_checkpoint_and_deduplicates_second_run(
     assert second.skipped_records == 2
     assert task.skipped_count == 2
     assert ReviewRecord.objects.count() == 2
+
+
+class KnownBoundaryHonorCollector(FixtureHonorCollector):
+    def __init__(self) -> None:
+        self.thread_fetches = 0
+
+    def fetch_page(self, request: CollectionRequest) -> RawPage:
+        if request.checkpoint.metadata.get("page_kind") == "thread":
+            self.thread_fetches += 1
+        return super().fetch_page(request)
+
+    def parse_records(self, raw_page: RawPage) -> list[RawRecord]:
+        if raw_page.metadata["page_kind"] == "topic":
+            return [
+                RawRecord(
+                    external_id=f"thread_link:{thread_id}",
+                    record_type="THREAD_LINK",
+                    payload={
+                        "thread_id": str(thread_id),
+                        "thread_url": f"https://club.honor.com/cn/thread-{thread_id}-1-1.html",
+                        "title": "荣耀Power2 已知帖子",
+                        "topic_tags": ["#荣耀Power2#"],
+                    },
+                )
+                for thread_id in range(1, 26)
+            ]
+        thread_id = str(raw_page.metadata["thread_id"])
+        published_at = datetime(2026, 1, 19, 10, 0, tzinfo=UTC)
+        return [
+            RawRecord(
+                external_id=f"thread:{thread_id}",
+                record_type="THREAD",
+                payload={
+                    "title": "荣耀Power2 已知帖子",
+                    "content": f"已知帖子 {thread_id}",
+                    "published_at": published_at,
+                    "author_role_text": "LV7",
+                    "source_url": f"https://club.honor.com/cn/thread-{thread_id}-1-1.html",
+                    "raw_data": {"topic_tags": ["#荣耀Power2#"]},
+                },
+            )
+        ]
+
+
+@pytest.mark.django_db
+def test_incremental_stops_after_twenty_consecutive_known_threads(
+    honor_source_target: SourceTarget,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collector = KnownBoundaryHonorCollector()
+    monkeypatch.setattr("apps.collection.services.collection_runner.get_collector", lambda _source_code: collector)
+    honor_source_target.config_json = {"topic_id": 595, "max_topic_pages": 1, "max_threads": 30}
+    honor_source_target.save(update_fields=("config_json", "updated_at"))
+    now = datetime.now(UTC)
+    ReviewRecord.objects.bulk_create(
+        [
+            ReviewRecord(
+                source=honor_source_target.source,
+                source_target=honor_source_target,
+                product=honor_source_target.product,
+                external_id=f"thread:{thread_id}",
+                record_type="THREAD",
+                title="荣耀Power2 已知帖子",
+                content=f"已知帖子 {thread_id}",
+                content_hash=f"{thread_id:064d}",
+                raw_data={},
+                published_at=now,
+                collected_at=now,
+            )
+            for thread_id in range(1, 26)
+        ]
+    )
+    task = CollectionTask.objects.create(
+        source_target=honor_source_target,
+        task_type=CollectionTaskType.INCREMENTAL,
+        requested_limit=25,
+    )
+
+    summary = run_collection(task.id)
+    task.refresh_from_db()
+
+    assert summary.scanned_threads == 20
+    assert summary.known_threads == 20
+    assert summary.stopped_at_known_boundary
+    assert collector.thread_fetches == 20
+    assert task.known_threads == 20
+    assert task.stopped_at_known_boundary

@@ -6,6 +6,9 @@
 
 ### Added
 
+- Phase 4 荣耀数据治理：`ReviewQuality`、版本化 `ReviewQualityRun`、`AnalysisCorpusItem`、确定性规则 Pipeline、上下文构建、人工覆盖、Celery 任务、管理命令和数据质量 API/页面。
+- 荣耀 FULL/INCREMENTAL 采集统计与连续 20 个已知帖子边界；首阶段安全配置为 5 页/100 帖，硬上限 10 页/200 帖。
+- Phase 4 真实扩容与质量报告：10 页实际覆盖 97 个主题、487 条记录，固定 100 条样本在最终 v7 规则下复核通过；真实增量任务在连续 20 个已知主题处停止。
 - 京东 Phase 3.1 可视浏览器辅助探测工具：独立 Chrome profile、XHR/fetch 元数据索引、候选结构检测、最多 3 条递归脱敏样本，以及默认关闭的 live 开关。
 - 京东接口发现报告；本次隔离会话分类为 `C JD_REVIEW_ACCESS_BLOCKED`，未启用 SourceTarget，也未采集真实评价。
 - 京东 PoC 失败关闭框架：商品身份门禁、严格 SSRF 校验、固定身份 4 秒限速、登录/重定向阻断、JSON/JSONP 安全解析。

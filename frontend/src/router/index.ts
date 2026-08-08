@@ -33,6 +33,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '原始反馈' },
       },
       {
+        path: 'data-quality',
+        name: 'data-quality',
+        component: () => import('@/views/DataQualityView.vue'),
+        meta: { title: '数据质量' },
+      },
+      {
         path: 'analysis',
         name: 'analysis',
         component: () => import('@/views/AnalysisView.vue'),

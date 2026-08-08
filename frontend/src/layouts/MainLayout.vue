@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { Cpu, DataAnalysis, Document, Iphone, List, Monitor } from '@element-plus/icons-vue'
+import {
+  CircleCheck,
+  Cpu,
+  DataAnalysis,
+  Document,
+  Iphone,
+  List,
+  Monitor,
+} from '@element-plus/icons-vue'
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
@@ -15,7 +23,7 @@ const activePath = computed(() => route.path)
         <span class="brand-mark">PVI</span>
         <div>
           <strong>Phone Voice Insight</strong>
-          <small>手机用户口碑洞察平台</small>
+          <small>荣耀俱乐部公开讨论洞察</small>
         </div>
       </div>
       <el-menu :default-active="activePath" router class="nav-menu">
@@ -31,8 +39,11 @@ const activePath = computed(() => route.path)
         <el-menu-item index="/reviews"
           ><el-icon><Document /></el-icon>原始反馈</el-menu-item
         >
+        <el-menu-item index="/data-quality"
+          ><el-icon><CircleCheck /></el-icon>数据质量</el-menu-item
+        >
         <el-menu-item index="/analysis"
-          ><el-icon><DataAnalysis /></el-icon>AI 分析</el-menu-item
+          ><el-icon><DataAnalysis /></el-icon>AI 分析（后续）</el-menu-item
         >
         <el-menu-item index="/system"
           ><el-icon><Cpu /></el-icon>系统状态</el-menu-item
@@ -44,7 +55,7 @@ const activePath = computed(() => route.path)
         <el-button class="menu-button" text @click="mobileMenuOpen = !mobileMenuOpen"
           >菜单</el-button
         >
-        <span>Phase 1 · 基础框架</span>
+        <span>Phase 4 · 数据治理与样本扩容</span>
       </header>
       <section class="content" @click="mobileMenuOpen = false">
         <RouterView />

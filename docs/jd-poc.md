@@ -112,6 +112,6 @@ python manage.py jd_poc --target-id <id> --pages 1 --limit 10
 
 2026-08-08 使用 Playwright 启动独立可视 Chrome profile，由用户人工登录和导航。隔离会话的京东搜索页出现“访问频繁”限制，直达商品页后仍要求登录，评价区域未正常显示。共保留 369 条京东 XHR/fetch 脱敏响应元数据，其中 299 条为 HTTP 200、70 条为 HTTP 403；403 均来自 `api.m.jd.com` 的 `/` 或 `/api` 通用入口。没有人工确认到评价候选接口，也没有进入 Stage B。
 
-结果分类为 `C JD_REVIEW_ACCESS_BLOCKED`。用户日常 Chrome 能显示商品和评价，但本次没有接管、读取或复制其 profile、Cookie、Token 或登录会话。JD SourceTarget 继续保持 `is_active=false`，Phase 3 真实验收仍未完成，不进入 Phase 4。完整证据见 [京东评价接口发现报告](jd-interface-discovery.md)。
+结果分类为 `C JD_REVIEW_ACCESS_BLOCKED`。用户日常 Chrome 能显示商品和评价，但本次没有接管、读取或复制其 profile、Cookie、Token 或登录会话。JD SourceTarget 继续保持 `is_active=false`，Phase 3 真实验收仍未完成并正式暂缓；第一版转入只依赖荣耀俱乐部的 Phase 4。完整证据见 [京东评价接口发现报告](jd-interface-discovery.md)。
 
 若后续继续，只允许使用已授权的京东官方接口、人工导出的最小化脱敏数据，或组织内部来源可追溯的数据集；不复制 Cookie/Token，不逆向签名，不绕过登录、验证码或风控。

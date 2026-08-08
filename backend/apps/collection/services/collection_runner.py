@@ -20,10 +20,11 @@ from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 
-from apps.collection.models import CollectionRun, CollectionStatus, CollectionTask
+from apps.collection.models import CollectionRun, CollectionStatus, CollectionTask, CollectionTaskType
 from apps.collection.services.collector_registry import get_collector
 from apps.collection.services.review_persistence import persist_review
 from apps.products.models import ProductAlias
+from apps.reviews.models import ReviewRecord
 from apps.sources.models import SourceTarget
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,11 @@ class CollectionSummary:
     failed_records: int
     record_types: dict[str, int]
     samples: list[dict[str, Any]]
+    new_threads: int = 0
+    known_threads: int = 0
+    new_records: int = 0
+    duplicate_records: int = 0
+    stopped_at_known_boundary: bool = False
 
 
 def _int_config(config: dict[str, Any], name: str, default: int, maximum: int) -> int:
@@ -76,6 +82,11 @@ def _start_run(task_id: int) -> tuple[CollectionTask, CollectionRun]:
         task.success_count = 0
         task.skipped_count = 0
         task.failure_count = 0
+        task.new_threads = 0
+        task.known_threads = 0
+        task.new_records = 0
+        task.duplicate_records = 0
+        task.stopped_at_known_boundary = False
         task.error_message = ""
         task.save(
             update_fields=(
@@ -85,6 +96,11 @@ def _start_run(task_id: int) -> tuple[CollectionTask, CollectionRun]:
                 "success_count",
                 "skipped_count",
                 "failure_count",
+                "new_threads",
+                "known_threads",
+                "new_records",
+                "duplicate_records",
+                "stopped_at_known_boundary",
                 "error_message",
                 "updated_at",
             )
@@ -107,6 +123,7 @@ def _save_progress(
     skipped: int,
     failed: int,
     checkpoint: dict[str, Any],
+    progress_stats: dict[str, int | bool] | None = None,
 ) -> None:
     with transaction.atomic():
         task = CollectionTask.objects.select_for_update().get(pk=task_id)
@@ -114,12 +131,23 @@ def _save_progress(
         task.skipped_count = skipped
         task.failure_count = failed
         task.last_checkpoint = checkpoint
+        if progress_stats:
+            task.new_threads = int(progress_stats.get("new_threads", 0))
+            task.known_threads = int(progress_stats.get("known_threads", 0))
+            task.new_records = int(progress_stats.get("new_records", inserted))
+            task.duplicate_records = int(progress_stats.get("duplicate_records", skipped))
+            task.stopped_at_known_boundary = bool(progress_stats.get("stopped_at_known_boundary", False))
         task.save(
             update_fields=(
                 "success_count",
                 "skipped_count",
                 "failure_count",
                 "last_checkpoint",
+                "new_threads",
+                "known_threads",
+                "new_records",
+                "duplicate_records",
+                "stopped_at_known_boundary",
                 "updated_at",
             )
         )
@@ -128,7 +156,25 @@ def _save_progress(
         run.skipped_count = skipped
         run.failure_count = failed
         run.checkpoint_json = checkpoint
-        run.save(update_fields=("success_count", "skipped_count", "failure_count", "checkpoint_json"))
+        if progress_stats:
+            run.new_threads = task.new_threads
+            run.known_threads = task.known_threads
+            run.new_records = task.new_records
+            run.duplicate_records = task.duplicate_records
+            run.stopped_at_known_boundary = task.stopped_at_known_boundary
+        run.save(
+            update_fields=(
+                "success_count",
+                "skipped_count",
+                "failure_count",
+                "checkpoint_json",
+                "new_threads",
+                "known_threads",
+                "new_records",
+                "duplicate_records",
+                "stopped_at_known_boundary",
+            )
+        )
 
 
 def _finish_success(task_id: int, run_id: int) -> None:
@@ -345,14 +391,16 @@ def run_collection(
             _finish_failed(task.id, run.id, message)
             raise
 
-    max_pages = _int_config(config, "max_topic_pages", 1, 2)
-    configured_threads = _int_config(config, "max_threads", 10, 20)
+    max_pages = _int_config(config, "max_topic_pages", 5, 10)
+    configured_threads = _int_config(config, "max_threads", 100, 200)
     requested_limit = limit_override or task.requested_limit or configured_threads
-    max_threads = min(max(int(requested_limit), 1), configured_threads, 20)
-    checkpoint = dict(task.last_checkpoint or {})
-    start_page = int(checkpoint.get("topic_page", 1))
-    start_index = int(checkpoint.get("thread_index", 0))
-    inserted = skipped = failed = scanned = 0
+    max_threads = min(max(int(requested_limit), 1), configured_threads, 200)
+    checkpoint = dict(task.last_checkpoint or {}) if task.task_type == CollectionTaskType.FULL else {}
+    start_page = int(checkpoint.get("topic_page", 1)) if task.task_type == CollectionTaskType.FULL else 1
+    start_index = int(checkpoint.get("thread_index", 0)) if task.task_type == CollectionTaskType.FULL else 0
+    inserted = skipped = failed = scanned = duplicate_records = 0
+    new_threads = known_threads = consecutive_known_threads = 0
+    stopped_at_known_boundary = False
     type_counts: Counter[str] = Counter()
     samples: list[dict[str, Any]] = []
 
@@ -377,6 +425,17 @@ def run_collection(
                 scanned += 1
                 listing_data = dict(thread_link.payload)
                 thread_id = str(listing_data["thread_id"])
+                thread_external_id = f"thread:{thread_id}"
+                thread_was_known = ReviewRecord.objects.filter(
+                    source_id=source_target.source_id,
+                    record_type="THREAD",
+                    external_id=thread_external_id,
+                ).exists()
+                if thread_was_known:
+                    known_threads += 1
+                    consecutive_known_threads += 1
+                else:
+                    consecutive_known_threads = 0
                 thread_url = str(listing_data["thread_url"])
                 thread_target = _build_collector_target(source_target, target_url=thread_url)
                 thread_request = CollectionRequest(
@@ -419,7 +478,33 @@ def run_collection(
                         skipped=skipped,
                         failed=failed,
                         checkpoint=checkpoint,
+                        progress_stats={
+                            "new_threads": new_threads,
+                            "known_threads": known_threads,
+                            "new_records": inserted,
+                            "duplicate_records": duplicate_records,
+                            "stopped_at_known_boundary": False,
+                        },
                     )
+                    if task.task_type == CollectionTaskType.INCREMENTAL and consecutive_known_threads >= 20:
+                        stopped_at_known_boundary = True
+                        checkpoint["stopped_at_known_boundary"] = True
+                        _save_progress(
+                            task.id,
+                            run.id,
+                            inserted=inserted,
+                            skipped=skipped,
+                            failed=failed,
+                            checkpoint=checkpoint,
+                            progress_stats={
+                                "new_threads": new_threads,
+                                "known_threads": known_threads,
+                                "new_records": inserted,
+                                "duplicate_records": duplicate_records,
+                                "stopped_at_known_boundary": True,
+                            },
+                        )
+                        break
                     continue
 
                 for raw_record in raw_records:
@@ -427,6 +512,8 @@ def run_collection(
                     result = persist_review(source_target, normalized)
                     if result.inserted:
                         inserted += 1
+                        if normalized.record_type == "THREAD":
+                            new_threads += 1
                         type_counts[normalized.record_type] += 1
                         if len(samples) < 10:
                             samples.append(
@@ -446,6 +533,7 @@ def run_collection(
                             )
                     else:
                         skipped += 1
+                        duplicate_records += 1
 
                 checkpoint = {
                     "topic_page": topic_page,
@@ -459,6 +547,13 @@ def run_collection(
                     skipped=skipped,
                     failed=failed,
                     checkpoint=checkpoint,
+                    progress_stats={
+                        "new_threads": new_threads,
+                        "known_threads": known_threads,
+                        "new_records": inserted,
+                        "duplicate_records": duplicate_records,
+                        "stopped_at_known_boundary": False,
+                    },
                 )
                 logger.info(
                     "collection_thread collection_task_id=%s source=%s topic_page=%s thread_id=%s "
@@ -472,7 +567,26 @@ def run_collection(
                     skipped,
                     checkpoint,
                 )
-            if scanned >= max_threads:
+                if task.task_type == CollectionTaskType.INCREMENTAL and consecutive_known_threads >= 20:
+                    stopped_at_known_boundary = True
+                    checkpoint["stopped_at_known_boundary"] = True
+                    _save_progress(
+                        task.id,
+                        run.id,
+                        inserted=inserted,
+                        skipped=skipped,
+                        failed=failed,
+                        checkpoint=checkpoint,
+                        progress_stats={
+                            "new_threads": new_threads,
+                            "known_threads": known_threads,
+                            "new_records": inserted,
+                            "duplicate_records": duplicate_records,
+                            "stopped_at_known_boundary": True,
+                        },
+                    )
+                    break
+            if scanned >= max_threads or stopped_at_known_boundary:
                 break
             checkpoint = {"topic_page": topic_page + 1, "thread_index": 0}
             _save_progress(
@@ -482,6 +596,13 @@ def run_collection(
                 skipped=skipped,
                 failed=failed,
                 checkpoint=checkpoint,
+                progress_stats={
+                    "new_threads": new_threads,
+                    "known_threads": known_threads,
+                    "new_records": inserted,
+                    "duplicate_records": duplicate_records,
+                    "stopped_at_known_boundary": stopped_at_known_boundary,
+                },
             )
         _finish_success(task.id, run.id)
     except Exception as exc:
@@ -500,6 +621,11 @@ def run_collection(
         failed_records=failed,
         record_types=dict(type_counts),
         samples=samples,
+        new_threads=new_threads,
+        known_threads=known_threads,
+        new_records=inserted,
+        duplicate_records=duplicate_records,
+        stopped_at_known_boundary=stopped_at_known_boundary,
     )
 
 
