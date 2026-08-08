@@ -207,3 +207,131 @@ export interface DataQualitySummary {
   }
   exclusion_reasons: Record<ExclusionReason, number>
 }
+
+export type AspectName =
+  | 'BATTERY'
+  | 'CHARGING'
+  | 'HEATING'
+  | 'SIGNAL'
+  | 'PERFORMANCE'
+  | 'SYSTEM_FLUENCY'
+  | 'SYSTEM_BUG'
+  | 'DISPLAY'
+  | 'CAMERA'
+  | 'WEIGHT_AND_FEEL'
+  | 'BUILD_QUALITY'
+  | 'AUDIO_AND_CALL'
+  | 'DURABILITY'
+  | 'VALUE_FOR_MONEY'
+  | 'AFTER_SALES'
+
+export type SentimentName = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' | 'MIXED'
+
+export interface AspectAnalysisResult {
+  id: number
+  aspect: AspectName
+  sentiment: SentimentName
+  sentiment_score: string | null
+  issue_category: string
+  issue_summary: string
+  usage_scenario: string
+  evidence_text: string
+  context_dependent: boolean
+  context_evidence_text: string
+  context_evidence_review_id: string
+  confidence: string
+}
+
+export interface AnalysisEvaluation {
+  aspect_correct: boolean
+  sentiment_correct: boolean
+  issue_correct: boolean
+  scenario_correct: boolean
+  evidence_correct: boolean
+  hallucination: boolean
+  reviewer_notes: string
+  evaluated_at: string
+}
+
+export interface AnalysisResult {
+  id: number
+  review_id: number
+  record_type: ReviewRecord['record_type']
+  original_title: string
+  original_content: string
+  published_at: string | null
+  context_text: string
+  batch: number | null
+  status: 'PENDING' | 'SUCCESS' | 'FAILED'
+  provider: string
+  model_name: string
+  model_version: string
+  prompt_version: string
+  input_hash: string
+  is_valid_content: boolean
+  confidence: string | null
+  summary: string
+  error_code: string
+  error_message: string
+  attempt_count: number
+  retry_count: number
+  latency_ms: number | null
+  prompt_tokens: number | null
+  completion_tokens: number | null
+  total_tokens: number | null
+  analyzed_at: string | null
+  aspects: AspectAnalysisResult[]
+  evaluation: AnalysisEvaluation | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AnalysisBatch {
+  id: number
+  product: number
+  product_name: string
+  source: number
+  source_name: string
+  corpus_version: string
+  provider: string
+  model_name: string
+  prompt_version: string
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
+  requested_count: number
+  success_count: number
+  failed_count: number
+  skipped_count: number
+  retry_count: number
+  prompt_tokens: number | null
+  completion_tokens: number | null
+  total_tokens: number | null
+  started_at: string | null
+  finished_at: string | null
+  error_message: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AnalysisSummary {
+  eligible_corpus: number
+  analyzed_reviews: number
+  success: number
+  failed: number
+  pending: number
+  average_confidence: number | null
+  schema_failures: number
+  evidence_failures: number
+  evaluated: number
+  evaluation_accuracy: Record<
+    'aspect' | 'sentiment' | 'issue' | 'scenario' | 'evidence',
+    number | null
+  >
+}
+
+export interface AIConfiguration {
+  provider: string
+  model: string
+  prompt_version: string
+  configured: boolean
+  concurrency: number
+}

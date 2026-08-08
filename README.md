@@ -1,5 +1,9 @@
 # Phone Voice Insight
 
+> 路线状态：Phase 1/2/4 COMPLETED，Phase 3 POSTPONED，Phase 5 AI 结构化分析 IN PROGRESS。Phase 5 已实现 provider-neutral 调用、严格 Schema/证据校验、批次与人工评估、管理命令和前端页面；真实 AI PoC 必须等待生产配置完成后按 20 → 100 → 剩余语料的闸门执行，当前不得进入 Phase 6。
+
+Phase 5 的配置、命令和执行闸门见 [AI 结构化分析](docs/ai-analysis-phase5.md)，固定 15 个维度见 [AI 分类体系](docs/ai-taxonomy.md)，人工抽检方法见 [AI 评估](docs/ai-evaluation.md)。
+
 手机用户口碑洞察平台（Phone Voice Insight，PVI）用于整合手机产品在公开渠道中的真实用户反馈。第一版聚焦荣耀 Power2，正式数据只依赖荣耀俱乐部公开帖子与回复；系统保留未来扩展京东及其他公开或授权数据源的能力。
 
 ## 当前范围

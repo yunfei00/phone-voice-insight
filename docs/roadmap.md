@@ -1,5 +1,15 @@
 # 路线图
 
+```text
+Phase 1 基础框架                 COMPLETED
+Phase 2 荣耀俱乐部采集           COMPLETED
+Phase 3 京东采集                 POSTPONED
+Phase 4 数据治理与样本扩容       COMPLETED
+Phase 5 AI 结构化分析            IN PROGRESS
+```
+
+Phase 5 只有在真实 20 条和 100 条人工评估闸门通过后才可完成全量；缺少真实 AI 配置时必须停下，不能以 Fake 结果替代。Phase 6 尚未开始。
+
 ## Phase 1：基础框架
 
 Monorepo、Django/Vue、数据服务、任务队列、基础模型、API/Admin、契约、测试、CI、Compose 和文档。

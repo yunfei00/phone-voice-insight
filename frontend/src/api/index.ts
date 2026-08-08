@@ -1,5 +1,10 @@
 import apiClient from './client'
 import type {
+  AIConfiguration,
+  AnalysisBatch,
+  AnalysisEvaluation,
+  AnalysisResult,
+  AnalysisSummary,
   CollectionTask,
   CollectionTaskRunResponse,
   DataQualitySummary,
@@ -63,3 +68,39 @@ export const overrideReviewQuality = async (
   payload: { eligible: boolean; reason: string },
 ): Promise<ReviewQuality> =>
   (await apiClient.post<ReviewQuality>(`/review-quality/${qualityId}/override/`, payload)).data
+
+export const getAnalysisSummary = async (): Promise<AnalysisSummary> =>
+  (await apiClient.get<AnalysisSummary>('/analysis-results/summary/')).data
+
+export const getAIConfiguration = async (): Promise<AIConfiguration> =>
+  (await apiClient.get<AIConfiguration>('/analysis-batches/configuration/')).data
+
+export const getAnalysisResults = async (
+  params: PageParams = {},
+): Promise<PaginatedResponse<AnalysisResult>> =>
+  (await apiClient.get<PaginatedResponse<AnalysisResult>>('/analysis-results/', { params })).data
+
+export const getAnalysisBatches = async (): Promise<AnalysisBatch[]> =>
+  (await apiClient.get<AnalysisBatch[]>('/analysis-batches/')).data
+
+export const createAnalysisBatch = async (payload: {
+  product_id: number
+  source_id: number
+  prompt_version: string
+  limit: 20 | 100 | 278
+  force?: boolean
+  retry_failed?: boolean
+}): Promise<{ batch: AnalysisBatch; celery_task_id: string }> =>
+  (
+    await apiClient.post<{ batch: AnalysisBatch; celery_task_id: string }>(
+      '/analysis-batches/',
+      payload,
+    )
+  ).data
+
+export const evaluateAnalysis = async (
+  analysisId: number,
+  payload: Omit<AnalysisEvaluation, 'evaluated_at'>,
+): Promise<AnalysisEvaluation> =>
+  (await apiClient.post<AnalysisEvaluation>(`/analysis-results/${analysisId}/evaluate/`, payload))
+    .data

@@ -6,6 +6,11 @@
 
 ### Added
 
+- Phase 5 AI 结构化分析链路：provider-neutral 接口、OpenAI-compatible/Fake providers、`review_analysis_v2`、严格 Schema/业务/逐字证据校验、幂等输入指纹、受限重试与安全 token/request-id 记录。
+- `AnalysisBatch`、增强的 `AnalysisResult`/`AspectResult`、`AnalysisEvaluation`、迁移、Celery 批次入口、`analyze_reviews` dry-run/真实执行命令和质量统计 API。
+- AI 分析管理页面：配置缺失提示、20/100/278 任务创建、批次状态、结果筛选、原文与上下文证据对照及简化人工评估。
+- Phase 5 运行手册、15 维分类体系和人工评估规范；当前生产真实 AI 尚未配置，真实 PoC 状态保持 NOT EVALUATED。
+
 - Phase 4 荣耀数据治理：`ReviewQuality`、版本化 `ReviewQualityRun`、`AnalysisCorpusItem`、确定性规则 Pipeline、上下文构建、人工覆盖、Celery 任务、管理命令和数据质量 API/页面。
 - 荣耀 FULL/INCREMENTAL 采集统计与连续 20 个已知帖子边界；首阶段安全配置为 5 页/100 帖，硬上限 10 页/200 帖。
 - Phase 4 真实扩容与质量报告：10 页实际覆盖 97 个主题、487 条记录，固定 100 条样本在最终 v7 规则下复核通过；真实增量任务在连续 20 个已知主题处停止。

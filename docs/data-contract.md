@@ -1,5 +1,13 @@
 # 数据契约
 
+## Phase 5 分析契约补充
+
+- `AnalysisBatch` 记录产品、来源、语料版本、provider、真实 model identifier、prompt 版本、状态、请求/成功/失败/跳过/重试计数、原样 token usage 与时间范围。
+- `AnalysisResult` 关联治理语料和可选批次，使用 `provider + model_name + prompt_version + input_hash` 保证同一输入幂等；失败只保存受控 `error_code/error_message`，不保存密钥或完整请求头。
+- `AspectResult` 除固定 Aspect、Sentiment、问题、场景、当前证据和 confidence 外，还显式保存 `context_dependent`、`context_evidence_text` 与 `context_evidence_review_id`。
+- `AnalysisEvaluation` 与结果一对一，保存五项人工正确性、严重幻觉标志、备注和实际评估时间；空评估不得被解释为正确。
+- `raw_result` 只允许保存通过 Schema、业务和证据校验后的结构化 JSON，不得包含 API key、Authorization 或完整 HTTP headers。
+
 ## 通用约定
 
 - 数据库主键使用 Django `BigAutoField`，领域外部标识单独保存。

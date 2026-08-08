@@ -5,7 +5,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
-from apps.analysis.views import AnalysisResultViewSet
+from apps.analysis.views import AnalysisBatchViewSet, AnalysisResultViewSet
 from apps.collection.views import CollectionTaskViewSet
 from apps.common.views import health
 from apps.products.views import ProductViewSet
@@ -19,6 +19,7 @@ router.register("collection-tasks", CollectionTaskViewSet, basename="collection-
 router.register("reviews", ReviewRecordViewSet, basename="review")
 router.register("review-quality", ReviewQualityViewSet, basename="review-quality")
 router.register("analysis-results", AnalysisResultViewSet, basename="analysis-result")
+router.register("analysis-batches", AnalysisBatchViewSet, basename="analysis-batch")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

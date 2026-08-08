@@ -1,5 +1,11 @@
 # 系统架构
 
+## Phase 5 AI 分析边界
+
+`analysis` 应用只从当前版本且最终 `eligible=true`、`quality.eligible_for_ai=true` 的 `AnalysisCorpusItem` 建立输入，绝不从 `ReviewRecord.objects.all()` 直接分析。`ai/providers` 隔离兼容 API，`ai/schemas` 定义严格输出，`ai/validation` 在持久化前执行业务和逐字证据校验。Django 保存 `AnalysisBatch`、`AnalysisResult`、`AspectResult` 与 `AnalysisEvaluation`；Celery 负责异步批次入口，生产并发上限为 2。
+
+当前文本和 thread/parent 上下文是两个独立证据域。上下文可帮助解释“我也是”，但不能被伪装成当前用户自己的完整陈述。Schema、业务或证据失败都不会产生 Aspect 记录；只有 timeout、429 和 5xx 可以进行受限 provider 重试。
+
 ## 总体架构
 
 ```mermaid

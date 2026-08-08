@@ -140,6 +140,17 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
+AI_PROVIDER = env("AI_PROVIDER", "openai_compatible")
+AI_BASE_URL = env("AI_BASE_URL", "")
+AI_API_KEY = env("AI_API_KEY", "")
+AI_MODEL = env("AI_MODEL", "")
+AI_TIMEOUT_SECONDS = int(env("AI_TIMEOUT_SECONDS", "60"))
+AI_MAX_RETRIES = int(env("AI_MAX_RETRIES", "2"))
+AI_CONCURRENCY = min(max(int(env("AI_CONCURRENCY", "2")), 1), 2)
+AI_TEMPERATURE = float(env("AI_TEMPERATURE", "0"))
+AI_MAX_OUTPUT_TOKENS = int(env("AI_MAX_OUTPUT_TOKENS", "1500"))
+AI_ALLOW_FAKE_PROVIDER = env_bool("AI_ALLOW_FAKE_PROVIDER", False)
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

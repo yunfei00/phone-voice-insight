@@ -50,9 +50,18 @@ class ReviewAnalysisInput(StrictSchema):
     title: str | None = None
     source: str
     record_type: str
+    author_role: str
     is_official: bool = False
     rating: float | None = Field(default=None, ge=0, le=5)
     software_version: str | None = None
+    published_at: str | None = None
+    device_source: str = ""
+    thread_review_id: str = ""
+    thread_title: str = ""
+    thread_content: str = ""
+    parent_review_id: str = ""
+    parent_content: str = ""
+    context_text: str = ""
 
 
 class EvidenceReference(StrictSchema):
@@ -64,9 +73,13 @@ class AspectAnalysisItem(StrictSchema):
     aspect: AspectName
     sentiment: SentimentName
     sentiment_score: float | None = Field(default=None, ge=-1, le=1)
-    issue_category: str = ""
-    issue_summary: str = ""
+    issue_category: str = Field(default="", max_length=24)
+    issue_summary: str = Field(default="", max_length=200)
+    usage_scenario: str = Field(default="", max_length=100)
     evidence_text: str = Field(min_length=1)
+    context_dependent: bool = False
+    context_evidence_text: str = ""
+    context_evidence_review_id: str = ""
     confidence: float = Field(ge=0, le=1)
 
 
