@@ -203,6 +203,7 @@ def analyze_corpus_item(
     attempts = retries = latency_ms = 0
     prompt_tokens = completion_tokens = total_tokens = None
     validation_feedback = ""
+    schema_retry_used = False
     evidence_retry_used = False
     while True:
         attempts += 1
@@ -233,6 +234,13 @@ def analyze_corpus_item(
         try:
             output, raw_result = parse_review_analysis_output(response.content)
         except (ValueError, ValidationError):
+            if not schema_retry_used and retries < settings.AI_MAX_RETRIES:
+                schema_retry_used = True
+                retries += 1
+                validation_feedback = (
+                    "返回内容不是符合严格输出契约的 JSON, 所有必填字段、字段类型和枚举值必须与系统提示一致。"
+                )
+                continue
             code = "SCHEMA_VALIDATION_FAILED"
             _persist_failure(
                 result,
@@ -256,7 +264,7 @@ def analyze_corpus_item(
             )
             return AnalysisOutcome(corpus_item.review_id, "FAILED", result.id, code, attempts, retries)
         evidence_errors = validate_evidence(request, output)
-        if evidence_errors and not evidence_retry_used:
+        if evidence_errors and not evidence_retry_used and retries < settings.AI_MAX_RETRIES:
             evidence_retry_used = True
             retries += 1
             validation_feedback = "; ".join(error.message for error in evidence_errors)[:500]

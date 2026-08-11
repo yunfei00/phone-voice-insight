@@ -126,6 +126,8 @@ def test_prompt_loader_resolves_prompt_from_installed_ai_package() -> None:
     prompt = load_review_prompt("review_analysis_v2")
     assert prompt.startswith("# Review Analysis Prompt v2")
     assert "BATTERY" in prompt
+    assert '"context_evidence_review_id"' in prompt
+    assert "所有字段都必须存在" in prompt
 
 
 @pytest.mark.parametrize(
@@ -386,11 +388,32 @@ class RetriableThenSuccessProvider(FakeAIProvider):
         return super().analyze_review(request, prompt=prompt, validation_feedback=validation_feedback)
 
 
-class InvalidSchemaProvider(FakeAIProvider):
+class SchemaRetryProvider(FakeAIProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+        self.feedback = ""
+
+    def analyze_review(
+        self, request: ReviewAnalysisInput, *, prompt: str, validation_feedback: str = ""
+    ) -> AIProviderResponse:
+        self.calls += 1
+        self.feedback = validation_feedback
+        if self.calls == 1:
+            return AIProviderResponse("fake", self.model, "not-json", 0)
+        return super().analyze_review(request, prompt=prompt, validation_feedback=validation_feedback)
+
+
+class AlwaysInvalidSchemaProvider(FakeAIProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
     def analyze_review(
         self, request: ReviewAnalysisInput, *, prompt: str, validation_feedback: str = ""
     ) -> AIProviderResponse:
         del request, prompt, validation_feedback
+        self.calls += 1
         return AIProviderResponse("fake", self.model, "not-json", 0)
 
 
@@ -428,9 +451,23 @@ def test_retriable_provider_failure_uses_bounded_retry(product: Product, monkeyp
 
 
 @pytest.mark.django_db
-def test_schema_failure_is_not_retried_and_is_persisted(product: Product) -> None:
+def test_schema_failure_gets_one_repair_request_then_persists(product: Product) -> None:
+    corpus = make_honor_corpus(product=product, content="屏幕挺不错", external_id="thread:schema-retry")
+    provider_instance = SchemaRetryProvider()
+    outcome = analyze_corpus_item(
+        corpus,
+        batch=None,
+        prompt_version="review_analysis_v2",
+        provider=provider_instance,
+    )
+    assert outcome.status == "SUCCESS" and outcome.attempts == 2 and outcome.retries == 1
+    assert provider_instance.calls == 2 and "严格输出契约" in provider_instance.feedback
+
+
+@pytest.mark.django_db
+def test_second_schema_failure_is_persisted_without_more_retries(product: Product) -> None:
     corpus = make_honor_corpus(product=product, content="屏幕挺不错", external_id="thread:schema-failed")
-    provider_instance = InvalidSchemaProvider()
+    provider_instance = AlwaysInvalidSchemaProvider()
     outcome = analyze_corpus_item(
         corpus,
         batch=None,
@@ -439,7 +476,8 @@ def test_schema_failure_is_not_retried_and_is_persisted(product: Product) -> Non
     )
     assert outcome.result_id is not None
     result = AnalysisResult.objects.get(pk=outcome.result_id)
-    assert outcome.error_code == "SCHEMA_VALIDATION_FAILED" and outcome.attempts == 1 and outcome.retries == 0
+    assert outcome.error_code == "SCHEMA_VALIDATION_FAILED" and outcome.attempts == 2 and outcome.retries == 1
+    assert provider_instance.calls == 2
     assert result.status == "FAILED" and result.error_message == "AI response did not match the required schema"
 
 
@@ -520,6 +558,7 @@ def test_batch_statistics_and_evaluation_api(product: Product, api_client: APICl
     report = render_batch_review_markdown(batch)
     assert "Human evaluation status: NOT_EVALUATED" in report
     assert "- [ ] Aspect 正确" in report
+    assert "- [ ] Context 使用正确" in report
     assert "nickname" not in report and "raw_data" not in report
 
 

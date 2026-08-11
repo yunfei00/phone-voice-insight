@@ -51,3 +51,43 @@
 8. 当前：“屏幕挺不错” → 只输出 `DISPLAY/POSITIVE`，禁止补充电池、相机或信号。
 
 再次确认：JSON-only；禁止幻觉；证据必须逐字可验证。
+
+## 严格输出契约
+
+必须返回且只返回下面结构的 JSON 对象。所有字段都必须存在，不得增加字段；字符串没有内容时使用空字符串，列表没有内容时使用空列表，软件版本未知时使用 `null`。
+
+```json
+{
+  "product_model": "必须逐字复制输入的 product_model",
+  "is_valid_content": true,
+  "content_type": "COMMUNITY_THREAD",
+  "aspects": [
+    {
+      "aspect": "BATTERY",
+      "sentiment": "NEGATIVE",
+      "sentiment_score": -0.9,
+      "issue_category": "续航耗电",
+      "issue_summary": "用户反馈手机耗电明显",
+      "usage_scenario": "",
+      "evidence_text": "必须逐字摘取当前 content 的连续片段",
+      "context_dependent": false,
+      "context_evidence_text": "",
+      "context_evidence_review_id": "",
+      "confidence": 0.95
+    }
+  ],
+  "software_version": null,
+  "usage_scenarios": [],
+  "summary": "只依据当前原文和必要上下文的简短摘要",
+  "confidence": 0.95,
+  "warnings": []
+}
+```
+
+- `content_type` 只能是 `USER_REVIEW`、`COMMUNITY_THREAD`、`COMMUNITY_REPLY`、`LOGISTICS_OR_SERVICE`、`OFFICIAL_REPLY`、`OTHER`；输入 `record_type=THREAD` 时用 `COMMUNITY_THREAD`，`record_type=REPLY` 时用 `COMMUNITY_REPLY`。
+- `aspect` 只能使用上文列出的 15 个大写枚举值。
+- `sentiment` 只能是 `POSITIVE`、`NEUTRAL`、`NEGATIVE`、`MIXED`。
+- `sentiment_score` 可以是 -1～1 的数字或 `null`；`confidence` 必须是 0～1 的数字。
+- `context_dependent=false` 时，两个 context evidence 字段必须都是空字符串。
+- `context_dependent=true` 时，两个 context evidence 字段都必须非空，且 Review ID 和逐字证据必须来自输入提供的父记录或主题正文。
+- 无有效内容时仍需返回全部顶层字段：`is_valid_content=false`、`aspects=[]`、`usage_scenarios=[]`，其余字段按上述类型填写。

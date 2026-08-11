@@ -43,7 +43,9 @@ class OpenAICompatibleProvider(AIProvider):
     ) -> AIProviderResponse:
         user_payload = request.model_dump_json(exclude_none=True)
         if validation_feedback:
-            user_payload = f"上次输出未通过证据校验：{validation_feedback}\n请重新输出完整 JSON。\n输入：{user_payload}"
+            user_payload = (
+                f"上次输出未通过校验：{validation_feedback}\n请严格按系统提示重新输出完整 JSON。\n输入：{user_payload}"
+            )
         payload, latency_ms, request_id = self._chat_completion(
             messages=[
                 {"role": "system", "content": prompt},
