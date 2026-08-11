@@ -36,6 +36,7 @@ const detailVisible = ref(false)
 const selected = ref<AnalysisResult | null>(null)
 
 const filters = reactive({
+  sample_version: 'phase5-poc-v1',
   status: '',
   aspect: '',
   sentiment: '',
@@ -50,15 +51,38 @@ const createForm = reactive({
   limit: 20 as 20 | 100 | 278,
 })
 
-const evaluation = reactive<Omit<AnalysisEvaluation, 'evaluated_at'>>({
-  aspect_correct: false,
-  sentiment_correct: false,
-  issue_correct: false,
-  scenario_correct: false,
-  evidence_correct: false,
-  hallucination: false,
-  reviewer_notes: '',
-})
+type EvaluationDecision = boolean | null
+type EvaluationForm = Omit<
+  AnalysisEvaluation,
+  | 'evaluated_at'
+  | 'aspect_correct'
+  | 'sentiment_correct'
+  | 'issue_correct'
+  | 'scenario_correct'
+  | 'evidence_correct'
+  | 'hallucination'
+> & {
+  aspect_correct: EvaluationDecision
+  sentiment_correct: EvaluationDecision
+  issue_correct: EvaluationDecision
+  scenario_correct: EvaluationDecision
+  evidence_correct: EvaluationDecision
+  hallucination: EvaluationDecision
+}
+
+function emptyEvaluation(): EvaluationForm {
+  return {
+    aspect_correct: null,
+    sentiment_correct: null,
+    issue_correct: null,
+    scenario_correct: null,
+    evidence_correct: null,
+    hallucination: null,
+    reviewer_notes: '',
+  }
+}
+
+const evaluation = reactive<EvaluationForm>(emptyEvaluation())
 
 const aspects = [
   'BATTERY',
@@ -156,18 +180,7 @@ async function submitBatch() {
 
 function openDetail(row: AnalysisResult) {
   selected.value = row
-  Object.assign(
-    evaluation,
-    row.evaluation || {
-      aspect_correct: false,
-      sentiment_correct: false,
-      issue_correct: false,
-      scenario_correct: false,
-      evidence_correct: false,
-      hallucination: false,
-      reviewer_notes: '',
-    },
-  )
+  Object.assign(evaluation, row.evaluation || emptyEvaluation())
   detailVisible.value = true
 }
 
@@ -216,17 +229,32 @@ function markAllCorrect() {
 }
 
 function markHasError() {
-  evaluation.aspect_correct = false
-  evaluation.sentiment_correct = false
-  evaluation.issue_correct = false
-  evaluation.scenario_correct = false
-  evaluation.evidence_correct = false
-  evaluation.hallucination = false
+  Object.assign(evaluation, emptyEvaluation())
 }
 
 async function saveEvaluation() {
   if (!selected.value) return
-  await evaluateAnalysis(selected.value.id, evaluation)
+  const decisions = [
+    evaluation.aspect_correct,
+    evaluation.sentiment_correct,
+    evaluation.issue_correct,
+    evaluation.scenario_correct,
+    evaluation.evidence_correct,
+    evaluation.hallucination,
+  ]
+  if (decisions.some((value) => value === null)) {
+    ElMessage.warning('请完成全部人工审核项后再保存')
+    return
+  }
+  await evaluateAnalysis(selected.value.id, {
+    aspect_correct: evaluation.aspect_correct as boolean,
+    sentiment_correct: evaluation.sentiment_correct as boolean,
+    issue_correct: evaluation.issue_correct as boolean,
+    scenario_correct: evaluation.scenario_correct as boolean,
+    evidence_correct: evaluation.evidence_correct as boolean,
+    hallucination: evaluation.hallucination as boolean,
+    reviewer_notes: evaluation.reviewer_notes,
+  })
   ElMessage.success('人工评价已保存')
   await loadAll()
   selected.value = results.value.find((item) => item.id === selected.value?.id) || selected.value
@@ -284,6 +312,14 @@ onMounted(loadAll)
     </div>
 
     <div class="panel filters">
+      <el-select
+        v-model="filters.sample_version"
+        clearable
+        placeholder="评测集"
+        @change="loadResults"
+      >
+        <el-option label="phase5-poc-v1（固定20条）" value="phase5-poc-v1" />
+      </el-select>
       <el-select v-model="filters.status" clearable placeholder="状态" @change="loadResults">
         <el-option
           v-for="value in ['SUCCESS', 'FAILED', 'PENDING']"
@@ -350,6 +386,7 @@ onMounted(loadAll)
     <div class="panel">
       <el-table :data="results" @row-click="openDetail">
         <el-table-column prop="review_id" label="Review ID" width="95" />
+        <el-table-column prop="record_type" label="Record Type" width="115" />
         <el-table-column label="正文摘要" min-width="240"
           ><template #default="{ row }">{{
             row.original_content.slice(0, 80)
@@ -432,6 +469,20 @@ onMounted(loadAll)
           <dd>{{ selected.record_type }}</dd>
           <dt>发布时间</dt>
           <dd>{{ selected.published_at || '未解析' }}</dd>
+          <dt>模型</dt>
+          <dd>{{ selected.model_name }}</dd>
+          <dt>Prompt</dt>
+          <dd>{{ selected.prompt_version }}</dd>
+          <dt>分析时间</dt>
+          <dd>{{ selected.analyzed_at || '未完成' }}</dd>
+          <dt>分析状态</dt>
+          <dd>{{ selected.status }}</dd>
+          <dt>人工审核</dt>
+          <dd>
+            <el-tag :type="selected.evaluation ? 'success' : 'info'">
+              {{ selected.evaluation ? '已审核' : '未审核' }}
+            </el-tag>
+          </dd>
           <dt>原文</dt>
           <dd class="pre">{{ selected.original_content }}</dd>
           <dt>父帖上下文</dt>
@@ -481,15 +532,51 @@ onMounted(loadAll)
         <h3>人工评价</h3>
         <div class="evaluation-actions">
           <el-button type="success" plain @click="markAllCorrect">标记全部正确</el-button>
-          <el-button type="danger" plain @click="markHasError">标记有误并逐项审核</el-button>
+          <el-button plain @click="markHasError">清空并逐项审核</el-button>
         </div>
         <div class="evaluation-grid">
-          <el-checkbox v-model="evaluation.aspect_correct">Aspect 正确</el-checkbox
-          ><el-checkbox v-model="evaluation.sentiment_correct">Sentiment 正确</el-checkbox
-          ><el-checkbox v-model="evaluation.issue_correct">Issue 正确</el-checkbox
-          ><el-checkbox v-model="evaluation.scenario_correct">Scenario 正确</el-checkbox
-          ><el-checkbox v-model="evaluation.evidence_correct">Evidence 正确</el-checkbox
-          ><el-checkbox v-model="evaluation.hallucination">存在严重幻觉</el-checkbox>
+          <div class="evaluation-item">
+            <span>Aspect</span>
+            <el-radio-group v-model="evaluation.aspect_correct">
+              <el-radio-button :value="true">正确</el-radio-button>
+              <el-radio-button :value="false">错误</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="evaluation-item">
+            <span>Sentiment</span>
+            <el-radio-group v-model="evaluation.sentiment_correct">
+              <el-radio-button :value="true">正确</el-radio-button>
+              <el-radio-button :value="false">错误</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="evaluation-item">
+            <span>Issue</span>
+            <el-radio-group v-model="evaluation.issue_correct">
+              <el-radio-button :value="true">正确</el-radio-button>
+              <el-radio-button :value="false">错误</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="evaluation-item">
+            <span>Scenario</span>
+            <el-radio-group v-model="evaluation.scenario_correct">
+              <el-radio-button :value="true">正确</el-radio-button>
+              <el-radio-button :value="false">错误</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="evaluation-item">
+            <span>Evidence</span>
+            <el-radio-group v-model="evaluation.evidence_correct">
+              <el-radio-button :value="true">正确</el-radio-button>
+              <el-radio-button :value="false">错误</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="evaluation-item">
+            <span>Hallucination</span>
+            <el-radio-group v-model="evaluation.hallucination">
+              <el-radio-button :value="true">有</el-radio-button>
+              <el-radio-button :value="false">无</el-radio-button>
+            </el-radio-group>
+          </div>
         </div>
         <el-input
           v-model="evaluation.reviewer_notes"
@@ -601,6 +688,12 @@ onMounted(loadAll)
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-bottom: 14px;
+}
+.evaluation-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 .save-button {
   margin-top: 12px;

@@ -25,6 +25,7 @@ RUN if [ "$UV_DEFAULT_INDEX_URL" != "https://pypi.org/simple" ]; then \
 COPY backend/ ./
 COPY collectors/ ./collectors/
 COPY ai/ ./ai/
+COPY docs/evaluation/phase5-poc-sample-v1.json ./docs/evaluation/phase5-poc-sample-v1.json
 
 EXPOSE 8000
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2"]

@@ -22,6 +22,7 @@ from rest_framework.test import APIClient
 
 from apps.analysis.models import AnalysisBatch, AnalysisEvaluation, AnalysisResult
 from apps.analysis.services.analysis_runner import analyze_corpus_item, run_analysis_batch
+from apps.analysis.services.evaluation_samples import EvaluationSample, load_evaluation_sample
 from apps.analysis.services.input_builder import compute_input_hash
 from apps.analysis.services.prompt_loader import load_review_prompt
 from apps.analysis.services.response_parser import parse_review_analysis_output
@@ -128,6 +129,12 @@ def test_prompt_loader_resolves_prompt_from_installed_ai_package() -> None:
     assert "BATTERY" in prompt
     assert '"context_evidence_review_id"' in prompt
     assert "所有字段都必须存在" in prompt
+
+
+def test_phase5_sample_manifest_contains_twenty_unique_review_ids() -> None:
+    sample = load_evaluation_sample("phase5-poc-v1")
+    assert sample.sample_version == "phase5-poc-v1" and sample.seed == 20260808
+    assert len(sample.review_ids) == 20 and len(set(sample.review_ids)) == 20
 
 
 @pytest.mark.parametrize(
@@ -559,7 +566,37 @@ def test_batch_statistics_and_evaluation_api(product: Product, api_client: APICl
     assert "Human evaluation status: NOT_EVALUATED" in report
     assert "- [ ] Aspect 正确" in report
     assert "- [ ] Context 使用正确" in report
+    assert "### 必要上下文" in report and "> N/A" in report
+    assert "### AI结果" in report
     assert "nickname" not in report and "raw_data" not in report
+
+
+@pytest.mark.django_db
+@override_settings(AI_PROVIDER="fake", AI_MODEL="fake-review-v1", AI_ALLOW_FAKE_PROVIDER=True)
+def test_analysis_results_filter_by_fixed_sample(
+    product: Product,
+    api_client: APIClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = make_honor_corpus(product=product, content="续航很好", external_id="thread:sample-filter-1")
+    second = make_honor_corpus(product=product, content="屏幕不错", external_id="thread:sample-filter-2")
+    for corpus in (first, second):
+        analyze_corpus_item(corpus, batch=None, prompt_version="review_analysis_v2")
+    monkeypatch.setattr(
+        "apps.analysis.filters.load_evaluation_sample",
+        lambda _version: EvaluationSample("phase5-poc-v1", 20260808, (second.review_id,)),
+    )
+    response = api_client.get("/api/v1/analysis-results/?sample_version=phase5-poc-v1")
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
+    assert response.json()["results"][0]["review_id"] == second.review_id
+
+
+@pytest.mark.django_db
+def test_analysis_results_reject_unknown_sample(api_client: APIClient) -> None:
+    response = api_client.get("/api/v1/analysis-results/?sample_version=unknown")
+    assert response.status_code == 400
+    assert response.json()["detail"]["sample_version"] == ["UNKNOWN_EVALUATION_SAMPLE"]
 
 
 @pytest.mark.django_db

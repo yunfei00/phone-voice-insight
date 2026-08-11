@@ -5,11 +5,27 @@
 from __future__ import annotations
 
 from apps.analysis.models import AnalysisBatch, AnalysisResult
+from apps.analysis.services.input_builder import build_review_analysis_input
+from apps.reviews.models import RecordType
 
 
 def _quote(value: str) -> str:
     safe = value.replace("<", "&lt;").replace(">", "&gt;")
     return "\n".join(f"> {line}" if line else ">" for line in safe.splitlines()) or "> （空）"
+
+
+def _necessary_context(result: AnalysisResult) -> str:
+    if result.corpus_item is None or result.review.record_type == RecordType.THREAD:
+        return "> N/A"
+    request = build_review_analysis_input(result.corpus_item)
+    sections: list[str] = []
+    if request.thread_title:
+        sections.extend(("父帖标题：", "", _quote(request.thread_title)))
+    if request.thread_content:
+        sections.extend(("主题正文：", "", _quote(request.thread_content)))
+    if request.parent_content and request.parent_content != request.thread_content:
+        sections.extend(("父级回复正文：", "", _quote(request.parent_content)))
+    return "\n\n".join(sections) if sections else "> N/A"
 
 
 def _aspect_markdown(result: AnalysisResult) -> list[str]:
@@ -83,11 +99,11 @@ def render_batch_review_markdown(batch: AnalysisBatch) -> str:
                 "",
                 _quote(result.review.content),
                 "",
-                "### 上下文",
+                "### 必要上下文",
                 "",
-                _quote(result.corpus_item.context_text if result.corpus_item else ""),
+                _necessary_context(result),
                 "",
-                "### AI 分析",
+                "### AI结果",
                 "",
             )
         )
@@ -105,7 +121,7 @@ def render_batch_review_markdown(batch: AnalysisBatch) -> str:
                 "- [ ] Context 使用正确",
                 "- [ ] 无幻觉",
                 "",
-                "人工备注：",
+                "备注：",
                 "",
                 "---",
                 "",
