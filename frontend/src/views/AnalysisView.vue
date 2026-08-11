@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import {
   createAnalysisBatch,
@@ -51,11 +51,11 @@ const createForm = reactive({
 })
 
 const evaluation = reactive<Omit<AnalysisEvaluation, 'evaluated_at'>>({
-  aspect_correct: true,
-  sentiment_correct: true,
-  issue_correct: true,
-  scenario_correct: true,
-  evidence_correct: true,
+  aspect_correct: false,
+  sentiment_correct: false,
+  issue_correct: false,
+  scenario_correct: false,
+  evidence_correct: false,
   hallucination: false,
   reviewer_notes: '',
 })
@@ -125,12 +125,26 @@ async function loadAll() {
 
 async function submitBatch() {
   if (!createForm.product_id || !createForm.source_id) return
+  let allowLargeRun = false
+  if (createForm.limit > 20) {
+    try {
+      await ElMessageBox.confirm(
+        `本次将调用真实 AI 分析 ${createForm.limit} 条反馈，是否明确继续？`,
+        '大任务二次确认',
+        { confirmButtonText: '明确继续', cancelButtonText: '取消', type: 'warning' },
+      )
+      allowLargeRun = true
+    } catch {
+      return
+    }
+  }
   try {
     await createAnalysisBatch({
       product_id: createForm.product_id,
       source_id: createForm.source_id,
       prompt_version: createForm.prompt_version,
       limit: createForm.limit,
+      allow_large_run: allowLargeRun,
     })
     ElMessage.success('分析批次已创建')
     createVisible.value = false
@@ -145,11 +159,11 @@ function openDetail(row: AnalysisResult) {
   Object.assign(
     evaluation,
     row.evaluation || {
-      aspect_correct: true,
-      sentiment_correct: true,
-      issue_correct: true,
-      scenario_correct: true,
-      evidence_correct: true,
+      aspect_correct: false,
+      sentiment_correct: false,
+      issue_correct: false,
+      scenario_correct: false,
+      evidence_correct: false,
       hallucination: false,
       reviewer_notes: '',
     },
@@ -166,6 +180,48 @@ function issueText(row: AnalysisResult) {
     .map((item) => item.issue_category)
     .filter(Boolean)
     .join(', ')
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
+function highlightEvidence(content: string, evidence: string) {
+  if (!evidence) return escapeHtml(content)
+  const index = content.indexOf(evidence)
+  if (index < 0) return escapeHtml(content)
+  return [
+    escapeHtml(content.slice(0, index)),
+    `<mark>${escapeHtml(evidence)}</mark>`,
+    escapeHtml(content.slice(index + evidence.length)),
+  ].join('')
+}
+
+function evidenceMissing(content: string, evidence: string) {
+  return !evidence || !content.includes(evidence)
+}
+
+function markAllCorrect() {
+  evaluation.aspect_correct = true
+  evaluation.sentiment_correct = true
+  evaluation.issue_correct = true
+  evaluation.scenario_correct = true
+  evaluation.evidence_correct = true
+  evaluation.hallucination = false
+}
+
+function markHasError() {
+  evaluation.aspect_correct = false
+  evaluation.sentiment_correct = false
+  evaluation.issue_correct = false
+  evaluation.scenario_correct = false
+  evaluation.evidence_correct = false
+  evaluation.hallucination = false
 }
 
 async function saveEvaluation() {
@@ -395,15 +451,38 @@ onMounted(loadAll)
           </div>
           <p><b>问题：</b>{{ item.issue_category }} · {{ item.issue_summary || '—' }}</p>
           <p><b>场景：</b>{{ item.usage_scenario || '—' }}</p>
-          <p>
-            <b>当前证据：</b><mark>{{ item.evidence_text }}</mark>
-          </p>
-          <p v-if="item.context_dependent">
-            <b>上下文证据（Review {{ item.context_evidence_review_id }}）：</b
-            ><mark>{{ item.context_evidence_text }}</mark>
-          </p>
+          <div class="evidence-block">
+            <b>当前正文证据：</b>
+            <div
+              class="evidence-content"
+              v-html="highlightEvidence(selected.original_content, item.evidence_text)"
+            />
+            <el-alert
+              v-if="evidenceMissing(selected.original_content, item.evidence_text)"
+              title="证据校验失败：当前证据不在用户正文中"
+              type="error"
+              :closable="false"
+            />
+          </div>
+          <div v-if="item.context_dependent" class="evidence-block">
+            <b>上下文证据（Review {{ item.context_evidence_review_id }}）：</b>
+            <div
+              class="evidence-content"
+              v-html="highlightEvidence(selected.context_text, item.context_evidence_text)"
+            />
+            <el-alert
+              v-if="evidenceMissing(selected.context_text, item.context_evidence_text)"
+              title="证据校验失败：上下文证据不在父帖/上下文中"
+              type="error"
+              :closable="false"
+            />
+          </div>
         </div>
         <h3>人工评价</h3>
+        <div class="evaluation-actions">
+          <el-button type="success" plain @click="markAllCorrect">标记全部正确</el-button>
+          <el-button type="danger" plain @click="markHasError">标记有误并逐项审核</el-button>
+        </div>
         <div class="evaluation-grid">
           <el-checkbox v-model="evaluation.aspect_correct">Aspect 正确</el-checkbox
           ><el-checkbox v-model="evaluation.sentiment_correct">Sentiment 正确</el-checkbox
@@ -497,6 +576,25 @@ onMounted(loadAll)
   border-radius: 8px;
   padding: 14px;
   margin: 12px 0;
+}
+.evidence-block {
+  margin-top: 12px;
+}
+.evidence-content {
+  margin-top: 6px;
+  padding: 10px;
+  white-space: pre-wrap;
+  line-height: 1.65;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+.evidence-content :deep(mark) {
+  padding: 1px 2px;
+  background: #fff176;
+  color: #1f2937;
+}
+.evaluation-actions {
+  margin-bottom: 12px;
 }
 .evaluation-grid {
   display: grid;

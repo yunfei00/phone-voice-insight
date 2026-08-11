@@ -51,3 +51,11 @@ Evidence 正确率 = 100%
 ## 汇报
 
 准确率分母必须是实际完成人工评估的记录数。分别汇报 Aspect、Sentiment、Issue、Scenario、Evidence 正确率和 hallucination count，不得把空评估、自动校验通过或模型 confidence 当作人工正确率。provider 未返回 token 时显示 `N/A`，不得估算。
+
+固定 20 条 PoC 的 review ID 保存到 `docs/evaluation/phase5-poc-sample-v1.json`，不复制用户正文。真实运行完成后，可执行：
+
+```bash
+python manage.py export_analysis_review --batch-id <batch_id>
+```
+
+生成 `docs/evaluation/phase5-poc-review-v1.md` 的待审核内容。报告只允许正文、必要上下文和 AI 结果，不读取昵称或 `raw_data`。所有复核项默认保持未勾选，状态为 `NOT_EVALUATED`。管理页面使用 HTML 转义后再逐字高亮当前证据和上下文证据；若证据不在对应文本中，页面显示“证据校验失败”。

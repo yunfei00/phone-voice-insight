@@ -104,6 +104,7 @@ class AnalysisBatchCreateSerializer(serializers.Serializer):
     source_id = serializers.IntegerField()
     prompt_version = serializers.RegexField(r"^review_analysis_v\d+$", default="review_analysis_v2")
     limit = serializers.ChoiceField(choices=(20, 100, 278), default=20)
+    allow_large_run = serializers.BooleanField(default=False)
     force = serializers.BooleanField(default=False)
     retry_failed = serializers.BooleanField(default=False)
 

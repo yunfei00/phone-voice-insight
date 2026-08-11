@@ -105,6 +105,11 @@ class AnalysisBatchViewSet(ViewSet):
         source = get_object_or_404(DataSource, pk=values["source_id"])
         if product.normalized_name != PHASE5_PRODUCT or source.code != PHASE5_SOURCE:
             return Response({"error_code": "PHASE5_TARGET_ONLY"}, status=status.HTTP_400_BAD_REQUEST)
+        if int(values["limit"]) > 20 and not values["allow_large_run"]:
+            return Response(
+                {"error_code": "LARGE_RUN_REQUIRES_EXPLICIT_CONFIRMATION"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             load_review_prompt(values["prompt_version"])
             provider = get_ai_provider()

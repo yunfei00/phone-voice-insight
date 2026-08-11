@@ -88,6 +88,7 @@ export const createAnalysisBatch = async (payload: {
   source_id: number
   prompt_version: string
   limit: 20 | 100 | 278
+  allow_large_run?: boolean
   force?: boolean
   retry_failed?: boolean
 }): Promise<{ batch: AnalysisBatch; celery_task_id: string }> =>

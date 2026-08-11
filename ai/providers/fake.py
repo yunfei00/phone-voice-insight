@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from ai.providers.base import AIProvider, AIProviderResponse
+from ai.providers.base import AIConnectivityResponse, AIProvider, AIProviderResponse
 from ai.schemas.review_analysis import ReviewAnalysisInput
 
 
@@ -104,5 +104,13 @@ class FakeAIProvider(AIProvider):
             provider=self.provider_name,
             model=self.model,
             content=json.dumps(output, ensure_ascii=False),
+            latency_ms=0,
+        )
+
+    def check_connectivity(self) -> AIConnectivityResponse:
+        return AIConnectivityResponse(
+            provider=self.provider_name,
+            model=self.model,
+            status="ok",
             latency_ms=0,
         )

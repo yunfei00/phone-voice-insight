@@ -66,6 +66,14 @@ AI_MAX_OUTPUT_TOKENS=1500
 
 ## 命令
 
+真实调用前先执行不含用户数据、也不读取评论表的最小连通性检查：
+
+```bash
+python manage.py check_ai
+```
+
+成功时只输出 provider、model 和 `connectivity=OK`；失败时只输出受控错误类型、HTTP status 和可选 provider request ID。该命令不会输出 API key、Authorization 或完整 headers。
+
 先预览全部合格语料，dry-run 不读取 provider、不调用网络，也不写入分析结果：
 
 ```bash
@@ -88,7 +96,9 @@ python manage.py analyze_reviews \
   --limit 20
 ```
 
-也支持 `--record-id`、`--retry-failed`、`--force` 和 `--seed`。`--force` 仍不会放宽治理资格或证据规则。
+也支持 `--record-id`、逗号分隔的 `--record-ids`、`--retry-failed`、`--force` 和 `--seed`。`--force` 仍不会放宽治理资格或证据规则。固定 PoC 必须保存 review ID 后通过 `--record-ids` 重放，不能依赖数据库前 20 条。
+
+真实 CLI 单次最多运行 20 条。超过 20 条必须显式增加 `--allow-large-run`；API 对 100/278 条任务要求 `allow_large_run=true`，前端必须再次弹窗确认。dry-run 不调用 AI，不受该费用闸门限制。
 
 ## 严格执行闸门
 

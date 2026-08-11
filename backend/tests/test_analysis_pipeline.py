@@ -14,6 +14,7 @@ from ai.schemas.review_analysis import ReviewAnalysisInput, ReviewAnalysisOutput
 from ai.validation.analysis_validator import validate_analysis
 from ai.validation.evidence_validator import validate_evidence
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import override_settings
 from django.utils import timezone
 from pydantic import ValidationError
@@ -24,6 +25,7 @@ from apps.analysis.services.analysis_runner import analyze_corpus_item, run_anal
 from apps.analysis.services.input_builder import compute_input_hash
 from apps.analysis.services.prompt_loader import load_review_prompt
 from apps.analysis.services.response_parser import parse_review_analysis_output
+from apps.analysis.services.review_report import render_batch_review_markdown
 from apps.products.models import Product
 from apps.reviews.models import AnalysisCorpusItem, AuthorRole, RecordType, ReviewRecord
 from apps.reviews.services.constants import CORPUS_VERSION
@@ -244,6 +246,31 @@ def test_openai_compatible_returns_valid_content_and_usage(monkeypatch: pytest.M
     assert (response.prompt_tokens, response.completion_tokens, response.total_tokens) == (101, 42, 143)
     parsed, _ = parse_review_analysis_output(response.content)
     assert parsed == valid_output()
+
+
+def test_openai_compatible_connectivity_uses_minimal_parseable_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *_args, **_kwargs: FakeHttpResponse(
+            200,
+            {"choices": [{"message": {"content": '{"status":"ok"}'}}]},
+        ),
+    )
+    result = provider().check_connectivity()
+    assert result.provider == "openai_compatible"
+    assert result.model == "model-2026-08"
+    assert result.status == "ok" and result.request_id == "safe-request-id"
+
+
+@override_settings(AI_PROVIDER="fake", AI_MODEL="fake-review-v1", AI_ALLOW_FAKE_PROVIDER=True)
+def test_check_ai_command_is_network_free_with_fake_provider(capsys: pytest.CaptureFixture[str]) -> None:
+    call_command("check_ai")
+    assert json.loads(capsys.readouterr().out) == {
+        "connectivity": "OK",
+        "model": "fake-review-v1",
+        "provider": "fake",
+    }
 
 
 @pytest.mark.django_db
@@ -490,6 +517,10 @@ def test_batch_statistics_and_evaluation_api(product: Product, api_client: APICl
     )
     assert response.status_code == 200
     assert AnalysisEvaluation.objects.filter(analysis=result, evidence_correct=True).exists()
+    report = render_batch_review_markdown(batch)
+    assert "Human evaluation status: NOT_EVALUATED" in report
+    assert "- [ ] Aspect 正确" in report
+    assert "nickname" not in report and "raw_data" not in report
 
 
 @pytest.mark.django_db
@@ -511,6 +542,50 @@ def test_analyze_reviews_dry_run_never_requires_provider(product: Product, capsy
 
 
 @pytest.mark.django_db
+@override_settings(AI_PROVIDER="fake", AI_MODEL="fake-review-v1", AI_ALLOW_FAKE_PROVIDER=True)
+def test_analyze_reviews_blocks_more_than_twenty_without_explicit_flag(
+    product: Product,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    corpus = make_honor_corpus(product=product, content="屏幕挺不错", external_id="thread:large-run-guard")
+    monkeypatch.setattr(
+        "apps.analysis.management.commands.analyze_reviews.select_corpus_items",
+        lambda *_args, **_kwargs: [corpus] * 21,
+    )
+    with pytest.raises(CommandError, match="LARGE_RUN_REQUIRES_ALLOW_LARGE_RUN"):
+        call_command(
+            "analyze_reviews",
+            product="HONOR_POWER2",
+            source="HONOR_CLUB",
+            limit=21,
+            prompt_version="review_analysis_v2",
+        )
+    assert AnalysisBatch.objects.count() == 0 and AnalysisResult.objects.count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(AI_PROVIDER="openai_compatible", AI_MODEL="", AI_BASE_URL="", AI_API_KEY="")
+def test_analyze_reviews_accepts_fixed_record_ids_in_order(
+    product: Product,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    first = make_honor_corpus(product=product, content="屏幕挺不错", external_id="thread:fixed-first")
+    second = make_honor_corpus(product=product, content="发热明显", external_id="thread:fixed-second")
+    call_command(
+        "analyze_reviews",
+        product="HONOR_POWER2",
+        source="HONOR_CLUB",
+        record_ids=f"{second.review_id},{first.review_id}",
+        prompt_version="review_analysis_v2",
+        dry_run=True,
+        show_selected_ids=True,
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["selected_review_ids"] == [second.review_id, first.review_id]
+    assert payload["selected"] == 2
+
+
+@pytest.mark.django_db
 @override_settings(
     AI_PROVIDER="openai_compatible",
     AI_MODEL="",
@@ -528,3 +603,23 @@ def test_ai_configuration_endpoint_never_returns_api_key(api_client: APIClient) 
         "concurrency": 2,
     }
     assert "super-secret-must-never-be-returned" not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_batch_api_requires_second_confirmation_above_twenty(
+    product: Product,
+    api_client: APIClient,
+) -> None:
+    corpus = make_honor_corpus(product=product, content="屏幕挺不错", external_id="thread:api-large-run")
+    response = api_client.post(
+        "/api/v1/analysis-batches/",
+        {
+            "product_id": product.id,
+            "source_id": corpus.source_id,
+            "prompt_version": "review_analysis_v2",
+            "limit": 100,
+        },
+        format="json",
+    )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "LARGE_RUN_REQUIRES_EXPLICIT_CONFIRMATION"

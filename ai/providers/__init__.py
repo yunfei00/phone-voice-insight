@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.conf import settings
 
-from ai.providers.base import AIProvider, AIProviderError, AIProviderResponse
+from ai.providers.base import AIConnectivityResponse, AIProvider, AIProviderError, AIProviderResponse
 from ai.providers.fake import FakeAIProvider
 from ai.providers.openai_compatible import OpenAICompatibleProvider
 
@@ -38,4 +38,10 @@ def get_ai_provider() -> AIProvider:
     raise AIProviderError("AI_PROVIDER_UNSUPPORTED", "Configured AI provider is not supported")
 
 
-__all__ = ["AIProvider", "AIProviderError", "AIProviderResponse", "get_ai_provider"]
+__all__ = [
+    "AIConnectivityResponse",
+    "AIProvider",
+    "AIProviderError",
+    "AIProviderResponse",
+    "get_ai_provider",
+]
