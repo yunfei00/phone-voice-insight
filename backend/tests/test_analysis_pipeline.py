@@ -12,7 +12,11 @@ from ai.providers.fake import FakeAIProvider
 from ai.providers.openai_compatible import OpenAICompatibleProvider
 from ai.schemas.review_analysis import ReviewAnalysisInput, ReviewAnalysisOutput
 from ai.validation.analysis_validator import validate_analysis
-from ai.validation.evidence_validator import validate_evidence
+from ai.validation.evidence_validator import (
+    map_normalized_evidence_to_raw,
+    reconcile_evidence_spans,
+    validate_evidence,
+)
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
@@ -27,6 +31,7 @@ from apps.analysis.services.input_builder import compute_input_hash
 from apps.analysis.services.prompt_loader import load_review_prompt
 from apps.analysis.services.response_parser import parse_review_analysis_output
 from apps.analysis.services.review_report import render_batch_review_markdown
+from apps.analysis.services.sample_preview import SamplePreviewItem
 from apps.products.models import Product
 from apps.reviews.models import AnalysisCorpusItem, AuthorRole, RecordType, ReviewRecord
 from apps.reviews.services.constants import CORPUS_VERSION
@@ -128,12 +133,20 @@ def test_prompt_loader_resolves_prompt_from_installed_ai_package() -> None:
     assert prompt.startswith("# Review Analysis Prompt v2")
     assert "BATTERY" in prompt
     assert '"context_evidence_review_id"' in prompt
+
+
+def test_review_analysis_v3_prompt_has_question_and_content_boundaries() -> None:
+    prompt = load_review_prompt("review_analysis_v3")
+    assert "为什么只有4G？" in prompt and "SIGNAL/NEUTRAL" in prompt
+    assert "4G信号太差" in prompt and "SIGNAL/NEGATIVE" in prompt
+    assert "相册里的 AI 作品不错" in prompt and "SYSTEM_BUG" in prompt
     assert "所有字段都必须存在" in prompt
 
 
-def test_phase5_sample_manifest_contains_twenty_unique_review_ids() -> None:
-    sample = load_evaluation_sample("phase5-poc-v1")
-    assert sample.sample_version == "phase5-poc-v1" and sample.seed == 20260808
+@pytest.mark.parametrize("sample_version", ("phase5-poc-v1", "phase5-poc-v2"))
+def test_phase5_sample_manifest_contains_twenty_unique_review_ids(sample_version: str) -> None:
+    sample = load_evaluation_sample(sample_version)
+    assert sample.sample_version == sample_version and sample.seed == 20260808
     assert len(sample.review_ids) == 20 and len(set(sample.review_ids)) == 20
 
 
@@ -173,6 +186,34 @@ def test_evidence_validator_rejects_hallucination_and_wrong_context() -> None:
     )
     errors = validate_evidence(request, output)
     assert {error.field for error in errors} == {"evidence_text", "context_evidence_text"}
+
+
+def test_evidence_normalization_maps_back_to_raw_contiguous_span() -> None:
+    request = analysis_input(content="续航\u00a0  很好")
+    output = valid_output(
+        aspects=[
+            {
+                "aspect": "BATTERY",
+                "sentiment": "POSITIVE",
+                "sentiment_score": 0.8,
+                "issue_category": "续航表现",
+                "issue_summary": "续航很好",
+                "usage_scenario": "",
+                "evidence_text": "续航 很好",
+                "context_dependent": False,
+                "context_evidence_text": "",
+                "context_evidence_review_id": "",
+                "confidence": 0.9,
+            }
+        ]
+    )
+    reconciled = reconcile_evidence_spans(request, output, raw_content=request.content)
+    assert reconciled.aspects[0].evidence_text == "续航\u00a0  很好"
+    assert validate_evidence(request, reconciled, raw_content=request.content) == ()
+
+
+def test_evidence_mapping_does_not_accept_punctuation_rewrite() -> None:
+    assert map_normalized_evidence_to_raw("正常，有的人补丁没打。。所以大小不一样", "补丁没打。所以") is None
 
 
 def test_analysis_validator_rejects_duplicates_and_product_mismatch() -> None:
@@ -600,6 +641,36 @@ def test_analysis_results_reject_unknown_sample(api_client: APIClient) -> None:
 
 
 @pytest.mark.django_db
+def test_phase5_v2_sample_preview_endpoint_never_runs_ai(
+    api_client: APIClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "apps.analysis.views.load_sample_preview",
+        lambda _version: [
+            SamplePreviewItem(
+                review_id=70,
+                record_type="REPLY",
+                current_content="我也是",
+                necessary_context="父帖正文：升级后掉电特别快",
+                experience_signal_reason="CONTEXT:BATTERY:掉电",
+                candidate_aspects=("BATTERY",),
+                content_purpose="PRODUCT_EXPERIENCE",
+                context_required=True,
+            )
+        ],
+    )
+    response = api_client.get(
+        "/api/v1/analysis-results/sample-preview/",
+        {"sample_version": "phase5-poc-v2"},
+    )
+    assert response.status_code == 200
+    assert response.json()["ai_status"] == "NOT_RUN"
+    assert response.json()["count"] == 1
+    assert response.json()["items"][0]["candidate_aspects"] == ["BATTERY"]
+
+
+@pytest.mark.django_db
 @override_settings(AI_PROVIDER="openai_compatible", AI_MODEL="", AI_BASE_URL="", AI_API_KEY="")
 def test_analyze_reviews_dry_run_never_requires_provider(product: Product, capsys: pytest.CaptureFixture[str]) -> None:
     make_honor_corpus(product=product, content="续航很好", external_id="thread:dry-run")
@@ -674,7 +745,7 @@ def test_ai_configuration_endpoint_never_returns_api_key(api_client: APIClient) 
     assert response.json() == {
         "provider": "openai_compatible",
         "model": "NOT_CONFIGURED",
-        "prompt_version": "review_analysis_v2",
+        "prompt_version": "review_analysis_v3",
         "configured": False,
         "concurrency": 2,
     }

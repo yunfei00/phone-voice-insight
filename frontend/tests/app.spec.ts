@@ -56,6 +56,18 @@ describe('App', () => {
     expect(container.textContent).toContain('Phone Voice Insight')
     expect(container.textContent).toContain('数据总览')
     expect(container.textContent).toContain('已连接')
+    const navigationLabels = Array.from(container.querySelectorAll('.nav-menu .el-menu-item')).map(
+      (item) => item.textContent?.trim(),
+    )
+    expect(navigationLabels).toEqual([
+      '数据总览',
+      '手机产品',
+      '采集任务',
+      '原始反馈',
+      '数据质量',
+      'AI分析',
+      '系统状态',
+    ])
 
     await router.push('/system')
     await new Promise((resolve) => setTimeout(resolve, 0))

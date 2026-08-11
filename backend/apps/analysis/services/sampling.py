@@ -37,6 +37,8 @@ def _rank(item: AnalysisCorpusItem, seed: int) -> str:
 
 
 def is_context_candidate(item: AnalysisCorpusItem) -> bool:
+    if "context_required" in item.quality.flags_json:
+        return item.quality.context_required
     text = item.normalized_text.strip()
     return (
         item.record_type == RecordType.REPLY
@@ -45,7 +47,10 @@ def is_context_candidate(item: AnalysisCorpusItem) -> bool:
     )
 
 
-def _aspect_candidate_count(item: AnalysisCorpusItem) -> int:
+def aspect_candidate_count(item: AnalysisCorpusItem) -> int:
+    candidate_aspects = item.quality.flags_json.get("candidate_aspects")
+    if isinstance(candidate_aspects, list):
+        return len({value for value in candidate_aspects if isinstance(value, str)})
     text = item.normalized_text
     return sum(any(marker in text for marker in markers) for markers in ASPECT_MARKER_GROUPS)
 
@@ -64,8 +69,8 @@ def sample_coverage(items: list[AnalysisCorpusItem]) -> dict[str, int]:
         "negative_candidates": sum(
             any(marker in item.normalized_text for marker in NEGATIVE_MARKERS) for item in items
         ),
-        "single_aspect_candidates": sum(_aspect_candidate_count(item) == 1 for item in items),
-        "multi_aspect_candidates": sum(_aspect_candidate_count(item) >= 2 for item in items),
+        "single_aspect_candidates": sum(aspect_candidate_count(item) == 1 for item in items),
+        "multi_aspect_candidates": sum(aspect_candidate_count(item) >= 2 for item in items),
     }
 
 
@@ -111,8 +116,8 @@ def select_corpus_items(
     ensure(lambda item: len(item.normalized_text) >= 81)
     ensure(lambda item: any(marker in item.normalized_text for marker in POSITIVE_MARKERS))
     ensure(lambda item: any(marker in item.normalized_text for marker in NEGATIVE_MARKERS))
-    ensure(lambda item: _aspect_candidate_count(item) >= 2)
-    ensure(lambda item: _aspect_candidate_count(item) == 1)
+    ensure_count(lambda item: aspect_candidate_count(item) >= 2, 2)
+    ensure(lambda item: aspect_candidate_count(item) == 1)
     ensure_count(lambda item: item.record_type == RecordType.THREAD, 5)
     ensure_count(lambda item: item.record_type == RecordType.REPLY, 10)
 

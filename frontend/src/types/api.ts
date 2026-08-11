@@ -156,6 +156,20 @@ export type ExclusionReason =
   | 'DUPLICATE'
   | 'INVALID_ENCODING'
   | 'PARSER_ARTIFACT'
+  | 'NO_PRODUCT_EXPERIENCE_SIGNAL'
+  | 'SOCIAL_INTERACTION'
+  | 'RESOURCE_SHARE'
+  | 'PHOTO_SHARE'
+  | 'OTHER'
+
+export type ContentPurpose =
+  | 'PRODUCT_EXPERIENCE'
+  | 'QUESTION'
+  | 'RESOURCE_SHARE'
+  | 'PHOTO_SHARE'
+  | 'TUTORIAL'
+  | 'SOCIAL_INTERACTION'
+  | 'PROMOTIONAL'
   | 'OTHER'
 
 export interface ReviewQuality {
@@ -174,6 +188,9 @@ export interface ReviewQuality {
   published_at: string | null
   has_meaningful_text: boolean
   is_product_related: boolean
+  has_product_experience_signal: boolean
+  context_required: boolean
+  content_purpose: ContentPurpose
   is_official_content: boolean
   is_low_information: boolean
   is_navigation_or_page_noise: boolean
@@ -326,6 +343,24 @@ export interface AnalysisSummary {
     'aspect' | 'sentiment' | 'issue' | 'scenario' | 'evidence',
     number | null
   >
+}
+
+export interface SamplePreviewItem {
+  review_id: number
+  record_type: ReviewRecord['record_type']
+  current_content: string
+  necessary_context: string
+  experience_signal_reason: string
+  candidate_aspects: AspectName[]
+  content_purpose: ContentPurpose
+  context_required: boolean
+}
+
+export interface SamplePreview {
+  sample_version: string
+  count: number
+  ai_status: 'NOT_RUN' | 'HISTORICAL'
+  items: SamplePreviewItem[]
 }
 
 export interface AIConfiguration {

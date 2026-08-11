@@ -21,6 +21,7 @@ from apps.analysis.serializers import (
 )
 from apps.analysis.services.input_builder import PHASE5_PRODUCT, PHASE5_SOURCE
 from apps.analysis.services.prompt_loader import load_review_prompt
+from apps.analysis.services.sample_preview import load_sample_preview
 from apps.analysis.services.sampling import select_corpus_items
 from apps.analysis.tasks import run_analysis_batch_task
 from apps.products.models import Product
@@ -47,6 +48,22 @@ class AnalysisResultViewSet(ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         evaluation = serializer.save(analysis=analysis)
         return Response(AnalysisEvaluationSerializer(evaluation).data)
+
+    @action(detail=False, methods=("get",), url_path="sample-preview")
+    def sample_preview(self, request: Request) -> Response:
+        sample_version = request.query_params.get("sample_version", "phase5-poc-v2")
+        try:
+            items = load_sample_preview(sample_version)
+        except ValueError as exc:
+            return Response({"error_code": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "sample_version": sample_version,
+                "count": len(items),
+                "ai_status": "NOT_RUN" if sample_version == "phase5-poc-v2" else "HISTORICAL",
+                "items": [item.as_dict() for item in items],
+            }
+        )
 
     @action(detail=False, methods=("get",), url_path="summary")
     def summary(self, _request: Request) -> Response:
@@ -151,7 +168,7 @@ class AnalysisBatchViewSet(ViewSet):
             {
                 "provider": settings.AI_PROVIDER,
                 "model": settings.AI_MODEL or "NOT_CONFIGURED",
-                "prompt_version": "review_analysis_v2",
+                "prompt_version": "review_analysis_v3",
                 "configured": configured,
                 "concurrency": settings.AI_CONCURRENCY,
             }

@@ -14,6 +14,18 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 const mobileMenuOpen = ref(false)
 const activePath = computed(() => route.path)
+const phaseLabel = computed(() =>
+  route.path === '/analysis' ? 'Phase 5 · AI结构化分析' : 'Phase 4 · 数据治理与样本扩容',
+)
+const navigationItems = [
+  { path: '/dashboard', label: '数据总览', icon: Monitor },
+  { path: '/products', label: '手机产品', icon: Iphone },
+  { path: '/collection-tasks', label: '采集任务', icon: List },
+  { path: '/reviews', label: '原始反馈', icon: Document },
+  { path: '/data-quality', label: '数据质量', icon: CircleCheck },
+  { path: '/analysis', label: 'AI分析', icon: DataAnalysis },
+  { path: '/system', label: '系统状态', icon: Cpu },
+]
 </script>
 
 <template>
@@ -27,27 +39,9 @@ const activePath = computed(() => route.path)
         </div>
       </div>
       <el-menu :default-active="activePath" router class="nav-menu">
-        <el-menu-item index="/dashboard"
-          ><el-icon><Monitor /></el-icon>数据总览</el-menu-item
-        >
-        <el-menu-item index="/products"
-          ><el-icon><Iphone /></el-icon>手机产品</el-menu-item
-        >
-        <el-menu-item index="/collection-tasks"
-          ><el-icon><List /></el-icon>采集任务</el-menu-item
-        >
-        <el-menu-item index="/reviews"
-          ><el-icon><Document /></el-icon>原始反馈</el-menu-item
-        >
-        <el-menu-item index="/data-quality"
-          ><el-icon><CircleCheck /></el-icon>数据质量</el-menu-item
-        >
-        <el-menu-item index="/analysis"
-          ><el-icon><DataAnalysis /></el-icon>AI 分析（后续）</el-menu-item
-        >
-        <el-menu-item index="/system"
-          ><el-icon><Cpu /></el-icon>系统状态</el-menu-item
-        >
+        <el-menu-item v-for="item in navigationItems" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon>{{ item.label }}
+        </el-menu-item>
       </el-menu>
     </aside>
     <main class="main">
@@ -55,7 +49,7 @@ const activePath = computed(() => route.path)
         <el-button class="menu-button" text @click="mobileMenuOpen = !mobileMenuOpen"
           >菜单</el-button
         >
-        <span>Phase 4 · 数据治理与样本扩容</span>
+        <span>{{ phaseLabel }}</span>
       </header>
       <section class="content" @click="mobileMenuOpen = false">
         <RouterView />

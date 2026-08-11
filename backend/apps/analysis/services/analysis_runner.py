@@ -11,7 +11,7 @@ from typing import Any
 from ai.providers import AIProvider, AIProviderError, get_ai_provider
 from ai.schemas.review_analysis import ReviewAnalysisOutput
 from ai.validation.analysis_validator import validate_analysis
-from ai.validation.evidence_validator import validate_evidence
+from ai.validation.evidence_validator import reconcile_evidence_spans, validate_evidence
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -31,7 +31,7 @@ from apps.analysis.services.input_builder import (
 )
 from apps.analysis.services.prompt_loader import load_review_prompt
 from apps.analysis.services.response_parser import parse_review_analysis_output
-from apps.reviews.models import AnalysisCorpusItem
+from apps.reviews.models import AnalysisCorpusItem, ReviewRecord
 
 logger = logging.getLogger(__name__)
 ANALYSIS_BATCH_SIZE = 10
@@ -65,6 +65,14 @@ def _nullable_add(current: int | None, value: int | None) -> int | None:
     if value is None:
         return current
     return (current or 0) + value
+
+
+def _raw_context_sources(review_ids: tuple[str, ...]) -> dict[str, str]:
+    numeric_ids = {int(review_id) for review_id in review_ids if review_id.isdigit()}
+    return {
+        str(review_id): content
+        for review_id, content in ReviewRecord.objects.filter(pk__in=numeric_ids).values_list("id", "content")
+    }
 
 
 def _persist_success(
@@ -161,6 +169,7 @@ def analyze_corpus_item(
         return AnalysisOutcome(corpus_item.review_id, "SKIPPED", None, "PHASE5_TARGET_ONLY")
     prompt = load_review_prompt(prompt_version)
     request = build_review_analysis_input(corpus_item)
+    raw_context_sources = _raw_context_sources((request.thread_review_id, request.parent_review_id))
     input_hash = compute_input_hash(corpus_item, prompt_version=prompt_version)
     provider = provider or get_ai_provider()
     if not force:
@@ -251,6 +260,12 @@ def analyze_corpus_item(
                 token_usage=(prompt_tokens, completion_tokens, total_tokens),
             )
             return AnalysisOutcome(corpus_item.review_id, "FAILED", result.id, code, attempts, retries)
+        output = reconcile_evidence_spans(
+            request,
+            output,
+            raw_content=corpus_item.review.content,
+            raw_context_sources=raw_context_sources,
+        )
         business_errors = validate_analysis(request, output)
         if business_errors:
             code = "ANALYSIS_VALIDATION_FAILED"
@@ -263,7 +278,12 @@ def analyze_corpus_item(
                 token_usage=(prompt_tokens, completion_tokens, total_tokens),
             )
             return AnalysisOutcome(corpus_item.review_id, "FAILED", result.id, code, attempts, retries)
-        evidence_errors = validate_evidence(request, output)
+        evidence_errors = validate_evidence(
+            request,
+            output,
+            raw_content=corpus_item.review.content,
+            raw_context_sources=raw_context_sources,
+        )
         if evidence_errors and not evidence_retry_used and retries < settings.AI_MAX_RETRIES:
             evidence_retry_used = True
             retries += 1

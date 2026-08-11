@@ -19,6 +19,11 @@ from apps.reviews.models import (
     ReviewQualityRun,
     ReviewRecord,
 )
+from apps.reviews.services.experience_signal_detector import (
+    classify_content_purpose,
+    detect_product_experience_signal,
+    is_non_phone_accessory_content,
+)
 from apps.reviews.services.governance_pipeline import (
     GovernanceProcessor,
     apply_manual_override,
@@ -97,6 +102,74 @@ def test_low_information_exact_terms(value: str) -> None:
 @pytest.mark.parametrize("value", ("发热严重", "掉电快", "信号太差", "续航很好", "拍照一般", "太重了", "卡死了"))
 def test_short_but_valuable_text_is_not_low_information(value: str) -> None:
     assert not is_low_information(value)
+
+
+@pytest.mark.parametrize("value", ("感谢大佬分享", "求解答", "在哪里"))
+def test_interaction_text_has_no_product_experience_signal(value: str) -> None:
+    signal = detect_product_experience_signal(value)
+    assert not signal.has_signal
+
+
+@pytest.mark.parametrize(
+    ("value", "aspect"),
+    (
+        ("续航不错", "BATTERY"),
+        ("掉电快", "BATTERY"),
+        ("信号太差", "SIGNAL"),
+    ),
+)
+def test_short_experience_text_keeps_signal(value: str, aspect: str) -> None:
+    signal = detect_product_experience_signal(value)
+    assert signal.has_signal and aspect in signal.candidate_aspects
+
+
+def test_short_reply_inherits_only_explicit_parent_experience() -> None:
+    inherited = detect_product_experience_signal(
+        "我也是",
+        parent_text="升级后掉电特别快",
+        allow_context_inheritance=True,
+    )
+    unrelated = detect_product_experience_signal(
+        "我也是",
+        parent_text="Power2壁纸分享",
+        allow_context_inheritance=True,
+    )
+    assert inherited.has_signal and inherited.context_required
+    assert inherited.candidate_aspects == ("BATTERY",)
+    assert not unrelated.has_signal and not unrelated.context_required
+
+
+def test_photo_share_is_not_camera_experience() -> None:
+    shared = detect_product_experience_signal("相册里的AI作品不错")
+    camera = detect_product_experience_signal("这手机拍照真的不错")
+    assert not shared.has_signal
+    assert classify_content_purpose("相册里的AI作品不错", has_experience_signal=False) == "PHOTO_SHARE"
+    assert camera.has_signal and camera.candidate_aspects == ("CAMERA",)
+
+
+def test_camera_location_is_build_quality_not_camera_experience() -> None:
+    signal = detect_product_experience_signal("后盖照相机位置连续更换开裂")
+
+    assert signal.has_signal
+    assert signal.candidate_aspects == ("BUILD_QUALITY",)
+
+
+def test_accessory_content_is_not_phone_experience() -> None:
+    earphone = "荣耀亲选 AI通话耳机，独立屏幕并支持视频通话"
+    watch = "这和通话手表相比还是差了一截"
+
+    assert is_non_phone_accessory_content(earphone)
+    assert is_non_phone_accessory_content(watch)
+    assert not detect_product_experience_signal(earphone).has_signal
+    assert not detect_product_experience_signal(watch).has_signal
+
+
+def test_audio_usage_condition_is_not_audio_evaluation() -> None:
+    condition = detect_product_experience_signal("基本上没开声音，或者开的很小")
+    evaluation = detect_product_experience_signal("声音太小")
+
+    assert not condition.has_signal
+    assert evaluation.has_signal and evaluation.candidate_aspects == ("AUDIO_AND_CALL",)
 
 
 def test_page_noise_is_conservative() -> None:
@@ -231,7 +304,28 @@ def test_high_confidence_commerce_copy_is_promotional(
 
 
 @pytest.mark.django_db
-def test_meaningful_thread_title_rescues_low_information_body(
+def test_product_launch_spec_copy_is_promotional(
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+) -> None:
+    review = make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id="honor_thread:spec-copy",
+        title="荣耀Power2发布",
+        content="荣耀Power2带来了千元机最大电池容量，10080毫安",
+    )
+
+    decision = GovernanceProcessor().process(review, persist=True, force=True)
+
+    assert not decision.eligible
+    assert decision.exclusion_reason == ExclusionReason.PROMOTIONAL
+
+
+@pytest.mark.django_db
+def test_ambiguous_photo_question_title_does_not_rescue_generic_body(
     source: DataSource,
     source_target: SourceTarget,
     product: Product,
@@ -247,8 +341,8 @@ def test_meaningful_thread_title_rescues_low_information_body(
 
     decision = GovernanceProcessor().process(review, persist=True, force=True)
 
-    assert decision.eligible
-    assert not decision.is_low_information
+    assert not decision.eligible
+    assert decision.exclusion_reason == ExclusionReason.NO_PRODUCT_EXPERIENCE_SIGNAL
 
 
 @pytest.mark.django_db
@@ -269,7 +363,7 @@ def test_generic_thread_title_does_not_rescue_low_information_body(
     decision = GovernanceProcessor().process(review, persist=True, force=True)
 
     assert not decision.eligible
-    assert decision.exclusion_reason == ExclusionReason.LOW_INFORMATION
+    assert decision.exclusion_reason == ExclusionReason.SOCIAL_INTERACTION
 
 
 @pytest.mark.django_db
@@ -321,7 +415,7 @@ def test_manual_override_has_priority(
 
     cleared = clear_manual_override(review.id)
     assert not cleared.eligible
-    assert cleared.exclusion_reason == ExclusionReason.LOW_INFORMATION
+    assert cleared.exclusion_reason == ExclusionReason.SOCIAL_INTERACTION
 
 
 @pytest.mark.django_db
@@ -390,7 +484,7 @@ def test_quality_api_filters_summarizes_and_applies_override(
 
     assert summary.status_code == 200
     assert summary.json()["total"] == 1
-    assert summary.json()["exclusion_reasons"][ExclusionReason.LOW_INFORMATION] == 1
+    assert summary.json()["exclusion_reasons"][ExclusionReason.SOCIAL_INTERACTION] == 1
     assert filtered.status_code == 200 and filtered.json()["count"] == 1
     assert override.status_code == 200 and override.json()["eligible_for_ai"] is True
 

@@ -16,7 +16,10 @@ class EvaluationSample:
     review_ids: tuple[int, ...]
 
 
-_SAMPLE_FILES = {"phase5-poc-v1": "phase5-poc-sample-v1.json"}
+_SAMPLE_FILES = {
+    "phase5-poc-v1": "phase5-poc-sample-v1.json",
+    "phase5-poc-v2": "phase5-poc-sample-v2.json",
+}
 
 
 def load_evaluation_sample(sample_version: str) -> EvaluationSample:

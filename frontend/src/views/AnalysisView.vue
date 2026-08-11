@@ -10,6 +10,7 @@ import {
   getAnalysisResults,
   getAnalysisSummary,
   getProducts,
+  getSamplePreview,
   getSources,
 } from '@/api'
 import type {
@@ -20,6 +21,7 @@ import type {
   AnalysisSummary,
   DataSource,
   Product,
+  SamplePreview,
 } from '@/types/api'
 
 const loading = ref(false)
@@ -34,9 +36,10 @@ const page = ref(1)
 const createVisible = ref(false)
 const detailVisible = ref(false)
 const selected = ref<AnalysisResult | null>(null)
+const samplePreview = ref<SamplePreview | null>(null)
 
 const filters = reactive({
-  sample_version: 'phase5-poc-v1',
+  sample_version: 'phase5-poc-v2',
   status: '',
   aspect: '',
   sentiment: '',
@@ -47,7 +50,7 @@ const filters = reactive({
 const createForm = reactive({
   product_id: undefined as number | undefined,
   source_id: undefined as number | undefined,
-  prompt_version: 'review_analysis_v2',
+  prompt_version: 'review_analysis_v3',
   limit: 20 as 20 | 100 | 278,
 })
 
@@ -108,7 +111,17 @@ const accuracyText = computed(() => {
   return value === null ? 'NOT EVALUATED' : `${(value * 100).toFixed(1)}%`
 })
 
+const sampleQuantity = computed(() => samplePreview.value?.count ?? total.value)
+const isPreviewMode = computed(() => filters.sample_version === 'phase5-poc-v2')
+
 async function loadResults() {
+  if (isPreviewMode.value) {
+    samplePreview.value = await getSamplePreview(filters.sample_version)
+    results.value = []
+    total.value = 0
+    return
+  }
+  samplePreview.value = null
   const response = await getAnalysisResults({
     page: page.value,
     page_size: 20,
@@ -269,12 +282,12 @@ onMounted(loadAll)
       <div>
         <h1 class="page-title">AI 结构化分析</h1>
         <p class="page-description">
-          仅分析 Phase 4 eligible 语料；本页展示结构化质量，不展示产品评分或排行。
+          基于治理后的荣耀俱乐部用户反馈进行结构化AI分析，所有结果保留原文证据，本阶段不生成产品综合评分。
         </p>
       </div>
       <el-button
         type="primary"
-        :disabled="!configuration?.configured"
+        :disabled="!configuration?.configured || isPreviewMode"
         @click="createVisible = true"
       >
         创建分析任务
@@ -292,19 +305,19 @@ onMounted(loadAll)
 
     <div v-if="summary" class="metric-grid">
       <div class="metric-card">
+        <span>评测集数量</span><strong>{{ sampleQuantity }}</strong>
+      </div>
+      <div class="metric-card">
         <span>可分析语料</span><strong>{{ summary.eligible_corpus }}</strong>
       </div>
-      <div class="metric-card">
-        <span>已分析</span><strong>{{ summary.analyzed_reviews }}</strong>
-      </div>
       <div class="metric-card success">
-        <span>成功</span><strong>{{ summary.success }}</strong>
+        <span>历史分析成功</span><strong>{{ summary.success }}</strong>
       </div>
       <div class="metric-card danger">
-        <span>失败</span><strong>{{ summary.failed }}</strong>
+        <span>历史分析失败</span><strong>{{ summary.failed }}</strong>
       </div>
       <div class="metric-card">
-        <span>待分析</span><strong>{{ summary.pending }}</strong>
+        <span>待分析语料</span><strong>{{ summary.pending }}</strong>
       </div>
       <div class="metric-card">
         <span>人工 Aspect 准确率</span><strong>{{ accuracyText }}</strong>
@@ -319,6 +332,7 @@ onMounted(loadAll)
         @change="loadResults"
       >
         <el-option label="phase5-poc-v1（固定20条）" value="phase5-poc-v1" />
+        <el-option label="phase5-poc-v2（待人工确认）" value="phase5-poc-v2" />
       </el-select>
       <el-select v-model="filters.status" clearable placeholder="状态" @change="loadResults">
         <el-option
@@ -368,6 +382,39 @@ onMounted(loadAll)
       />
     </div>
 
+    <div v-if="samplePreview" class="panel preview-panel">
+      <div class="preview-heading">
+        <div>
+          <h2>phase5-poc-v2 样本预览</h2>
+          <p>请先确认这 20 条是否值得送入 AI；当前没有调用真实模型。</p>
+        </div>
+        <el-tag type="warning">{{ samplePreview.ai_status }}</el-tag>
+      </div>
+      <el-table :data="samplePreview.items" row-key="review_id">
+        <el-table-column prop="review_id" label="Review ID" width="95" />
+        <el-table-column prop="record_type" label="Record Type" width="115" />
+        <el-table-column prop="content_purpose" label="Content Purpose" width="170" />
+        <el-table-column label="当前正文" min-width="320">
+          <template #default="{ row }"
+            ><div class="preview-text">{{ row.current_content }}</div></template
+          >
+        </el-table-column>
+        <el-table-column label="必要上下文" min-width="320">
+          <template #default="{ row }"
+            ><div class="preview-text">{{ row.necessary_context }}</div></template
+          >
+        </el-table-column>
+        <el-table-column label="体验 Signal" min-width="260">
+          <template #default="{ row }">
+            <div class="preview-text">{{ row.experience_signal_reason }}</div>
+            <el-tag v-for="aspect in row.candidate_aspects" :key="aspect" size="small">{{
+              aspect
+            }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
     <div v-if="batches.length" class="panel batch-panel">
       <h2>最近分析任务</h2>
       <el-table :data="batches.slice(0, 5)" size="small">
@@ -383,7 +430,7 @@ onMounted(loadAll)
       </el-table>
     </div>
 
-    <div class="panel">
+    <div v-if="!isPreviewMode" class="panel">
       <el-table :data="results" @row-click="openDetail">
         <el-table-column prop="review_id" label="Review ID" width="95" />
         <el-table-column prop="record_type" label="Record Type" width="115" />
@@ -632,6 +679,28 @@ onMounted(loadAll)
 .batch-panel h2 {
   margin: 0 0 12px;
   font-size: 17px;
+}
+.preview-panel {
+  margin-bottom: 16px;
+}
+.preview-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.preview-heading h2,
+.preview-heading p {
+  margin: 0;
+}
+.preview-heading p {
+  margin-top: 6px;
+  color: #667085;
+}
+.preview-text {
+  white-space: pre-wrap;
+  line-height: 1.6;
 }
 .filters > * {
   width: 180px;

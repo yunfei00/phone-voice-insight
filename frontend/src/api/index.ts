@@ -12,6 +12,7 @@ import type {
   HealthStatus,
   PaginatedResponse,
   Product,
+  SamplePreview,
   ReviewQuality,
   ReviewRecord,
 } from '@/types/api'
@@ -79,6 +80,13 @@ export const getAnalysisResults = async (
   params: PageParams = {},
 ): Promise<PaginatedResponse<AnalysisResult>> =>
   (await apiClient.get<PaginatedResponse<AnalysisResult>>('/analysis-results/', { params })).data
+
+export const getSamplePreview = async (sampleVersion: string): Promise<SamplePreview> =>
+  (
+    await apiClient.get<SamplePreview>('/analysis-results/sample-preview/', {
+      params: { sample_version: sampleVersion },
+    })
+  ).data
 
 export const getAnalysisBatches = async (): Promise<AnalysisBatch[]> =>
   (await apiClient.get<AnalysisBatch[]>('/analysis-batches/')).data

@@ -42,6 +42,21 @@ class ExclusionReason(models.TextChoices):
     DUPLICATE = "DUPLICATE", "重复"
     INVALID_ENCODING = "INVALID_ENCODING", "无效编码"
     PARSER_ARTIFACT = "PARSER_ARTIFACT", "解析残留"
+    NO_PRODUCT_EXPERIENCE_SIGNAL = "NO_PRODUCT_EXPERIENCE_SIGNAL", "无产品体验信号"
+    SOCIAL_INTERACTION = "SOCIAL_INTERACTION", "纯社交互动"
+    RESOURCE_SHARE = "RESOURCE_SHARE", "资源分享"
+    PHOTO_SHARE = "PHOTO_SHARE", "图片作品分享"
+    OTHER = "OTHER", "其他"
+
+
+class ContentPurpose(models.TextChoices):
+    PRODUCT_EXPERIENCE = "PRODUCT_EXPERIENCE", "产品体验"
+    QUESTION = "QUESTION", "问题咨询"
+    RESOURCE_SHARE = "RESOURCE_SHARE", "资源分享"
+    PHOTO_SHARE = "PHOTO_SHARE", "图片作品分享"
+    TUTORIAL = "TUTORIAL", "教程"
+    SOCIAL_INTERACTION = "SOCIAL_INTERACTION", "社交互动"
+    PROMOTIONAL = "PROMOTIONAL", "宣传"
     OTHER = "OTHER", "其他"
 
 
@@ -121,6 +136,15 @@ class ReviewQuality(TimeStampedModel):
     normalized_text = models.TextField("标准化文本", blank=True)
     has_meaningful_text = models.BooleanField("包含有效文本", default=False)
     is_product_related = models.BooleanField("产品相关", default=False)
+    has_product_experience_signal = models.BooleanField("包含产品体验信号", default=False, db_index=True)
+    context_required = models.BooleanField("需要上下文继承", default=False)
+    content_purpose = models.CharField(
+        "内容用途",
+        max_length=30,
+        choices=ContentPurpose.choices,
+        default=ContentPurpose.OTHER,
+        db_index=True,
+    )
     is_official_content = models.BooleanField("官方内容", default=False)
     is_low_information = models.BooleanField("低信息", default=False)
     is_navigation_or_page_noise = models.BooleanField("页面噪声", default=False)
@@ -176,6 +200,14 @@ class ReviewQualityRun(TimeStampedModel):
     )
     processor_version = models.CharField("处理器版本", max_length=50)
     normalized_text = models.TextField("标准化文本", blank=True)
+    has_product_experience_signal = models.BooleanField("包含产品体验信号", default=False)
+    context_required = models.BooleanField("需要上下文继承", default=False)
+    content_purpose = models.CharField(
+        "内容用途",
+        max_length=30,
+        choices=ContentPurpose.choices,
+        default=ContentPurpose.OTHER,
+    )
     eligible_for_ai = models.BooleanField("AI 语料可用", default=False)
     exclusion_reason = models.CharField(
         "排除原因",

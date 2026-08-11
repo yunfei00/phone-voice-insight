@@ -14,6 +14,7 @@ from django.utils import timezone
 from apps.reviews.models import (
     AnalysisCorpusItem,
     AuthorRole,
+    ContentPurpose,
     ExclusionReason,
     RecordType,
     ReviewQuality,
@@ -22,6 +23,10 @@ from apps.reviews.models import (
 )
 from apps.reviews.services.constants import CORPUS_VERSION, GOVERNANCE_PROCESSOR_VERSION
 from apps.reviews.services.context_builder import build_analysis_context, find_parent_review
+from apps.reviews.services.experience_signal_detector import (
+    classify_content_purpose,
+    detect_product_experience_signal,
+)
 from apps.reviews.services.low_information_detector import is_low_information
 from apps.reviews.services.noise_detector import is_navigation_or_page_noise
 from apps.reviews.services.product_relevance import is_product_related
@@ -44,6 +49,10 @@ class GovernanceDecision:
     is_promotional: bool
     is_noise: bool
     is_product_related: bool
+    has_product_experience_signal: bool
+    context_required: bool
+    content_purpose: str
+    candidate_aspects: tuple[str, ...]
     is_duplicate: bool
     is_empty: bool
     reused: bool = False
@@ -93,6 +102,8 @@ def _automatic_exclusion_reason(
     low_information: bool,
     duplicate: bool,
     supported_record_type: bool,
+    has_product_experience_signal: bool,
+    content_purpose: str,
 ) -> str:
     if is_empty:
         return ExclusionReason.EMPTY_CONTENT
@@ -106,12 +117,20 @@ def _automatic_exclusion_reason(
         return ExclusionReason.PAGE_NOISE
     if promotional:
         return ExclusionReason.PROMOTIONAL
-    if low_information:
-        return ExclusionReason.LOW_INFORMATION
     if duplicate:
         return ExclusionReason.DUPLICATE
     if not supported_record_type:
         return ExclusionReason.OTHER
+    if not has_product_experience_signal:
+        if content_purpose == ContentPurpose.SOCIAL_INTERACTION:
+            return ExclusionReason.SOCIAL_INTERACTION
+        if content_purpose == ContentPurpose.RESOURCE_SHARE:
+            return ExclusionReason.RESOURCE_SHARE
+        if content_purpose == ContentPurpose.PHOTO_SHARE:
+            return ExclusionReason.PHOTO_SHARE
+        return ExclusionReason.NO_PRODUCT_EXPERIENCE_SIGNAL
+    if low_information:
+        return ExclusionReason.LOW_INFORMATION
     return ExclusionReason.NONE
 
 
@@ -127,6 +146,7 @@ def _quality_score(
     duplicate: bool,
     published_at: datetime | None,
     context_sufficient: bool,
+    has_product_experience_signal: bool,
 ) -> float:
     score = 1.0
     if is_empty or invalid_encoding or official or not product_related or noise or duplicate:
@@ -135,6 +155,8 @@ def _quality_score(
         score -= 0.8
     if low_information:
         score -= 0.6
+    if not has_product_experience_signal:
+        score -= 0.7
     if published_at is None:
         score -= 0.05
     if not context_sufficient:
@@ -156,6 +178,10 @@ def _decision_from_quality(quality: ReviewQuality, *, reused: bool) -> Governanc
         is_promotional=quality.is_promotional,
         is_noise=quality.is_navigation_or_page_noise,
         is_product_related=quality.is_product_related,
+        has_product_experience_signal=quality.has_product_experience_signal,
+        context_required=quality.context_required,
+        content_purpose=quality.content_purpose,
+        candidate_aspects=tuple(quality.flags_json.get("candidate_aspects", ())),
         is_duplicate=quality.is_duplicate,
         is_empty=not bool(quality.normalized_text),
         reused=reused,
@@ -241,6 +267,27 @@ class GovernanceProcessor:
             is_official=official,
         )
         product_related = is_product_related(review, parent=parent)
+        signal_text = normalized_text
+        parent_signal_text = f"{parent.title}\n{parent.content}" if parent is not None else ""
+        parent_allows_inheritance = bool(
+            parent is not None
+            and not _is_official(parent)
+            and not is_promotional_content(
+                title=parent.title,
+                content=normalize_text(parent.content),
+                is_official=False,
+            )
+        )
+        experience_signal = detect_product_experience_signal(
+            signal_text,
+            parent_text=parent_signal_text,
+            allow_context_inheritance=review.record_type == RecordType.REPLY and parent_allows_inheritance,
+        )
+        content_purpose = classify_content_purpose(
+            signal_text,
+            has_experience_signal=experience_signal.has_signal,
+            promotional=promotional,
+        )
         duplicate_of = self._find_duplicate(review, normalized_text)
         duplicate = duplicate_of is not None
         supported_record_type = review.record_type in {RecordType.THREAD, RecordType.REPLY}
@@ -254,6 +301,8 @@ class GovernanceProcessor:
             low_information=low_information,
             duplicate=duplicate,
             supported_record_type=supported_record_type,
+            has_product_experience_signal=experience_signal.has_signal,
+            content_purpose=content_purpose,
         )
         automatic_eligible = automatic_reason == ExclusionReason.NONE
         score = _quality_score(
@@ -267,6 +316,7 @@ class GovernanceProcessor:
             duplicate=duplicate,
             published_at=review.published_at,
             context_sufficient=context.has_parent_context,
+            has_product_experience_signal=experience_signal.has_signal,
         )
         manual_override = bool(existing and existing.manual_override and existing.manual_eligible is not None)
         eligible = bool(existing.manual_eligible) if manual_override and existing is not None else automatic_eligible
@@ -285,6 +335,11 @@ class GovernanceProcessor:
             "invalid_encoding": invalid_encoding,
             "manual_override_applied": manual_override,
             "published_at_present": review.published_at is not None,
+            "has_product_experience_signal": experience_signal.has_signal,
+            "context_required": experience_signal.context_required,
+            "content_purpose": content_purpose,
+            "candidate_aspects": list(experience_signal.candidate_aspects),
+            "experience_signal_reasons": list(experience_signal.matched_terms),
         }
         self._remember(review, normalized_text)
 
@@ -301,6 +356,10 @@ class GovernanceProcessor:
                 is_promotional=promotional,
                 is_noise=noise,
                 is_product_related=product_related,
+                has_product_experience_signal=experience_signal.has_signal,
+                context_required=experience_signal.context_required,
+                content_purpose=content_purpose,
+                candidate_aspects=experience_signal.candidate_aspects,
                 is_duplicate=duplicate,
                 is_empty=is_empty,
             )
@@ -310,6 +369,9 @@ class GovernanceProcessor:
             "normalized_text": normalized_text,
             "has_meaningful_text": has_meaningful_text,
             "is_product_related": product_related,
+            "has_product_experience_signal": experience_signal.has_signal,
+            "context_required": experience_signal.context_required,
+            "content_purpose": content_purpose,
             "is_official_content": official,
             "is_low_information": low_information,
             "is_navigation_or_page_noise": noise,
@@ -330,6 +392,9 @@ class GovernanceProcessor:
                 processor_version=GOVERNANCE_PROCESSOR_VERSION,
                 defaults={
                     "normalized_text": normalized_text,
+                    "has_product_experience_signal": experience_signal.has_signal,
+                    "context_required": experience_signal.context_required,
+                    "content_purpose": content_purpose,
                     "eligible_for_ai": eligible,
                     "exclusion_reason": exclusion_reason,
                     "quality_score": score,
