@@ -39,7 +39,7 @@ const selected = ref<AnalysisResult | null>(null)
 const samplePreview = ref<SamplePreview | null>(null)
 
 const filters = reactive({
-  sample_version: 'phase5-poc-v2',
+  sample_version: 'phase5-poc-v3',
   status: '',
   aspect: '',
   sentiment: '',
@@ -63,6 +63,7 @@ type EvaluationForm = Omit<
   | 'issue_correct'
   | 'scenario_correct'
   | 'evidence_correct'
+  | 'context_correct'
   | 'hallucination'
 > & {
   aspect_correct: EvaluationDecision
@@ -70,6 +71,7 @@ type EvaluationForm = Omit<
   issue_correct: EvaluationDecision
   scenario_correct: EvaluationDecision
   evidence_correct: EvaluationDecision
+  context_correct: EvaluationDecision
   hallucination: EvaluationDecision
 }
 
@@ -80,6 +82,7 @@ function emptyEvaluation(): EvaluationForm {
     issue_correct: null,
     scenario_correct: null,
     evidence_correct: null,
+    context_correct: null,
     hallucination: null,
     reviewer_notes: '',
   }
@@ -113,6 +116,10 @@ const accuracyText = computed(() => {
 
 const sampleQuantity = computed(() => samplePreview.value?.count ?? total.value)
 const isPreviewMode = computed(() => filters.sample_version === 'phase5-poc-v2')
+
+function purposeTagType(purpose: string) {
+  return purpose === 'QUESTION' ? 'warning' : 'info'
+}
 
 async function loadResults() {
   if (isPreviewMode.value) {
@@ -238,6 +245,7 @@ function markAllCorrect() {
   evaluation.issue_correct = true
   evaluation.scenario_correct = true
   evaluation.evidence_correct = true
+  evaluation.context_correct = true
   evaluation.hallucination = false
 }
 
@@ -253,6 +261,7 @@ async function saveEvaluation() {
     evaluation.issue_correct,
     evaluation.scenario_correct,
     evaluation.evidence_correct,
+    evaluation.context_correct,
     evaluation.hallucination,
   ]
   if (decisions.some((value) => value === null)) {
@@ -265,6 +274,7 @@ async function saveEvaluation() {
     issue_correct: evaluation.issue_correct as boolean,
     scenario_correct: evaluation.scenario_correct as boolean,
     evidence_correct: evaluation.evidence_correct as boolean,
+    context_correct: evaluation.context_correct as boolean,
     hallucination: evaluation.hallucination as boolean,
     reviewer_notes: evaluation.reviewer_notes,
   })
@@ -333,6 +343,7 @@ onMounted(loadAll)
       >
         <el-option label="phase5-poc-v1（固定20条）" value="phase5-poc-v1" />
         <el-option label="phase5-poc-v2（待人工确认）" value="phase5-poc-v2" />
+        <el-option label="phase5-poc-v3（真实 AI 结果）" value="phase5-poc-v3" />
       </el-select>
       <el-select v-model="filters.status" clearable placeholder="状态" @change="loadResults">
         <el-option
@@ -434,6 +445,11 @@ onMounted(loadAll)
       <el-table :data="results" @row-click="openDetail">
         <el-table-column prop="review_id" label="Review ID" width="95" />
         <el-table-column prop="record_type" label="Record Type" width="115" />
+        <el-table-column label="Content Purpose" width="170">
+          <template #default="{ row }">
+            <el-tag :type="purposeTagType(row.content_purpose)">{{ row.content_purpose }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="正文摘要" min-width="240"
           ><template #default="{ row }">{{
             row.original_content.slice(0, 80)
@@ -514,6 +530,12 @@ onMounted(loadAll)
           <dd>{{ selected.review_id }}</dd>
           <dt>记录类型</dt>
           <dd>{{ selected.record_type }}</dd>
+          <dt>Content Purpose</dt>
+          <dd>
+            <el-tag :type="purposeTagType(selected.content_purpose)">
+              {{ selected.content_purpose }}
+            </el-tag>
+          </dd>
           <dt>发布时间</dt>
           <dd>{{ selected.published_at || '未解析' }}</dd>
           <dt>模型</dt>
@@ -532,6 +554,8 @@ onMounted(loadAll)
           </dd>
           <dt>原文</dt>
           <dd class="pre">{{ selected.original_content }}</dd>
+          <dt>normalized_text</dt>
+          <dd class="pre">{{ selected.normalized_text }}</dd>
           <dt>父帖上下文</dt>
           <dd class="pre">{{ selected.context_text }}</dd>
         </dl>
@@ -613,6 +637,13 @@ onMounted(loadAll)
           <div class="evaluation-item">
             <span>Evidence</span>
             <el-radio-group v-model="evaluation.evidence_correct">
+              <el-radio-button :value="true">正确</el-radio-button>
+              <el-radio-button :value="false">错误</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="evaluation-item">
+            <span>Context</span>
+            <el-radio-group v-model="evaluation.context_correct">
               <el-radio-button :value="true">正确</el-radio-button>
               <el-radio-button :value="false">错误</el-radio-button>
             </el-radio-group>

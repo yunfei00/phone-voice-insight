@@ -13,6 +13,7 @@ from apps.products.models import Product
 from apps.reviews.models import (
     AnalysisCorpusItem,
     AuthorRole,
+    ContentPurpose,
     ExclusionReason,
     RecordType,
     ReviewQuality,
@@ -510,3 +511,107 @@ def test_process_reviews_command_dry_run_does_not_write(
     assert output["total"] == 1
     assert output["dry_run"] is True
     assert ReviewQuality.objects.count() == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("content", ("133版本的", "160版本", "最新版", "刚升级133", "系统版本是xxx"))
+def test_metadata_only_reply_is_excluded_without_overwriting_raw_record(
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+    content: str,
+) -> None:
+    parent = make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id=f"honor_thread:metadata-parent:{content}",
+        content="待机耗电很快",
+    )
+    review = make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id=f"honor_reply:metadata:{content}",
+        parent_external_id=parent.external_id or "",
+        content=content,
+        record_type=RecordType.REPLY,
+    )
+
+    decision = GovernanceProcessor().process(review, persist=True, force=True)
+    quality = ReviewQuality.objects.get(review=review)
+    review.refresh_from_db()
+
+    assert not decision.eligible
+    assert decision.exclusion_reason == ExclusionReason.METADATA_REPLY
+    assert not decision.has_product_experience_signal
+    assert decision.content_purpose == ContentPurpose.METADATA_REPLY
+    assert quality.flags_json["candidate_metadata"]
+    assert review.content == content
+
+
+@pytest.mark.django_db
+def test_version_with_battery_experience_remains_eligible(
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+) -> None:
+    review = make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id="honor_reply:version-experience",
+        content="133版本掉电快",
+        record_type=RecordType.REPLY,
+    )
+
+    decision = GovernanceProcessor().process(review, persist=True, force=True)
+
+    assert decision.eligible
+    assert decision.content_purpose == ContentPurpose.PRODUCT_EXPERIENCE
+    assert decision.candidate_aspects == ("BATTERY",)
+
+
+@pytest.mark.django_db
+def test_exact_platform_declaration_is_removed_only_from_governed_text(
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+) -> None:
+    raw = "后盖开裂\n作者声明：作品含AI生成内容"
+    review = make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id="honor_thread:boilerplate",
+        content=raw,
+    )
+
+    decision = GovernanceProcessor().process(review, persist=True, force=True)
+    quality = ReviewQuality.objects.get(review=review)
+    review.refresh_from_db()
+
+    assert decision.eligible
+    assert quality.normalized_text == "后盖开裂"
+    assert quality.flags_json["platform_boilerplate_removed"] == ["作者声明：作品含AI生成内容"]
+    assert review.content == raw
+
+
+@pytest.mark.django_db
+def test_user_ai_generated_sentence_is_not_removed_by_boilerplate_cleaner(
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+) -> None:
+    raw = "我认为AI生成的照片看起来不错"
+    review = make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id="honor_thread:user-ai-sentence",
+        content=raw,
+    )
+
+    GovernanceProcessor().process(review, persist=True, force=True)
+
+    assert ReviewQuality.objects.get(review=review).normalized_text == raw

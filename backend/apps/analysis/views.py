@@ -51,7 +51,7 @@ class AnalysisResultViewSet(ReadOnlyModelViewSet):
 
     @action(detail=False, methods=("get",), url_path="sample-preview")
     def sample_preview(self, request: Request) -> Response:
-        sample_version = request.query_params.get("sample_version", "phase5-poc-v2")
+        sample_version = request.query_params.get("sample_version", "phase5-poc-v3")
         try:
             items = load_sample_preview(sample_version)
         except ValueError as exc:
@@ -178,11 +178,12 @@ class AnalysisBatchViewSet(ViewSet):
 def _evaluation_accuracy(queryset: Any) -> dict[str, float | None]:
     total = queryset.count()
     if not total:
-        return {name: None for name in ("aspect", "sentiment", "issue", "scenario", "evidence")}
+        return {name: None for name in ("aspect", "sentiment", "issue", "scenario", "evidence", "context")}
     return {
         "aspect": queryset.filter(aspect_correct=True).count() / total,
         "sentiment": queryset.filter(sentiment_correct=True).count() / total,
         "issue": queryset.filter(issue_correct=True).count() / total,
         "scenario": queryset.filter(scenario_correct=True).count() / total,
         "evidence": queryset.filter(evidence_correct=True).count() / total,
+        "context": queryset.filter(context_correct=True).count() / total,
     }

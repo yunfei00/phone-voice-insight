@@ -46,6 +46,7 @@ class ExclusionReason(models.TextChoices):
     SOCIAL_INTERACTION = "SOCIAL_INTERACTION", "纯社交互动"
     RESOURCE_SHARE = "RESOURCE_SHARE", "资源分享"
     PHOTO_SHARE = "PHOTO_SHARE", "图片作品分享"
+    METADATA_REPLY = "METADATA_REPLY", "纯元数据回复"
     OTHER = "OTHER", "其他"
 
 
@@ -57,6 +58,7 @@ class ContentPurpose(models.TextChoices):
     TUTORIAL = "TUTORIAL", "教程"
     SOCIAL_INTERACTION = "SOCIAL_INTERACTION", "社交互动"
     PROMOTIONAL = "PROMOTIONAL", "宣传"
+    METADATA_REPLY = "METADATA_REPLY", "元数据回复"
     OTHER = "OTHER", "其他"
 
 

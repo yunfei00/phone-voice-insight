@@ -29,6 +29,7 @@ class AnalysisResultSerializer(serializers.ModelSerializer):
     record_type = serializers.CharField(source="review.record_type", read_only=True)
     original_title = serializers.CharField(source="review.title", read_only=True)
     original_content = serializers.CharField(source="review.content", read_only=True)
+    normalized_text = serializers.CharField(source="corpus_item.normalized_text", read_only=True, default="")
     published_at = serializers.DateTimeField(source="review.published_at", read_only=True)
     context_text = serializers.CharField(source="corpus_item.context_text", read_only=True, default="")
     evaluation = serializers.SerializerMethodField()
@@ -48,6 +49,7 @@ class AnalysisResultSerializer(serializers.ModelSerializer):
             "record_type",
             "original_title",
             "original_content",
+            "normalized_text",
             "published_at",
             "context_text",
             "batch",
@@ -57,6 +59,7 @@ class AnalysisResultSerializer(serializers.ModelSerializer):
             "model_version",
             "prompt_version",
             "input_hash",
+            "content_purpose",
             "is_valid_content",
             "confidence",
             "summary",
@@ -118,6 +121,7 @@ class AnalysisEvaluationSerializer(serializers.ModelSerializer):
             "issue_correct",
             "scenario_correct",
             "evidence_correct",
+            "context_correct",
             "hallucination",
             "reviewer_notes",
             "evaluated_at",

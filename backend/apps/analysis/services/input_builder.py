@@ -8,6 +8,7 @@ from ai.schemas.review_analysis import ReviewAnalysisInput
 
 from apps.reviews.models import AnalysisCorpusItem, RecordType, ReviewRecord
 from apps.reviews.services.context_builder import find_parent_review
+from apps.reviews.services.platform_boilerplate_cleaner import clean_platform_boilerplate
 
 PHASE5_PRODUCT = "HONOR_POWER2"
 PHASE5_SOURCE = "HONOR_CLUB"
@@ -48,19 +49,20 @@ def build_review_analysis_input(corpus_item: AnalysisCorpusItem) -> ReviewAnalys
         product_model=corpus_item.product.name,
         source=corpus_item.source.code,
         record_type=review.record_type,
+        content_purpose=corpus_item.quality.content_purpose,
         author_role=review.author_role,
         is_official=review.is_official,
         title=review.title or None,
-        content=review.content,
+        content=corpus_item.normalized_text,
         rating=float(review.rating) if review.rating is not None else None,
         software_version=review.software_version or None,
         published_at=review.published_at.isoformat() if review.published_at else None,
         device_source=_device_source(review) or _device_source(parent) or _device_source(thread),
         thread_review_id=str(thread.id) if thread else "",
         thread_title=thread.title if thread else "",
-        thread_content=thread.content if thread else "",
+        thread_content=clean_platform_boilerplate(thread.content).text if thread else "",
         parent_review_id=str(parent.id) if parent else "",
-        parent_content=parent.content if parent else "",
+        parent_content=clean_platform_boilerplate(parent.content).text if parent else "",
         context_text=corpus_item.context_text,
     )
 

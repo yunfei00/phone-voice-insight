@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from ai.schemas.review_analysis import ReviewAnalysisInput, ReviewAnalysisOutput
+
+_EXPLICIT_NEGATIVE_MARKERS = re.compile(
+    r"太差|很差|真差|不好|不行了|有问题|故障|慢|模糊|转圈|衰减|不匹配|没能解决|"
+    r"电量.{0,8}(?:掉|下降)|掉电(?:太)?快|耗电(?:太)?快|发热|烫|卡顿|断流|没信号|无信号"
+)
 
 
 @dataclass(frozen=True)
@@ -34,4 +40,15 @@ def validate_analysis(
             errors.append(AnalysisValidationError("evidence_text", "evidence cannot be empty"))
         if item.context_dependent != bool(item.context_evidence_text and item.context_evidence_review_id):
             errors.append(AnalysisValidationError("context_dependent", "context fields are inconsistent"))
+        if (
+            request.content_purpose == "QUESTION"
+            and item.sentiment.value == "NEGATIVE"
+            and not _EXPLICIT_NEGATIVE_MARKERS.search(request.content)
+        ):
+            errors.append(
+                AnalysisValidationError(
+                    "sentiment",
+                    "a pure question cannot be negative without an explicit negative statement",
+                )
+            )
     return tuple(errors)

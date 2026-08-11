@@ -11,6 +11,7 @@ from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from apps.analysis.models import AnalysisBatch, AnalysisResult, AnalysisStatus, AspectResult
 from apps.analysis.services.analysis_runner import error_counts, outcome_dict, run_analysis_batch
+from apps.analysis.services.evaluation_samples import load_evaluation_sample
 from apps.analysis.services.input_builder import PHASE5_PRODUCT, PHASE5_SOURCE, compute_input_hash
 from apps.analysis.services.prompt_loader import load_review_prompt
 from apps.analysis.services.sampling import DEFAULT_SAMPLE_SEED, sample_coverage, select_corpus_items
@@ -53,6 +54,7 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int)
         parser.add_argument("--record-id", type=int)
         parser.add_argument("--record-ids", default="")
+        parser.add_argument("--sample-version", default="")
         parser.add_argument("--prompt-version", default="review_analysis_v3")
         parser.add_argument("--retry-failed", action="store_true")
         parser.add_argument("--force", action="store_true")
@@ -64,12 +66,17 @@ class Command(BaseCommand):
     def handle(self, *_args: object, **options: Any) -> None:
         limit = options["limit"]
         record_ids = _parse_record_ids(options["record_ids"]) if options["record_ids"] else []
+        sample_version = str(options["sample_version"])
         if limit is not None and not 1 <= limit <= 10_000:
             raise CommandError("--limit 必须在 1 到 10000 之间")
         if options["record_id"] is not None and limit not in (None, 1):
             raise CommandError("--record-id 不能与大于 1 的 --limit 同时使用")
         if record_ids and (options["record_id"] is not None or limit is not None):
             raise CommandError("--record-ids 不能与 --record-id 或 --limit 同时使用")
+        if sample_version and (record_ids or options["record_id"] is not None or limit is not None):
+            raise CommandError("--sample-version 不能与记录或数量选择器同时使用")
+        if sample_version and sample_version != "phase5-poc-v3":
+            raise CommandError("ONLY_PHASE5_POC_V3_IS_ALLOWED")
         try:
             load_review_prompt(options["prompt_version"])
         except ValueError as exc:
@@ -94,7 +101,17 @@ class Command(BaseCommand):
             quality__eligible_for_ai=True,
         )
         total_eligible = queryset.count()
-        if record_ids:
+        if sample_version:
+            try:
+                sample = load_evaluation_sample(sample_version)
+            except ValueError as exc:
+                raise CommandError(str(exc)) from exc
+            item_map = {item.review_id: item for item in queryset.filter(review_id__in=sample.review_ids)}
+            missing_ids = [review_id for review_id in sample.review_ids if review_id not in item_map]
+            if missing_ids:
+                raise CommandError(f"ELIGIBLE_CORPUS_ITEMS_NOT_FOUND:{','.join(map(str, missing_ids))}")
+            items = [item_map[review_id] for review_id in sample.review_ids]
+        elif record_ids:
             item_map = {item.review_id: item for item in queryset.filter(review_id__in=record_ids)}
             missing_ids = [record_id for record_id in record_ids if record_id not in item_map]
             if missing_ids:

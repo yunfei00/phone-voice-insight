@@ -27,7 +27,7 @@ from rest_framework.test import APIClient
 from apps.analysis.models import AnalysisBatch, AnalysisEvaluation, AnalysisResult
 from apps.analysis.services.analysis_runner import analyze_corpus_item, run_analysis_batch
 from apps.analysis.services.evaluation_samples import EvaluationSample, load_evaluation_sample
-from apps.analysis.services.input_builder import compute_input_hash
+from apps.analysis.services.input_builder import build_review_analysis_input, compute_input_hash
 from apps.analysis.services.prompt_loader import load_review_prompt
 from apps.analysis.services.response_parser import parse_review_analysis_output
 from apps.analysis.services.review_report import render_batch_review_markdown
@@ -143,7 +143,7 @@ def test_review_analysis_v3_prompt_has_question_and_content_boundaries() -> None
     assert "所有字段都必须存在" in prompt
 
 
-@pytest.mark.parametrize("sample_version", ("phase5-poc-v1", "phase5-poc-v2"))
+@pytest.mark.parametrize("sample_version", ("phase5-poc-v1", "phase5-poc-v2", "phase5-poc-v3"))
 def test_phase5_sample_manifest_contains_twenty_unique_review_ids(sample_version: str) -> None:
     sample = load_evaluation_sample(sample_version)
     assert sample.sample_version == sample_version and sample.seed == 20260808
@@ -222,6 +222,41 @@ def test_analysis_validator_rejects_duplicates_and_product_mismatch() -> None:
     output = valid_output(product_model="其他产品", aspects=[item, item])
     errors = validate_analysis(request, output)
     assert {error.field for error in errors} == {"product_model", "aspects"}
+
+
+@pytest.mark.parametrize(
+    ("content", "sentiment", "valid"),
+    (
+        ("为什么只有4G？", "NEUTRAL", True),
+        ("为什么只有4G？", "NEGATIVE", False),
+        ("信号太差了，为什么还是4G？", "NEGATIVE", True),
+        ("充电慢不说，拍照也模糊是怎么回事？", "NEGATIVE", True),
+        ("待机24小时电量直接掉了9%，怎么回事？", "NEGATIVE", True),
+    ),
+)
+def test_question_sentiment_requires_explicit_negative_statement(
+    content: str,
+    sentiment: str,
+    valid: bool,
+) -> None:
+    request = analysis_input(content=content, content_purpose="QUESTION")
+    output = valid_output(
+        aspects=[
+            {
+                "aspect": "SIGNAL",
+                "sentiment": sentiment,
+                "evidence_text": content,
+                "context_dependent": False,
+                "context_evidence_text": "",
+                "context_evidence_review_id": "",
+                "confidence": 0.9,
+            }
+        ]
+    )
+
+    errors = validate_analysis(request, output)
+
+    assert (not errors) is valid
 
 
 def test_analysis_validator_rejects_official_content_defensively() -> None:
@@ -596,6 +631,7 @@ def test_batch_statistics_and_evaluation_api(product: Product, api_client: APICl
             "issue_correct": True,
             "scenario_correct": True,
             "evidence_correct": True,
+            "context_correct": True,
             "hallucination": False,
             "reviewer_notes": "fixture review",
         },
@@ -606,10 +642,27 @@ def test_batch_statistics_and_evaluation_api(product: Product, api_client: APICl
     report = render_batch_review_markdown(batch)
     assert "Human evaluation status: NOT_EVALUATED" in report
     assert "- [ ] Aspect 正确" in report
-    assert "- [ ] Context 使用正确" in report
+    assert "- [ ] Context 正确  - [ ] Context 错误" in report
+    assert "- [ ] Hallucination 有  - [ ] Hallucination 无" in report
+    assert "Content Purpose:" in report and "normalized_text" in report
     assert "### 必要上下文" in report and "> N/A" in report
     assert "### AI结果" in report
     assert "nickname" not in report and "raw_data" not in report
+
+
+@pytest.mark.django_db
+def test_analysis_input_uses_cleaned_content_and_preserves_purpose(product: Product) -> None:
+    corpus = make_honor_corpus(
+        product=product,
+        content="后盖开裂\n作者声明：作品含AI生成内容",
+        external_id="thread:cleaned-ai-input",
+    )
+
+    request = build_review_analysis_input(corpus)
+
+    assert request.content == "后盖开裂"
+    assert request.content_purpose == "PRODUCT_EXPERIENCE"
+    assert corpus.review.content.endswith("作者声明：作品含AI生成内容")
 
 
 @pytest.mark.django_db

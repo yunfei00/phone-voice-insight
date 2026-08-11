@@ -5,7 +5,7 @@ from django.db import models
 
 from apps.common.models import TimeStampedModel
 from apps.products.models import Product
-from apps.reviews.models import AnalysisCorpusItem, ReviewRecord
+from apps.reviews.models import AnalysisCorpusItem, ContentPurpose, ReviewRecord
 from apps.sources.models import DataSource
 
 
@@ -109,6 +109,13 @@ class AnalysisResult(TimeStampedModel):
     model_version = models.CharField("模型版本", max_length=100)
     prompt_version = models.CharField("Prompt 版本", max_length=100)
     input_hash = models.CharField("输入指纹", max_length=64, db_index=True, default="")
+    content_purpose = models.CharField(
+        "内容用途",
+        max_length=30,
+        choices=ContentPurpose.choices,
+        default=ContentPurpose.OTHER,
+        db_index=True,
+    )
     is_valid_content = models.BooleanField("有效内容", default=False)
     confidence = models.DecimalField(
         "置信度",
@@ -193,6 +200,7 @@ class AnalysisEvaluation(TimeStampedModel):
     issue_correct = models.BooleanField("问题正确")
     scenario_correct = models.BooleanField("场景正确")
     evidence_correct = models.BooleanField("证据正确")
+    context_correct = models.BooleanField("上下文使用正确")
     hallucination = models.BooleanField("存在严重幻觉", default=False)
     reviewer_notes = models.TextField("审核备注", blank=True)
     evaluated_at = models.DateTimeField("审核时间")

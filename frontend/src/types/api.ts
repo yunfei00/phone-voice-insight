@@ -160,6 +160,7 @@ export type ExclusionReason =
   | 'SOCIAL_INTERACTION'
   | 'RESOURCE_SHARE'
   | 'PHOTO_SHARE'
+  | 'METADATA_REPLY'
   | 'OTHER'
 
 export type ContentPurpose =
@@ -170,6 +171,7 @@ export type ContentPurpose =
   | 'TUTORIAL'
   | 'SOCIAL_INTERACTION'
   | 'PROMOTIONAL'
+  | 'METADATA_REPLY'
   | 'OTHER'
 
 export interface ReviewQuality {
@@ -265,6 +267,7 @@ export interface AnalysisEvaluation {
   issue_correct: boolean
   scenario_correct: boolean
   evidence_correct: boolean
+  context_correct: boolean
   hallucination: boolean
   reviewer_notes: string
   evaluated_at: string
@@ -276,6 +279,7 @@ export interface AnalysisResult {
   record_type: ReviewRecord['record_type']
   original_title: string
   original_content: string
+  normalized_text: string
   published_at: string | null
   context_text: string
   batch: number | null
@@ -285,6 +289,7 @@ export interface AnalysisResult {
   model_version: string
   prompt_version: string
   input_hash: string
+  content_purpose: ContentPurpose
   is_valid_content: boolean
   confidence: string | null
   summary: string
@@ -340,7 +345,7 @@ export interface AnalysisSummary {
   evidence_failures: number
   evaluated: number
   evaluation_accuracy: Record<
-    'aspect' | 'sentiment' | 'issue' | 'scenario' | 'evidence',
+    'aspect' | 'sentiment' | 'issue' | 'scenario' | 'evidence' | 'context',
     number | null
   >
 }

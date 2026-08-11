@@ -50,6 +50,7 @@ class ReviewAnalysisInput(StrictSchema):
     title: str | None = None
     source: str
     record_type: str
+    content_purpose: str = "OTHER"
     author_role: str
     is_official: bool = False
     rating: float | None = Field(default=None, ge=0, le=5)

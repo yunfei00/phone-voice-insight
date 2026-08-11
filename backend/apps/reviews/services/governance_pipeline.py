@@ -28,7 +28,9 @@ from apps.reviews.services.experience_signal_detector import (
     detect_product_experience_signal,
 )
 from apps.reviews.services.low_information_detector import is_low_information
+from apps.reviews.services.metadata_reply_detector import detect_metadata_reply
 from apps.reviews.services.noise_detector import is_navigation_or_page_noise
+from apps.reviews.services.platform_boilerplate_cleaner import clean_platform_boilerplate
 from apps.reviews.services.product_relevance import is_product_related
 from apps.reviews.services.promotional_detector import is_promotional_content
 from apps.reviews.services.text_normalizer import normalize_text
@@ -121,6 +123,8 @@ def _automatic_exclusion_reason(
         return ExclusionReason.DUPLICATE
     if not supported_record_type:
         return ExclusionReason.OTHER
+    if content_purpose == ContentPurpose.METADATA_REPLY:
+        return ExclusionReason.METADATA_REPLY
     if not has_product_experience_signal:
         if content_purpose == ContentPurpose.SOCIAL_INTERACTION:
             return ExclusionReason.SOCIAL_INTERACTION
@@ -242,7 +246,8 @@ class GovernanceProcessor:
             self._remember(review, existing.normalized_text)
             return _decision_from_quality(existing, reused=True)
 
-        normalized_text = normalize_text(review.content)
+        cleaning_result = clean_platform_boilerplate(review.content)
+        normalized_text = cleaning_result.text
         parent = find_parent_review(review)
         context = build_analysis_context(review, parent=parent)
         invalid_encoding = "\ufffd" in normalized_text
@@ -268,7 +273,9 @@ class GovernanceProcessor:
         )
         product_related = is_product_related(review, parent=parent)
         signal_text = normalized_text
-        parent_signal_text = f"{parent.title}\n{parent.content}" if parent is not None else ""
+        parent_signal_text = (
+            f"{parent.title}\n{clean_platform_boilerplate(parent.content).text}" if parent is not None else ""
+        )
         parent_allows_inheritance = bool(
             parent is not None
             and not _is_official(parent)
@@ -278,16 +285,22 @@ class GovernanceProcessor:
                 is_official=False,
             )
         )
-        experience_signal = detect_product_experience_signal(
-            signal_text,
-            parent_text=parent_signal_text,
-            allow_context_inheritance=review.record_type == RecordType.REPLY and parent_allows_inheritance,
-        )
-        content_purpose = classify_content_purpose(
-            signal_text,
-            has_experience_signal=experience_signal.has_signal,
-            promotional=promotional,
-        )
+        metadata_reply = detect_metadata_reply(signal_text) if review.record_type == RecordType.REPLY else None
+        content_purpose: str
+        if metadata_reply is not None and metadata_reply.is_metadata_only:
+            experience_signal = detect_product_experience_signal("")
+            content_purpose = ContentPurpose.METADATA_REPLY
+        else:
+            experience_signal = detect_product_experience_signal(
+                signal_text,
+                parent_text=parent_signal_text,
+                allow_context_inheritance=review.record_type == RecordType.REPLY and parent_allows_inheritance,
+            )
+            content_purpose = classify_content_purpose(
+                signal_text,
+                has_experience_signal=experience_signal.has_signal,
+                promotional=promotional,
+            )
         duplicate_of = self._find_duplicate(review, normalized_text)
         duplicate = duplicate_of is not None
         supported_record_type = review.record_type in {RecordType.THREAD, RecordType.REPLY}
@@ -340,6 +353,8 @@ class GovernanceProcessor:
             "content_purpose": content_purpose,
             "candidate_aspects": list(experience_signal.candidate_aspects),
             "experience_signal_reasons": list(experience_signal.matched_terms),
+            "candidate_metadata": metadata_reply.candidate_metadata if metadata_reply is not None else {},
+            "platform_boilerplate_removed": list(cleaning_result.removed_lines),
         }
         self._remember(review, normalized_text)
 

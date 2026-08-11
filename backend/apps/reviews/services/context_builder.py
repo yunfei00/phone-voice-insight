@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from apps.reviews.models import RecordType, ReviewRecord
+from apps.reviews.services.platform_boilerplate_cleaner import clean_platform_boilerplate
 from apps.reviews.services.text_normalizer import normalize_text
 
 _CONTEXT_LIMIT = 600
@@ -54,20 +55,22 @@ def _raw_text(review: ReviewRecord, key: str) -> str:
     return normalize_text(value if isinstance(value, str) else "")[:_CONTEXT_LIMIT]
 
 
+def _content(value: str | None) -> str:
+    return clean_platform_boilerplate(value).text[:_CONTEXT_LIMIT]
+
+
 def build_analysis_context(review: ReviewRecord, *, parent: ReviewRecord | None = None) -> AnalysisContext:
     parent = parent or find_parent_review(review)
     is_thread = review.record_type == RecordType.THREAD
     thread_title = normalize_text(review.title if is_thread else (parent.title if parent else ""))[:_CONTEXT_LIMIT]
-    thread_content = normalize_text(review.content if is_thread else (parent.content if parent else ""))[
-        :_CONTEXT_LIMIT
-    ]
-    parent_content = normalize_text(parent.content if parent and not is_thread else "")[:_CONTEXT_LIMIT]
+    thread_content = _content(review.content if is_thread else (parent.content if parent else ""))
+    parent_content = _content(parent.content if parent and not is_thread else "")
     device_source = _raw_text(review, "device_source") or (_raw_text(parent, "device_source") if parent else "")
     return AnalysisContext(
         thread_title=thread_title,
         thread_content=thread_content,
         parent_content=parent_content,
-        current_content=normalize_text(review.content)[:_CONTEXT_LIMIT],
+        current_content=_content(review.content),
         record_type=review.record_type,
         author_role=review.author_role,
         published_at=review.published_at.isoformat() if review.published_at else "",

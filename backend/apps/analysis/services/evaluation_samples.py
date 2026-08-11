@@ -19,6 +19,7 @@ class EvaluationSample:
 _SAMPLE_FILES = {
     "phase5-poc-v1": "phase5-poc-sample-v1.json",
     "phase5-poc-v2": "phase5-poc-sample-v2.json",
+    "phase5-poc-v3": "phase5-poc-sample-v3.json",
 }
 
 

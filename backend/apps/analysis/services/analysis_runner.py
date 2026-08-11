@@ -90,11 +90,14 @@ def _persist_success(
     total_tokens: int | None,
     request_id: str,
 ) -> None:
+    if result.corpus_item is None:
+        raise ValueError("ANALYSIS_RESULT_MISSING_CORPUS_ITEM")
     with transaction.atomic():
         result.status = AnalysisStatus.SUCCESS
         result.provider = provider_name
         result.model_name = model
         result.model_version = model
+        result.content_purpose = result.corpus_item.quality.content_purpose
         result.is_valid_content = output.is_valid_content
         result.confidence = Decimal(str(output.confidence))
         result.summary = output.summary
@@ -202,12 +205,14 @@ def analyze_corpus_item(
         model_version=provider.model,
         prompt_version=prompt_version,
         input_hash=input_hash,
+        content_purpose=corpus_item.quality.content_purpose,
     )
     if existing is not None:
         result.batch = batch
         result.corpus_item = corpus_item
         result.status = AnalysisStatus.PENDING
-        result.save(update_fields=("batch", "corpus_item", "status", "updated_at"))
+        result.content_purpose = corpus_item.quality.content_purpose
+        result.save(update_fields=("batch", "corpus_item", "status", "content_purpose", "updated_at"))
 
     attempts = retries = latency_ms = 0
     prompt_tokens = completion_tokens = total_tokens = None

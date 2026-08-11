@@ -69,6 +69,14 @@ describe('App', () => {
       '系统状态',
     ])
 
+    const collapseButton = container.querySelector<HTMLButtonElement>('.collapse-button')
+    expect(collapseButton?.getAttribute('aria-label')).toBe('折叠左侧菜单')
+    collapseButton?.click()
+    await nextTick()
+    expect(container.querySelector('.sidebar')?.classList.contains('collapsed')).toBe(true)
+    expect(container.querySelector('.main')?.classList.contains('expanded')).toBe(true)
+    expect(collapseButton?.getAttribute('aria-label')).toBe('展开左侧菜单')
+
     await router.push('/system')
     await new Promise((resolve) => setTimeout(resolve, 0))
     await nextTick()
