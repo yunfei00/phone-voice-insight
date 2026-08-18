@@ -4,6 +4,7 @@ import { createApp, nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from '@/App.vue'
+import { CURRENT_PHASE_LABEL } from '@/config/project'
 import router from '@/router'
 
 vi.mock('@/api', () => ({
@@ -172,4 +173,15 @@ describe('App', () => {
 
     app.unmount()
   })
+
+  it.each(['/dashboard', '/analysis', '/data-quality'])(
+    '%s 的全局 Header 显示统一项目阶段',
+    async (path) => {
+      const { app, container } = await mountApp(path)
+
+      expect(container.querySelector('.phase-label')?.textContent).toBe(CURRENT_PHASE_LABEL)
+
+      app.unmount()
+    },
+  )
 })

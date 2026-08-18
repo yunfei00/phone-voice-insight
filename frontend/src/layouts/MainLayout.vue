@@ -13,6 +13,8 @@ import {
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { CURRENT_PHASE_LABEL } from '@/config/project'
+
 const SIDEBAR_STORAGE_KEY = 'pvi.sidebar.collapsed'
 const DESKTOP_SIDEBAR_WIDTH = 220
 const COLLAPSED_SIDEBAR_WIDTH = 64
@@ -32,9 +34,6 @@ function initialSidebarCollapsed() {
 const route = useRoute()
 const mobileMenuOpen = ref(false)
 const sidebarCollapsed = ref(initialSidebarCollapsed())
-const phaseLabel = computed(() =>
-  route.path.startsWith('/analysis') ? 'Phase 5 · AI结构化分析' : 'Phase 4 · 数据治理与样本扩容',
-)
 const navigationItems = [
   { path: '/dashboard', label: '数据总览', icon: Monitor },
   { path: '/products', label: '手机产品', icon: Iphone },
@@ -102,7 +101,7 @@ watch(sidebarCollapsed, (collapsed) => {
             <el-icon><Expand v-if="sidebarCollapsed" /><Fold v-else /></el-icon>
           </el-button>
         </el-tooltip>
-        <span>{{ phaseLabel }}</span>
+        <span class="phase-label">{{ CURRENT_PHASE_LABEL }}</span>
       </header>
       <section class="content" @click="mobileMenuOpen = false">
         <RouterView />
