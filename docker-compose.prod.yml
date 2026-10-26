@@ -123,12 +123,12 @@ services:
       context: .
       dockerfile: deploy/docker/frontend.prod.Dockerfile
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
-        VITE_PUBLIC_BASE: ${VITE_PUBLIC_BASE:-/}
+        VITE_API_BASE_URL: /phone/api/v1
+        VITE_PUBLIC_BASE: /phone/
     ports:
       - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8088}:80"
     volumes:
-      - static_data:/usr/share/nginx/html/static:ro
+      - static_data:/usr/share/nginx/html/phone/static:ro
     depends_on:
       backend:
         condition: service_healthy

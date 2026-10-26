@@ -1,55 +1,101 @@
 # 部署说明
 
-## 当前方案
+## 生产入口约定
 
-项目提供两套 Compose 配置：
+生产部署统一使用 `/phone/` 前缀。
 
-- `docker-compose.yml` 与 `docker-compose.dev.yml` 用于本地开发和热更新。
-- `docker-compose.prod.yml` 用于单机生产部署，前端采用多阶段静态构建与 Nginx，后端采用 Gunicorn，并包含 PostgreSQL、Redis、Celery Worker 和 Celery Beat。
+- 容器本机入口：`http://127.0.0.1:8088/phone/`
+- 容器健康检查：`http://127.0.0.1:8088/healthz`
+- 对外入口：`http://<主机>/phone/`
+- API：`/phone/api/v1/`
+- Django Admin：`/phone/admin/`
 
-生产部署先复制 `.env.example` 为不提交的 `.env`，替换 `SECRET_KEY`、`POSTGRES_PASSWORD`、允许主机和公开地址，再运行：
+前端生产构建固定使用：
+
+```text
+VITE_PUBLIC_BASE=/phone/
+VITE_API_BASE_URL=/phone/api/v1
+```
+
+因此不要再把生产前端按根路径 `/` 构建。
+
+## Docker Compose
+
+生产使用 `docker-compose.prod.yml`。保留现有 `.env`，尤其不要更换已经初始化数据库所使用的 PostgreSQL 密码。
+
+重新部署：
+
+```bash
+sh deploy/shell/redeploy-phone.sh
+```
+
+脚本会重新构建镜像、启动服务并打印状态。
+
+也可以手工执行：
 
 ```bash
 docker compose --env-file .env -f docker-compose.prod.yml up -d --build
 docker compose --env-file .env -f docker-compose.prod.yml ps
 ```
 
-生产配置只发布统一 Web 入口；PostgreSQL、Redis 和 Django 后端端口仅在 Compose 网络内可见。默认入口绑定 `127.0.0.1:8088`，由宿主机反向代理对外发布。
+生产 Compose 只发布统一 Web 入口。PostgreSQL、Redis 和 Django 后端端口仅在 Compose 网络内可见。
 
-后端镜像默认从 `https://pypi.org/simple` 安装锁定依赖。如果服务器访问官方 PyPI CDN 持续阻塞，可在 `.env` 设置受信任的镜像，例如 `UV_DEFAULT_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple`；该值只影响镜像构建，不改变运行时依赖版本或锁文件校验。
+## 宿主机 Nginx
 
-## 当前服务器部署
+如果一台主机部署多个网站，由宿主机 Nginx 通过路径区分。Phone Voice Insight 使用仓库中的：
 
-`8.130.97.14` 上的部署目录为 `/opt/apps/phone-voice-insight`，公网入口为：
-
-- 管理端：<http://8.130.97.14/phone/>
-- API 健康检查：<http://8.130.97.14/phone/api/v1/health/>
-- Django Admin：<http://8.130.97.14/phone/admin/>
-
-root 用户的 `.bashrc` 已加载 `deploy/shell/phone-voice-insight-aliases.sh`，新登录 shell 可以使用：
-
-```bash
-phone_start
-phone_stop
-phone_restart
+```text
+deploy/nginx/host-phone-path.conf
 ```
 
-宿主机 Nginx 通过 `/etc/nginx/snippets/phone-voice-insight.conf` 把 `/phone/` 转发到 `127.0.0.1:8088`。修改代理配置后必须先执行 `nginx -t`，验证通过再 reload。
+核心规则是保留 `/phone/` 前缀转发到 8088：
 
-## 环境变量
+```nginx
+location = /phone {
+    return 301 /phone/;
+}
 
-秘密只经运行环境注入，不写入 Dockerfile、镜像或 Git。生产应由秘密管理器提供 `SECRET_KEY`、`POSTGRES_PASSWORD` 等；设置 production settings、准确的 `ALLOWED_HOSTS`、`CSRF_TRUSTED_ORIGINS`、`CORS_ALLOWED_ORIGINS` 和 HTTPS。服务器 `.env` 权限应保持为 `0600`。
+location /phone/ {
+    proxy_pass http://127.0.0.1:8088;
+}
+```
 
-## 持久化与备份
+注意 `proxy_pass` 后面没有额外的 `/`，这样 `/phone/assets/... `、`/phone/api/... ` 都会原样进入容器。
 
-`postgres_data` 保存数据库，`redis_data` 使用 AOF 便于开发恢复。PostgreSQL 是唯一业务事实源，应定期用 `pg_dump` 备份并在隔离环境验证恢复。Redis 仅作为队列/结果基础设施，不能代替数据库备份。
+修改宿主机 Nginx 后先执行：
 
-升级前保存数据库备份并检查迁移；不要通过删除卷解决迁移问题。
+```bash
+nginx -t
+```
+
+确认成功后再 reload。
+
+## 当前服务器
+
+历史公网服务器入口仍为：
+
+- 管理端：`http://8.130.97.14/phone/`
+- API 健康检查：`http://8.130.97.14/phone/api/v1/health/`
+- Django Admin：`http://8.130.97.14/phone/admin/`
+
+## 数据与升级
+
+PostgreSQL 是业务事实源。重新部署或升级时不要执行 `docker compose down -v`，也不要删除 `postgres_data`。
+
+如果只是更新代码：
+
+```bash
+git pull
+sh deploy/shell/redeploy-phone.sh
+```
 
 ## 日志
 
-应用输出结构清晰的标准流日志，由容器平台收集。不得记录密码、Cookie、Token、完整连接串或个人敏感内容。生产需配置轮转、保留期和告警。
+应用日志输出到容器标准输出，可通过：
 
-## 后续 HTTPS 与运维
+```bash
+docker compose --env-file .env -f docker-compose.prod.yml logs -f frontend
+docker compose --env-file .env -f docker-compose.prod.yml logs -f backend
+```
 
-当前 IP 路径入口使用 HTTP。绑定正式域名后应启用 HTTPS 自动续期、安全响应头、日志轮转以及独立备份/监控，并把 `SESSION_COOKIE_SECURE` 和 `CSRF_COOKIE_SECURE` 设为 `true`。正式开放采集功能前还需完成容量、恢复、权限、隐私和采集合规评审。
+查看。
