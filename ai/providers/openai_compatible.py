@@ -26,6 +26,7 @@ class OpenAICompatibleProvider(AIProvider):
         timeout_seconds: int,
         temperature: float,
         max_output_tokens: int,
+        thinking_mode: str = "",
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -33,6 +34,7 @@ class OpenAICompatibleProvider(AIProvider):
         self.timeout_seconds = timeout_seconds
         self.temperature = temperature
         self.max_output_tokens = max_output_tokens
+        self.thinking_mode = thinking_mode
 
     def analyze_review(
         self,
@@ -119,16 +121,19 @@ class OpenAICompatibleProvider(AIProvider):
     ) -> tuple[dict[str, Any], int, str]:
         started = time.perf_counter()
         try:
+            request_payload: dict[str, Any] = {
+                "model": self.model,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "response_format": {"type": "json_object"},
+                "messages": messages,
+            }
+            if self.thinking_mode:
+                request_payload["thinking"] = {"type": self.thinking_mode}
             response = httpx.post(
                 f"{self.base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                json={
-                    "model": self.model,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    "response_format": {"type": "json_object"},
-                    "messages": messages,
-                },
+                json=request_payload,
                 timeout=self.timeout_seconds,
                 follow_redirects=False,
             )

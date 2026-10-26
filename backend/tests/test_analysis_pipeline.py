@@ -333,6 +333,27 @@ def test_openai_compatible_returns_valid_content_and_usage(monkeypatch: pytest.M
     assert parsed == valid_output()
 
 
+def test_openai_compatible_can_send_explicit_thinking_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_payload: dict[str, Any] = {}
+
+    def capture_request(*_args: object, **kwargs: Any) -> FakeHttpResponse:
+        captured_payload.update(kwargs["json"])
+        return FakeHttpResponse(200, {"choices": [{"message": {"content": '{"status":"ok"}'}}]})
+
+    monkeypatch.setattr(httpx, "post", capture_request)
+    configured_provider = OpenAICompatibleProvider(
+        base_url="https://api.deepseek.com",
+        api_key="secret-not-for-output",
+        model="deepseek-flash",
+        timeout_seconds=5,
+        temperature=0,
+        max_output_tokens=1500,
+        thinking_mode="disabled",
+    )
+    configured_provider.check_connectivity()
+    assert captured_payload["thinking"] == {"type": "disabled"}
+
+
 def test_openai_compatible_connectivity_uses_minimal_parseable_json(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx,

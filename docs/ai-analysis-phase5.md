@@ -49,12 +49,27 @@ AI_PROVIDER=openai_compatible
 AI_BASE_URL=
 AI_API_KEY=
 AI_MODEL=
+AI_THINKING_MODE=
 AI_TIMEOUT_SECONDS=60
 AI_MAX_RETRIES=2
 AI_CONCURRENCY=2
 AI_TEMPERATURE=0
 AI_MAX_OUTPUT_TOKENS=1500
 ```
+
+DeepSeek 当前推荐配置为：
+
+```env
+AI_PROVIDER=openai_compatible
+AI_BASE_URL=https://api.deepseek.com
+AI_API_KEY=<在服务器本地填写，不提交到 Git>
+AI_MODEL=deepseek-flash
+AI_THINKING_MODE=disabled
+```
+
+结构化抽取默认建议关闭思考模式，避免额外推理消耗并保持 JSON 输出稳定。修改生产 `.env` 后执行
+`phone_restart`；该 alias 会通过 Compose 强制重建容器，使新的环境变量生效。随后必须运行
+`python manage.py check_ai` 做不含用户反馈的最小连通性检查。
 
 缺少 base URL、key 或 model 时显式返回 `AI_NOT_CONFIGURED`。日志、错误消息、数据库 `raw_result` 和前端接口均不得包含 API key、Authorization 或完整 HTTP headers。若 provider 返回 token usage 则原样保存；否则保留为 `NULL`，不估算。
 

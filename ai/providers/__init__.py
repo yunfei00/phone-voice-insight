@@ -16,6 +16,12 @@ def get_ai_provider() -> AIProvider:
             raise AIProviderError("AI_FAKE_PROVIDER_FORBIDDEN", "Fake provider is disabled in production")
         return FakeAIProvider(model=settings.AI_MODEL or "fake-review-v1")
     if provider == "openai_compatible":
+        thinking_mode = str(settings.AI_THINKING_MODE).strip().lower()
+        if thinking_mode not in {"", "enabled", "disabled"}:
+            raise AIProviderError(
+                "AI_CONFIGURATION_INVALID",
+                "AI_THINKING_MODE must be empty, enabled, or disabled",
+            )
         missing = [
             name
             for name, value in (
@@ -34,6 +40,7 @@ def get_ai_provider() -> AIProvider:
             timeout_seconds=settings.AI_TIMEOUT_SECONDS,
             temperature=settings.AI_TEMPERATURE,
             max_output_tokens=settings.AI_MAX_OUTPUT_TOKENS,
+            thinking_mode=thinking_mode,
         )
     raise AIProviderError("AI_PROVIDER_UNSUPPORTED", "Configured AI provider is not supported")
 
