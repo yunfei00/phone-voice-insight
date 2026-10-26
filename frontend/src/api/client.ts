@@ -2,7 +2,7 @@ import axios, { AxiosError } from 'axios'
 import { ElMessage } from 'element-plus'
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: import.meta.env.DEV ? '/api/v1' : import.meta.env.VITE_API_BASE_URL || '/api/v1',
   timeout: 10_000,
   headers: {
     Accept: 'application/json',
