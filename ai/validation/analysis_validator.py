@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from ai.schemas.review_analysis import ReviewAnalysisInput, ReviewAnalysisOutput
 
 _EXPLICIT_NEGATIVE_MARKERS = re.compile(
-    r"太差|很差|真差|不好|不行了|有问题|故障|慢|模糊|转圈|衰减|不匹配|没能解决|"
+    r"太差|很差|真差|不好|不行了|不准|有问题|问题还在|故障|慢|模糊|转圈|衰减|不匹配|"
+    r"没能解决|解决不了|垃圾|桶手机|才.{0,8}续航|"
     r"电量.{0,8}(?:掉|下降)|掉电(?:太)?快|耗电(?:太)?快|发热|烫|卡顿|断流|没信号|无信号"
 )
 

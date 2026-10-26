@@ -240,6 +240,9 @@ def test_analysis_validator_rejects_duplicates_and_product_mismatch() -> None:
         ("信号太差了，为什么还是4G？", "NEGATIVE", True),
         ("充电慢不说，拍照也模糊是怎么回事？", "NEGATIVE", True),
         ("待机24小时电量直接掉了9%，怎么回事？", "NEGATIVE", True),
+        ("美团众包APP光标不准，去了三家售后店也解决不了", "NEGATIVE", True),
+        ("百分之十的电才这个续航？", "NEGATIVE", True),
+        ("拍照呢？广告呢？自装App呢？桶手机", "NEGATIVE", True),
     ),
 )
 def test_question_sentiment_requires_explicit_negative_statement(
