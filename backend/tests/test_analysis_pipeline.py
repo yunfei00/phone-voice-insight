@@ -30,7 +30,7 @@ from apps.analysis.services.evaluation_samples import EvaluationSample, load_eva
 from apps.analysis.services.input_builder import build_review_analysis_input, compute_input_hash
 from apps.analysis.services.prompt_loader import load_review_prompt
 from apps.analysis.services.response_parser import parse_review_analysis_output
-from apps.analysis.services.review_report import render_batch_review_markdown
+from apps.analysis.services.review_report import render_batch_review_markdown, render_sample_review_markdown
 from apps.analysis.services.sample_preview import SamplePreviewItem
 from apps.products.models import Product
 from apps.reviews.models import AnalysisCorpusItem, AuthorRole, RecordType, ReviewRecord
@@ -716,6 +716,41 @@ def test_analysis_results_filter_by_fixed_sample(
     assert response.status_code == 200
     assert response.json()["count"] == 1
     assert response.json()["results"][0]["review_id"] == second.review_id
+
+
+@pytest.mark.django_db
+@override_settings(AI_PROVIDER="fake", AI_MODEL="fake-review-v1", AI_ALLOW_FAKE_PROVIDER=True)
+def test_v4_sample_filter_and_export_span_retry_batches(
+    product: Product,
+    api_client: APIClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = make_honor_corpus(product=product, content="续航很好", external_id="thread:v4-filter-1")
+    second = make_honor_corpus(product=product, content="屏幕不错", external_id="thread:v4-filter-2")
+    batches = [
+        AnalysisBatch.objects.create(
+            product=product,
+            source=first.source,
+            corpus_version=CORPUS_VERSION,
+            provider="fake",
+            model_name="fake-review-v1",
+            prompt_version="review_analysis_v3",
+            requested_count=1,
+        )
+        for _index in range(2)
+    ]
+    analyze_corpus_item(first, batch=batches[0], prompt_version="review_analysis_v3")
+    analyze_corpus_item(second, batch=batches[1], prompt_version="review_analysis_v3")
+    sample = EvaluationSample("phase5-poc-v4", 20261026, (first.review_id, second.review_id))
+    monkeypatch.setattr("apps.analysis.filters.load_evaluation_sample", lambda _version: sample)
+    monkeypatch.setattr("apps.analysis.services.review_report.load_evaluation_sample", lambda _version: sample)
+
+    response = api_client.get("/api/v1/analysis-results/?sample_version=phase5-poc-v4")
+    report = render_sample_review_markdown("phase5-poc-v4", prompt_version="review_analysis_v3")
+
+    assert response.status_code == 200 and response.json()["count"] == 2
+    assert f"Review ID: {first.review_id}" in report and f"Review ID: {second.review_id}" in report
+    assert f"Batch IDs: {batches[0].id}, {batches[1].id}" in report
 
 
 @pytest.mark.django_db

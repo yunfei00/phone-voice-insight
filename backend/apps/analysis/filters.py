@@ -33,7 +33,7 @@ class AnalysisResultFilter(django_filters.FilterSet):
             sample = load_evaluation_sample(value)
         except ValueError as exc:
             raise ValidationError({"sample_version": [str(exc)]}) from exc
-        if value in {"phase5-poc-v3", "phase5-poc-v4"}:
+        if value == "phase5-poc-v3":
             latest_complete_batch = (
                 AnalysisBatch.objects.filter(prompt_version="review_analysis_v3")
                 .annotate(

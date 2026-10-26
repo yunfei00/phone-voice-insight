@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from apps.analysis.models import AnalysisBatch, AnalysisResult
+from apps.analysis.services.evaluation_samples import load_evaluation_sample
 from apps.analysis.services.input_builder import build_review_analysis_input
 from apps.reviews.models import RecordType
 
@@ -67,17 +68,10 @@ def _aspect_markdown(result: AnalysisResult) -> list[str]:
     return lines
 
 
-def render_batch_review_markdown(batch: AnalysisBatch) -> str:
-    results = list(
-        batch.results.select_related("review", "corpus_item").prefetch_related("aspects").order_by("created_at", "id")
-    )
+def _render_results_review_markdown(results: list[AnalysisResult], header: list[str]) -> str:
     lines = [
-        "# Phase 5 PoC v3 真实 AI 结果人工审核",
+        *header,
         "",
-        f"Batch ID: {batch.id}",
-        f"Provider: {batch.provider}",
-        f"Model: {batch.model_name}",
-        f"Prompt: {batch.prompt_version}",
         f"Samples: {len(results)}",
         "Human evaluation status: NOT_EVALUATED",
         "",
@@ -134,3 +128,53 @@ def render_batch_review_markdown(batch: AnalysisBatch) -> str:
             )
         )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def render_batch_review_markdown(batch: AnalysisBatch) -> str:
+    results = list(
+        batch.results.select_related("review", "corpus_item").prefetch_related("aspects").order_by("created_at", "id")
+    )
+    return _render_results_review_markdown(
+        results,
+        [
+            "# Phase 5 PoC v3 真实 AI 结果人工审核",
+            "",
+            f"Batch ID: {batch.id}",
+            f"Provider: {batch.provider}",
+            f"Model: {batch.model_name}",
+            f"Prompt: {batch.prompt_version}",
+        ],
+    )
+
+
+def render_sample_review_markdown(sample_version: str, *, prompt_version: str) -> str:
+    sample = load_evaluation_sample(sample_version)
+    queryset = (
+        AnalysisResult.objects.filter(
+            review_id__in=sample.review_ids,
+            prompt_version=prompt_version,
+        )
+        .select_related("review", "corpus_item")
+        .prefetch_related("aspects")
+    )
+    results: list[AnalysisResult] = []
+    for review_id in sample.review_ids:
+        result = queryset.filter(review_id=review_id).order_by("-analyzed_at", "-id").first()
+        if result is None:
+            raise ValueError(f"ANALYSIS_RESULT_NOT_FOUND:{review_id}")
+        results.append(result)
+    providers = ", ".join(sorted({result.provider for result in results}))
+    models = ", ".join(sorted({result.model_name for result in results}))
+    batch_ids = ", ".join(str(value) for value in sorted({result.batch_id for result in results if result.batch_id}))
+    return _render_results_review_markdown(
+        results,
+        [
+            f"# Phase 5 PoC {sample_version.removeprefix('phase5-poc-')} 真实 AI 结果人工审核",
+            "",
+            f"Sample version: {sample_version}",
+            f"Batch IDs: {batch_ids or '—'}",
+            f"Provider: {providers}",
+            f"Model: {models}",
+            f"Prompt: {prompt_version}",
+        ],
+    )
