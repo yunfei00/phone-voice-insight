@@ -7,8 +7,22 @@
 - 固定样本：20
 - Sample version：`phase5-poc-v4`
 - Seed：`20261026`
-- AI status：`NOT_RUN`
+- AI status：`20/20 SUCCESS`
 - Human evaluation status：`NOT_EVALUATED`
+
+真实执行结果：
+
+- Provider：`openai_compatible`
+- Model：`deepseek-flash`
+- Prompt：`review_analysis_v3`
+- Batch IDs：`1, 2`
+- 最终成功：20
+- 最终失败：0
+- Aspect 结果：26
+- Schema 失败：0
+- Evidence 失败：0
+- Provider 失败：0
+- 总 Token（包含首次失败及受控重试）：53,203
 
 样本覆盖：
 
@@ -25,4 +39,4 @@
 | 多维度候选 | 5 |
 | 上下文依赖候选 | 0 |
 
-当前 94 条合格语料中没有命中确定性上下文依赖规则的候选，因此 v4 不虚构此类覆盖。模型配置和最小连通性检查通过后，只允许先执行这 20 条；全部人工复核达标前，不进入后续扩量。
+当前 94 条合格语料中没有命中确定性上下文依赖规则的候选，因此 v4 不虚构此类覆盖。固定 20 条已经完成真实分析；全部人工复核达标前，不进入后续扩量。
