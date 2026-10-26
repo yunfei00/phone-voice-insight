@@ -1,13 +1,20 @@
 import pytest
+from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
+from apps.accounts.models import UserProfile, UserRole
 from apps.products.models import Brand, Product
 from apps.sources.models import DataSource, SourceTarget, SourceType, TargetType
 
 
 @pytest.fixture
-def api_client() -> APIClient:
-    return APIClient()
+def api_client(db: object) -> APIClient:
+    _ = db
+    user = get_user_model().objects.create_user(username="test-admin", password="test-password")
+    UserProfile.objects.create(user=user, role=UserRole.ADMIN)
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client
 
 
 @pytest.fixture

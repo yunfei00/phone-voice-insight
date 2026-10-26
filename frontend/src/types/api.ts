@@ -5,6 +5,40 @@ export interface PaginatedResponse<T> {
   results: T[]
 }
 
+export type UserRole = 'ADMIN' | 'ANALYST' | 'VIEWER'
+
+export interface UserAccount {
+  id: number
+  username: string
+  email: string
+  first_name: string
+  last_name: string
+  role: UserRole
+  is_active: boolean
+  last_login: string | null
+  date_joined: string
+}
+
+export interface LoginPayload {
+  username: string
+  password: string
+}
+
+export interface LoginResponse {
+  token: string
+  user: UserAccount
+}
+
+export interface UserPayload {
+  username: string
+  email?: string
+  first_name?: string
+  last_name?: string
+  role: UserRole
+  is_active: boolean
+  password?: string
+}
+
 export interface HealthStatus {
   status: 'ok' | 'degraded'
   service: string

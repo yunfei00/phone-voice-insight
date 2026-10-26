@@ -1,13 +1,27 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 import MainLayout from '@/layouts/MainLayout.vue'
+import { useAuthStore } from '@/stores/auth'
+import { pinia } from '@/stores/pinia'
 
 export const routes: RouteRecordRaw[] = [
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/LoginView.vue'),
+    meta: { title: '登录', public: true },
+  },
   {
     path: '/',
     component: MainLayout,
     redirect: '/dashboard',
     children: [
+      {
+        path: 'users',
+        name: 'users',
+        component: () => import('@/views/UsersView.vue'),
+        meta: { title: '用户管理', adminOnly: true },
+      },
       {
         path: 'dashboard',
         name: 'dashboard',
@@ -58,6 +72,15 @@ export const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
+})
+
+router.beforeEach(async (to) => {
+  const auth = useAuthStore(pinia)
+  await auth.initialize()
+  if (to.meta.public) return auth.isAuthenticated ? '/dashboard' : true
+  if (!auth.isAuthenticated) return { name: 'login', query: { redirect: to.fullPath } }
+  if (to.meta.adminOnly && !auth.isAdmin) return '/dashboard'
+  return true
 })
 
 router.afterEach((to) => {

@@ -9,11 +9,15 @@ import {
   Iphone,
   List,
   Monitor,
+  UserFilled,
 } from '@element-plus/icons-vue'
-import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import type { FormInstance, FormRules } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { computed, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import { CURRENT_PHASE_LABEL } from '@/config/project'
+import { useAuthStore } from '@/stores/auth'
 
 const SIDEBAR_STORAGE_KEY = 'pvi.sidebar.collapsed'
 const DESKTOP_SIDEBAR_WIDTH = 220
@@ -32,9 +36,11 @@ function initialSidebarCollapsed() {
 }
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const mobileMenuOpen = ref(false)
 const sidebarCollapsed = ref(initialSidebarCollapsed())
-const navigationItems = [
+const baseNavigationItems = [
   { path: '/dashboard', label: '数据总览', icon: Monitor },
   { path: '/products', label: '手机产品', icon: Iphone },
   { path: '/collection-tasks', label: '采集任务', icon: List },
@@ -43,15 +49,59 @@ const navigationItems = [
   { path: '/analysis', label: 'AI分析', icon: DataAnalysis },
   { path: '/system', label: '系统状态', icon: Cpu },
 ]
+const navigationItems = computed(() => [
+  ...baseNavigationItems,
+  ...(auth.isAdmin ? [{ path: '/users', label: '用户管理', icon: UserFilled }] : []),
+])
 const activePath = computed(
   () =>
-    navigationItems.find(
+    navigationItems.value.find(
       (item) => route.path === item.path || route.path.startsWith(`${item.path}/`),
     )?.path || route.path,
 )
 const sidebarWidth = computed(() =>
   sidebarCollapsed.value ? COLLAPSED_SIDEBAR_WIDTH : DESKTOP_SIDEBAR_WIDTH,
 )
+const passwordDialogVisible = ref(false)
+const passwordFormRef = ref<FormInstance>()
+const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+const passwordRules: FormRules = {
+  oldPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 8, message: '密码至少 8 位', trigger: 'blur' },
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
+    {
+      validator: (_rule, value: string, callback: (error?: Error) => void) => {
+        callback(value === passwordForm.newPassword ? undefined : new Error('两次输入的密码不一致'))
+      },
+      trigger: 'blur',
+    },
+  ],
+}
+
+async function handleUserCommand(command: string): Promise<void> {
+  if (command === 'password') {
+    passwordDialogVisible.value = true
+    return
+  }
+  if (command === 'logout') {
+    await auth.logout()
+    await router.replace('/login')
+  }
+}
+
+async function submitPassword(): Promise<void> {
+  if (!(await passwordFormRef.value?.validate().catch(() => false))) return
+  await auth.updatePassword(passwordForm.oldPassword, passwordForm.newPassword)
+  passwordDialogVisible.value = false
+  passwordForm.oldPassword = ''
+  passwordForm.newPassword = ''
+  passwordForm.confirmPassword = ''
+  ElMessage.success('密码修改成功')
+}
 
 watch(sidebarCollapsed, (collapsed) => {
   try {
@@ -101,12 +151,59 @@ watch(sidebarCollapsed, (collapsed) => {
             <el-icon><Expand v-if="sidebarCollapsed" /><Fold v-else /></el-icon>
           </el-button>
         </el-tooltip>
-        <span class="phase-label">{{ CURRENT_PHASE_LABEL }}</span>
+        <div class="topbar-right">
+          <span class="phase-label">{{ CURRENT_PHASE_LABEL }}</span>
+          <el-dropdown trigger="click" @command="handleUserCommand">
+            <button class="user-trigger" type="button">
+              <el-avatar :size="32"
+                ><el-icon><UserFilled /></el-icon
+              ></el-avatar>
+              <span class="user-name">{{ auth.user?.username }}</span>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item disabled>
+                  {{
+                    auth.user?.role === 'ADMIN'
+                      ? '管理员'
+                      : auth.user?.role === 'ANALYST'
+                        ? '分析员'
+                        : '只读用户'
+                  }}
+                </el-dropdown-item>
+                <el-dropdown-item command="password" divided>修改密码</el-dropdown-item>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </header>
       <section class="content" @click="mobileMenuOpen = false">
         <RouterView />
       </section>
     </main>
+    <el-dialog v-model="passwordDialogVisible" title="修改密码" width="min(440px, 92vw)">
+      <el-form
+        ref="passwordFormRef"
+        :model="passwordForm"
+        :rules="passwordRules"
+        label-width="90px"
+      >
+        <el-form-item label="当前密码" prop="oldPassword">
+          <el-input v-model="passwordForm.oldPassword" type="password" show-password />
+        </el-form-item>
+        <el-form-item label="新密码" prop="newPassword">
+          <el-input v-model="passwordForm.newPassword" type="password" show-password />
+        </el-form-item>
+        <el-form-item label="确认密码" prop="confirmPassword">
+          <el-input v-model="passwordForm.confirmPassword" type="password" show-password />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="passwordDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitPassword">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -246,6 +343,26 @@ watch(sidebarCollapsed, (collapsed) => {
   padding: 28px;
 }
 
+.topbar-right,
+.user-trigger {
+  display: flex;
+  align-items: center;
+}
+
+.topbar-right {
+  gap: 20px;
+}
+
+.user-trigger {
+  gap: 8px;
+  padding: 0;
+  color: #3f4757;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
@@ -279,6 +396,11 @@ watch(sidebarCollapsed, (collapsed) => {
 
   .content {
     padding: 18px 14px;
+  }
+
+  .phase-label,
+  .user-name {
+    display: none;
   }
 }
 </style>

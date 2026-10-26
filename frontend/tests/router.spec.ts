@@ -14,6 +14,8 @@ describe('router', () => {
         'data-quality',
         'analysis',
         'system',
+        'users',
+        'login',
       ]),
     )
   })

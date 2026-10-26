@@ -8,7 +8,8 @@ from django.db.utils import DatabaseError
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from redis import Redis
 from redis.exceptions import RedisError
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -22,6 +23,7 @@ def get_redis_client() -> Redis:
     tags=["system"],
 )
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def health(request: Request) -> Response:  # noqa: ARG001
     checks: dict[str, str] = {"database": "ok", "redis": "ok"}
     try:

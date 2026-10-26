@@ -23,8 +23,10 @@ import type {
   Product,
   SamplePreview,
 } from '@/types/api'
+import { useAuthStore } from '@/stores/auth'
 
 const loading = ref(false)
+const auth = useAuthStore()
 const summary = ref<AnalysisSummary | null>(null)
 const configuration = ref<AIConfiguration | null>(null)
 const results = ref<AnalysisResult[]>([])
@@ -297,7 +299,7 @@ onMounted(loadAll)
       </div>
       <el-button
         type="primary"
-        :disabled="!configuration?.configured || isPreviewMode"
+        :disabled="!auth.canWrite || !configuration?.configured || isPreviewMode"
         @click="createVisible = true"
       >
         创建分析任务
@@ -519,7 +521,9 @@ onMounted(loadAll)
       </el-form>
       <template #footer
         ><el-button @click="createVisible = false">取消</el-button
-        ><el-button type="primary" @click="submitBatch">创建</el-button></template
+        ><el-button type="primary" :disabled="!auth.canWrite" @click="submitBatch"
+          >创建</el-button
+        ></template
       >
     </el-dialog>
 
@@ -603,8 +607,12 @@ onMounted(loadAll)
         </div>
         <h3>人工评价</h3>
         <div class="evaluation-actions">
-          <el-button type="success" plain @click="markAllCorrect">标记全部正确</el-button>
-          <el-button plain @click="markHasError">清空并逐项审核</el-button>
+          <el-button :disabled="!auth.canWrite" type="success" plain @click="markAllCorrect"
+            >标记全部正确</el-button
+          >
+          <el-button :disabled="!auth.canWrite" plain @click="markHasError"
+            >清空并逐项审核</el-button
+          >
         </div>
         <div class="evaluation-grid">
           <div class="evaluation-item">
@@ -663,7 +671,11 @@ onMounted(loadAll)
           :rows="3"
           placeholder="审核备注（可选）"
         />
-        <el-button type="primary" class="save-button" @click="saveEvaluation"
+        <el-button
+          type="primary"
+          class="save-button"
+          :disabled="!auth.canWrite"
+          @click="saveEvaluation"
           >保存人工评价</el-button
         >
       </template>

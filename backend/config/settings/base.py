@@ -32,10 +32,12 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
+    "rest_framework.authtoken",
     "django_filters",
     "drf_spectacular",
     "django_celery_beat",
     "apps.common",
+    "apps.accounts",
     "apps.products",
     "apps.sources",
     "apps.collection",
@@ -103,6 +105,12 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "apps.accounts.permissions.RoleBasedAccessPermission",
+    ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "apps.common.pagination.StandardResultsSetPagination",
     "DEFAULT_FILTER_BACKENDS": [

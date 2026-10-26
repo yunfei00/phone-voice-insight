@@ -1,0 +1,120 @@
+from typing import Any, cast
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import User as DjangoUser
+from django.db import transaction
+from rest_framework import status
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
+from rest_framework.viewsets import ModelViewSet
+
+from apps.accounts.models import UserProfile, UserRole
+from apps.accounts.permissions import IsAdministrator, get_user_role
+from apps.accounts.serializers import LoginSerializer, PasswordChangeSerializer, UserSerializer
+
+User = get_user_model()
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def login(request: Request) -> Response:
+    serializer = LoginSerializer(data=request.data, context={"request": request})
+    serializer.is_valid(raise_exception=True)
+    user = serializer.validated_data["user"]
+    token, _ = Token.objects.get_or_create(user=user)
+    return Response({"token": token.key, "user": UserSerializer(user).data})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def logout(request: Request) -> Response:
+    user = cast(DjangoUser, request.user)
+    Token.objects.filter(user=user).delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def me(request: Request) -> Response:
+    return Response(UserSerializer(request.user).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def change_password(request: Request) -> Response:
+    serializer = PasswordChangeSerializer(data=request.data, context={"request": request})
+    serializer.is_valid(raise_exception=True)
+    user = cast(DjangoUser, request.user)
+    user.set_password(serializer.validated_data["new_password"])
+    user.save(update_fields=("password",))
+    Token.objects.filter(user=user).delete()
+    token = Token.objects.create(user=user)
+    return Response({"token": token.key})
+
+
+class UserViewSet(ModelViewSet):
+    queryset = User.objects.select_related("profile").order_by("-date_joined")
+    serializer_class = UserSerializer
+    permission_classes = (IsAdministrator,)
+    search_fields = ("username", "email", "first_name", "last_name")
+    ordering_fields = ("username", "date_joined", "last_login")
+
+    def perform_update(self, serializer: BaseSerializer[Any]) -> None:
+        user_serializer = cast(UserSerializer, serializer)
+        target = self.get_object()
+        role = user_serializer.validated_data.get("role", get_user_role(target))
+        active = user_serializer.validated_data.get("is_active", target.is_active)
+        if target.pk == self.request.user.pk and (role != UserRole.ADMIN or not active):
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError("不能停用当前账号或取消其管理员角色。")
+        self._protect_last_admin(target, role=role, active=active)
+        user = user_serializer.save()
+        if not user.is_active:
+            Token.objects.filter(user=user).delete()
+
+    def perform_destroy(self, instance: object) -> None:
+        if getattr(instance, "pk", None) == self.request.user.pk:
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError("不能删除当前登录账号。")
+        self._protect_last_admin(instance, role=UserRole.VIEWER, active=False)
+        super().perform_destroy(instance)
+
+    @action(detail=True, methods=("post",), url_path="reset-password")
+    def reset_password(self, request: Request, pk: str | None = None) -> Response:
+        del pk
+        user = self.get_object()
+        if user.pk == request.user.pk:
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError("请使用“修改密码”功能更新当前账号密码。")
+        password = request.data.get("password", "")
+        from django.contrib.auth import password_validation
+        from rest_framework.exceptions import ValidationError
+
+        try:
+            password_validation.validate_password(password, user)
+        except Exception as exc:
+            raise ValidationError({"password": list(getattr(exc, "messages", [str(exc)]))}) from exc
+        user.set_password(password)
+        user.save(update_fields=("password",))
+        Token.objects.filter(user=user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @staticmethod
+    def _protect_last_admin(target: object, *, role: str, active: bool) -> None:
+        if get_user_role(target) != UserRole.ADMIN or (role == UserRole.ADMIN and active):
+            return
+        with transaction.atomic():
+            admin_count = (
+                UserProfile.objects.select_for_update().filter(role=UserRole.ADMIN, user__is_active=True).count()
+            )
+            if admin_count <= 1:
+                from rest_framework.exceptions import ValidationError
+
+                raise ValidationError("系统必须至少保留一个启用的管理员账号。")

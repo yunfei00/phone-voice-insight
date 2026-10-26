@@ -5,6 +5,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
+from apps.accounts.views import UserViewSet, change_password, login, logout, me
 from apps.analysis.views import AnalysisBatchViewSet, AnalysisResultViewSet
 from apps.collection.views import CollectionTaskViewSet
 from apps.common.views import health
@@ -13,6 +14,7 @@ from apps.reviews.views import ReviewQualityViewSet, ReviewRecordViewSet
 from apps.sources.views import DataSourceViewSet
 
 router = DefaultRouter()
+router.register("users", UserViewSet, basename="user")
 router.register("products", ProductViewSet, basename="product")
 router.register("sources", DataSourceViewSet, basename="source")
 router.register("collection-tasks", CollectionTaskViewSet, basename="collection-task")
@@ -24,6 +26,10 @@ router.register("analysis-batches", AnalysisBatchViewSet, basename="analysis-bat
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/health/", health, name="health"),
+    path("api/v1/auth/login/", login, name="login"),
+    path("api/v1/auth/logout/", logout, name="logout"),
+    path("api/v1/auth/me/", me, name="me"),
+    path("api/v1/auth/change-password/", change_password, name="change-password"),
     path("api/v1/", include(router.urls)),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

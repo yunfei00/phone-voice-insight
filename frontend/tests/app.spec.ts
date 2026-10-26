@@ -1,4 +1,4 @@
-import { createPinia, setActivePinia } from 'pinia'
+import { setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import { createApp, nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App.vue'
 import { CURRENT_PHASE_LABEL } from '@/config/project'
 import router from '@/router'
+import { useAuthStore } from '@/stores/auth'
+import { pinia } from '@/stores/pinia'
 
 vi.mock('@/api', () => ({
   getHealth: vi.fn().mockResolvedValue({
@@ -68,6 +70,10 @@ vi.mock('@/api', () => ({
     },
     exclusion_reasons: {},
   }),
+  getCurrentUser: vi.fn(),
+  login: vi.fn(),
+  logout: vi.fn(),
+  changePassword: vi.fn(),
 }))
 
 const expectedNavigationLabels = [
@@ -81,14 +87,28 @@ const expectedNavigationLabels = [
 ]
 
 async function mountApp(path = '/dashboard') {
-  await router.push(path)
-  await router.isReady()
   const container = document.createElement('div')
   document.body.appendChild(container)
   const app = createApp(App)
-  app.use(createPinia())
+  app.use(pinia)
   app.use(router)
   app.use(ElementPlus)
+  const auth = useAuthStore(pinia)
+  auth.token = 'test-token'
+  auth.user = {
+    id: 1,
+    username: 'test-user',
+    email: '',
+    first_name: '',
+    last_name: '',
+    role: 'VIEWER',
+    is_active: true,
+    last_login: null,
+    date_joined: '2026-01-01T00:00:00Z',
+  }
+  auth.initialized = true
+  await router.push(path)
+  await router.isReady()
   app.mount(container)
   await new Promise((resolve) => setTimeout(resolve, 0))
   await nextTick()
@@ -100,7 +120,7 @@ describe('App', () => {
     document.body.innerHTML = ''
     window.localStorage.clear()
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
-    setActivePinia(createPinia())
+    setActivePinia(pinia)
   })
 
   it('桌面默认展开且只显示一组七项菜单', async () => {

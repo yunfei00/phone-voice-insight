@@ -10,12 +10,49 @@ import type {
   DataQualitySummary,
   DataSource,
   HealthStatus,
+  LoginPayload,
+  LoginResponse,
   PaginatedResponse,
   Product,
   SamplePreview,
   ReviewQuality,
   ReviewRecord,
+  UserAccount,
+  UserPayload,
 } from '@/types/api'
+
+export const login = async (payload: LoginPayload): Promise<LoginResponse> =>
+  (await apiClient.post<LoginResponse>('/auth/login/', payload)).data
+
+export const logout = async (): Promise<void> => {
+  await apiClient.post('/auth/logout/')
+}
+
+export const getCurrentUser = async (): Promise<UserAccount> =>
+  (await apiClient.get<UserAccount>('/auth/me/')).data
+
+export const changePassword = async (payload: {
+  old_password: string
+  new_password: string
+}): Promise<{ token: string }> =>
+  (await apiClient.post<{ token: string }>('/auth/change-password/', payload)).data
+
+export const getUsers = async (params: PageParams = {}): Promise<PaginatedResponse<UserAccount>> =>
+  (await apiClient.get<PaginatedResponse<UserAccount>>('/users/', { params })).data
+
+export const createUser = async (payload: UserPayload): Promise<UserAccount> =>
+  (await apiClient.post<UserAccount>('/users/', payload)).data
+
+export const updateUser = async (id: number, payload: Partial<UserPayload>): Promise<UserAccount> =>
+  (await apiClient.patch<UserAccount>(`/users/${id}/`, payload)).data
+
+export const deleteUser = async (id: number): Promise<void> => {
+  await apiClient.delete(`/users/${id}/`)
+}
+
+export const resetUserPassword = async (id: number, password: string): Promise<void> => {
+  await apiClient.post(`/users/${id}/reset-password/`, { password })
+}
 
 export interface PageParams {
   page?: number

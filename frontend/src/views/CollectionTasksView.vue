@@ -9,6 +9,7 @@ import {
   getSources,
   runCollectionTask,
 } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 import type {
   CollectionStatus,
   CollectionTask,
@@ -18,6 +19,7 @@ import type {
 } from '@/types/api'
 
 const tasks = ref<CollectionTask[]>([])
+const auth = useAuthStore()
 const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
 const loading = ref(false)
@@ -173,7 +175,9 @@ onUnmounted(stopPolling)
       </div>
       <div class="header-actions">
         <el-button :loading="loading" @click="refreshTasks">刷新</el-button>
-        <el-button type="primary" @click="dialogVisible = true">创建任务</el-button>
+        <el-button type="primary" :disabled="!auth.canWrite" @click="dialogVisible = true"
+          >创建任务</el-button
+        >
       </div>
     </div>
     <el-alert
@@ -215,7 +219,7 @@ onUnmounted(stopPolling)
             <el-button
               link
               type="success"
-              :disabled="!canRun(row)"
+              :disabled="!auth.canWrite || !canRun(row)"
               :loading="runningTaskIds.has(row.id)"
               @click="executeTask(row)"
               >执行</el-button
@@ -287,7 +291,13 @@ onUnmounted(stopPolling)
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitTask">创建</el-button>
+        <el-button
+          type="primary"
+          :disabled="!auth.canWrite"
+          :loading="submitting"
+          @click="submitTask"
+          >创建</el-button
+        >
       </template>
     </el-dialog>
 
