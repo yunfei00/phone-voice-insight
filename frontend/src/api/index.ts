@@ -1,6 +1,8 @@
 import apiClient from './client'
 import type {
   AIConfiguration,
+  AIConfigurationPayload,
+  AIConnectivityResult,
   AnalysisBatch,
   AnalysisEvaluation,
   AnalysisResult,
@@ -13,6 +15,7 @@ import type {
   LoginPayload,
   LoginResponse,
   PaginatedResponse,
+  PersonalAIConfiguration,
   Product,
   SamplePreview,
   ReviewQuality,
@@ -112,6 +115,17 @@ export const getAnalysisSummary = async (): Promise<AnalysisSummary> =>
 
 export const getAIConfiguration = async (): Promise<AIConfiguration> =>
   (await apiClient.get<AIConfiguration>('/analysis-batches/configuration/')).data
+
+export const getPersonalAIConfiguration = async (): Promise<PersonalAIConfiguration> =>
+  (await apiClient.get<PersonalAIConfiguration>('/ai-configuration/')).data
+
+export const savePersonalAIConfiguration = async (
+  payload: AIConfigurationPayload,
+): Promise<PersonalAIConfiguration> =>
+  (await apiClient.put<PersonalAIConfiguration>('/ai-configuration/', payload)).data
+
+export const testPersonalAIConfiguration = async (): Promise<AIConnectivityResult> =>
+  (await apiClient.post<AIConnectivityResult>('/ai-configuration/test/')).data
 
 export const getAnalysisResults = async (
   params: PageParams = {},

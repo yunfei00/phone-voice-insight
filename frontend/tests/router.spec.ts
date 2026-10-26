@@ -13,6 +13,7 @@ describe('router', () => {
         'reviews',
         'data-quality',
         'analysis',
+        'ai-settings',
         'system',
         'users',
         'login',

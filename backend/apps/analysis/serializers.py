@@ -83,6 +83,7 @@ class AnalysisResultSerializer(serializers.ModelSerializer):
 class AnalysisBatchSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)
     source_name = serializers.CharField(source="source.name", read_only=True)
+    created_by_username = serializers.CharField(source="created_by.username", read_only=True, default="")
 
     class Meta:
         model = AnalysisBatch

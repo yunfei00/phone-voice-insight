@@ -6,17 +6,19 @@ import logging
 import time
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from ai.providers import AIProvider, AIProviderError, get_ai_provider
 from ai.schemas.review_analysis import ReviewAnalysisOutput
 from ai.validation.analysis_validator import validate_analysis
 from ai.validation.evidence_validator import reconcile_evidence_spans, validate_evidence
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 from pydantic import ValidationError
 
+from apps.accounts.ai_service import get_user_ai_provider
 from apps.analysis.models import (
     AnalysisBatch,
     AnalysisBatchStatus,
@@ -359,7 +361,7 @@ def run_analysis_batch(
     force: bool = False,
     retry_failed: bool = False,
 ) -> list[AnalysisOutcome]:
-    provider = get_ai_provider()
+    provider = get_user_ai_provider(cast(User, batch.created_by)) if batch.created_by_id else get_ai_provider()
     batch.status = AnalysisBatchStatus.RUNNING
     batch.started_at = timezone.now()
     batch.error_message = ""

@@ -862,13 +862,12 @@ def test_analyze_reviews_accepts_fixed_record_ids_in_order(
 def test_ai_configuration_endpoint_never_returns_api_key(api_client: APIClient) -> None:
     response = api_client.get("/api/v1/analysis-batches/configuration/")
     assert response.status_code == 200
-    assert response.json() == {
-        "provider": "openai_compatible",
-        "model": "NOT_CONFIGURED",
-        "prompt_version": "review_analysis_v3",
-        "configured": False,
-        "concurrency": 2,
-    }
+    assert response.json()["provider"] == "openai_compatible"
+    assert response.json()["model"] == "NOT_CONFIGURED"
+    assert response.json()["prompt_version"] == "review_analysis_v3"
+    assert response.json()["configured"] is False
+    assert response.json()["api_key_configured"] is False
+    assert response.json()["concurrency"] == 2
     assert "super-secret-must-never-be-returned" not in response.content.decode()
 
 
@@ -890,3 +889,46 @@ def test_batch_api_requires_second_confirmation_above_twenty(
     )
     assert response.status_code == 400
     assert response.json()["error_code"] == "LARGE_RUN_REQUIRES_EXPLICIT_CONFIRMATION"
+
+
+@pytest.mark.django_db
+@override_settings(AI_ALLOW_FAKE_PROVIDER=True)
+def test_batch_api_uses_current_users_ai_configuration(
+    product: Product,
+    api_client: APIClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from django.contrib.auth import get_user_model
+
+    from apps.accounts.models import UserAIConfiguration
+
+    corpus = make_honor_corpus(product=product, content="屏幕挺不错", external_id="thread:user-ai-config")
+    user = get_user_model().objects.get(username="test-admin")
+    configuration = UserAIConfiguration.objects.get(user=user)
+    configuration.provider = "fake"
+    configuration.model = "personal-fake-model"
+    configuration.save()
+
+    class QueuedTask:
+        id = "test-celery-task"
+
+    monkeypatch.setattr(
+        "apps.analysis.views.run_analysis_batch_task.delay",
+        lambda *_args, **_kwargs: QueuedTask(),
+    )
+    response = api_client.post(
+        "/api/v1/analysis-batches/",
+        {
+            "product_id": product.id,
+            "source_id": corpus.source_id,
+            "prompt_version": "review_analysis_v3",
+            "limit": 20,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    batch = AnalysisBatch.objects.get(pk=response.json()["batch"]["id"])
+    assert batch.created_by == user
+    assert batch.provider == "fake"
+    assert batch.model_name == "personal-fake-model"

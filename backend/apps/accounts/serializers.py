@@ -5,7 +5,7 @@ from django.contrib.auth.models import AbstractBaseUser
 from django.db import transaction
 from rest_framework import serializers
 
-from apps.accounts.models import UserProfile, UserRole
+from apps.accounts.models import AIProviderName, UserAIConfiguration, UserProfile, UserRole
 from apps.accounts.permissions import get_user_role
 
 User = get_user_model()
@@ -99,3 +99,75 @@ class PasswordChangeSerializer(serializers.Serializer):
     def validate_new_password(self, value: str) -> str:
         password_validation.validate_password(value, self.context["request"].user)
         return value
+
+
+class UserAIConfigurationSerializer(serializers.ModelSerializer):
+    api_key = serializers.CharField(write_only=True, required=False, allow_blank=False, trim_whitespace=True)
+    api_key_configured = serializers.SerializerMethodField()
+    api_key_masked = serializers.SerializerMethodField()
+    configured = serializers.BooleanField(source="is_configured", read_only=True)
+
+    class Meta:
+        model = UserAIConfiguration
+        fields = (
+            "provider",
+            "base_url",
+            "api_key",
+            "api_key_configured",
+            "api_key_masked",
+            "model",
+            "thinking_mode",
+            "timeout_seconds",
+            "temperature",
+            "max_output_tokens",
+            "is_active",
+            "configured",
+            "updated_at",
+        )
+        read_only_fields = ("updated_at",)
+
+    def get_api_key_configured(self, obj: UserAIConfiguration) -> bool:
+        return bool(obj.api_key_ciphertext)
+
+    def get_api_key_masked(self, obj: UserAIConfiguration) -> str:
+        return f"••••••••{obj.api_key_last4}" if obj.api_key_last4 else ""
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        instance = self.instance
+        provider = attrs.get("provider", getattr(instance, "provider", AIProviderName.OPENAI_COMPATIBLE))
+        base_url = attrs.get("base_url", getattr(instance, "base_url", ""))
+        model = attrs.get("model", getattr(instance, "model", ""))
+        has_key = bool(attrs.get("api_key") or (instance and instance.api_key_ciphertext))
+        if provider == AIProviderName.FAKE:
+            from django.conf import settings
+
+            if not settings.DEBUG and not settings.AI_ALLOW_FAKE_PROVIDER:
+                raise serializers.ValidationError({"provider": "生产环境不允许使用测试 Provider。"})
+        elif not base_url or not has_key:
+            raise serializers.ValidationError("请完整填写 API 地址和 API Key。")
+        if attrs.get("is_active", getattr(instance, "is_active", True)) and not model:
+            raise serializers.ValidationError({"model": "启用配置时必须填写模型名称。"})
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data: dict[str, Any]) -> UserAIConfiguration:
+        api_key = validated_data.pop("api_key", "")
+        configuration = UserAIConfiguration(**validated_data)
+        if api_key:
+            configuration.set_api_key(api_key)
+        configuration.save()
+        return configuration
+
+    @transaction.atomic
+    def update(
+        self,
+        instance: UserAIConfiguration,
+        validated_data: dict[str, Any],
+    ) -> UserAIConfiguration:
+        api_key = validated_data.pop("api_key", "")
+        for name, value in validated_data.items():
+            setattr(instance, name, value)
+        if api_key:
+            instance.set_api_key(api_key)
+        instance.save()
+        return instance

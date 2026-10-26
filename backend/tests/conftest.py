@@ -1,8 +1,9 @@
 import pytest
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
-from apps.accounts.models import UserProfile, UserRole
+from apps.accounts.models import UserAIConfiguration, UserProfile, UserRole
 from apps.products.models import Brand, Product
 from apps.sources.models import DataSource, SourceTarget, SourceType, TargetType
 
@@ -12,6 +13,19 @@ def api_client(db: object) -> APIClient:
     _ = db
     user = get_user_model().objects.create_user(username="test-admin", password="test-password")
     UserProfile.objects.create(user=user, role=UserRole.ADMIN)
+    configuration = UserAIConfiguration(
+        user=user,
+        provider=settings.AI_PROVIDER,
+        base_url=settings.AI_BASE_URL,
+        model=settings.AI_MODEL,
+        thinking_mode=settings.AI_THINKING_MODE,
+        timeout_seconds=settings.AI_TIMEOUT_SECONDS,
+        temperature=settings.AI_TEMPERATURE,
+        max_output_tokens=settings.AI_MAX_OUTPUT_TOKENS,
+    )
+    if settings.AI_API_KEY:
+        configuration.set_api_key(settings.AI_API_KEY)
+    configuration.save()
     client = APIClient()
     client.force_authenticate(user=user)
     return client

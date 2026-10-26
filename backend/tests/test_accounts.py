@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from apps.accounts.models import UserProfile, UserRole
+from apps.accounts.models import UserAIConfiguration, UserProfile, UserRole
 
 pytestmark = pytest.mark.django_db
 
@@ -102,3 +102,72 @@ def test_change_password_rotates_token() -> None:
     assert response.data["token"] != old_token.key
     user.refresh_from_db()
     assert user.check_password("ChangedPass-2026")
+
+
+def test_personal_ai_configuration_is_encrypted_and_never_returns_secret(api_client: APIClient) -> None:
+    secret = "sk-personal-secret-1234"
+    response = api_client.put(
+        "/api/v1/ai-configuration/",
+        {
+            "provider": "openai_compatible",
+            "base_url": "https://api.example.com",
+            "api_key": secret,
+            "model": "example-model",
+            "thinking_mode": "disabled",
+            "timeout_seconds": 45,
+            "temperature": 0,
+            "max_output_tokens": 1200,
+            "is_active": True,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.json()["api_key_masked"] == "••••••••1234"
+    assert secret not in response.content.decode()
+    configuration = UserAIConfiguration.objects.get(user__username="test-admin")
+    assert secret not in configuration.api_key_ciphertext
+    assert configuration.get_api_key() == secret
+
+
+def test_personal_ai_configuration_is_isolated_per_user(api_client: APIClient) -> None:
+    first = api_client.put(
+        "/api/v1/ai-configuration/",
+        {
+            "provider": "openai_compatible",
+            "base_url": "https://first.example.com",
+            "api_key": "sk-first-1111",
+            "model": "first-model",
+            "thinking_mode": "",
+            "timeout_seconds": 60,
+            "temperature": 0,
+            "max_output_tokens": 1500,
+            "is_active": True,
+        },
+        format="json",
+    )
+    assert first.status_code == 200
+
+    second_user = create_user("second-user", UserRole.ANALYST)
+    api_client.force_authenticate(user=second_user)
+    empty = api_client.get("/api/v1/ai-configuration/")
+    assert empty.status_code == 200 and empty.json()["configured"] is False
+    second = api_client.put(
+        "/api/v1/ai-configuration/",
+        {
+            "provider": "openai_compatible",
+            "base_url": "https://second.example.com",
+            "api_key": "sk-second-2222",
+            "model": "second-model",
+            "thinking_mode": "enabled",
+            "timeout_seconds": 60,
+            "temperature": 0.2,
+            "max_output_tokens": 1500,
+            "is_active": True,
+        },
+        format="json",
+    )
+    assert second.status_code == 200
+    assert second.json()["model"] == "second-model"
+    assert second.json()["api_key_masked"].endswith("2222")
+    assert UserAIConfiguration.objects.get(user__username="test-admin").model == "first-model"

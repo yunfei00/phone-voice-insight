@@ -1,5 +1,6 @@
 """可追溯的结构化 AI 分析、批次和人工评估。"""
 
+from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
@@ -50,6 +51,14 @@ class Sentiment(models.TextChoices):
 
 
 class AnalysisBatch(TimeStampedModel):
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="analysis_batches",
+        null=True,
+        blank=True,
+        verbose_name="创建用户",
+    )
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="analysis_batches", verbose_name="产品")
     source = models.ForeignKey(
         DataSource, on_delete=models.PROTECT, related_name="analysis_batches", verbose_name="来源"

@@ -402,10 +402,41 @@ export interface SamplePreview {
   items: SamplePreviewItem[]
 }
 
-export interface AIConfiguration {
+export interface PersonalAIConfiguration {
+  provider: string
+  base_url: string
+  api_key_configured: boolean
+  api_key_masked: string
+  model: string
+  thinking_mode: '' | 'enabled' | 'disabled'
+  timeout_seconds: number
+  temperature: string
+  max_output_tokens: number
+  is_active: boolean
+  configured: boolean
+  updated_at: string | null
+}
+
+export interface AIConfiguration extends PersonalAIConfiguration {
+  prompt_version: string
+  concurrency: number
+}
+
+export interface AIConfigurationPayload {
+  provider: 'openai_compatible'
+  base_url: string
+  api_key?: string
+  model: string
+  thinking_mode: '' | 'enabled' | 'disabled'
+  timeout_seconds: number
+  temperature: number
+  max_output_tokens: number
+  is_active: boolean
+}
+
+export interface AIConnectivityResult {
+  status: 'ok'
   provider: string
   model: string
-  prompt_version: string
-  configured: boolean
-  concurrency: number
+  latency_ms: number
 }

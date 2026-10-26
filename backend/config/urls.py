@@ -5,7 +5,15 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
-from apps.accounts.views import UserViewSet, change_password, login, logout, me
+from apps.accounts.views import (
+    UserAIConfigurationView,
+    UserAIConnectivityView,
+    UserViewSet,
+    change_password,
+    login,
+    logout,
+    me,
+)
 from apps.analysis.views import AnalysisBatchViewSet, AnalysisResultViewSet
 from apps.collection.views import CollectionTaskViewSet
 from apps.common.views import health
@@ -30,6 +38,8 @@ urlpatterns = [
     path("api/v1/auth/logout/", logout, name="logout"),
     path("api/v1/auth/me/", me, name="me"),
     path("api/v1/auth/change-password/", change_password, name="change-password"),
+    path("api/v1/ai-configuration/", UserAIConfigurationView.as_view(), name="ai-configuration"),
+    path("api/v1/ai-configuration/test/", UserAIConnectivityView.as_view(), name="ai-configuration-test"),
     path("api/v1/", include(router.urls)),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

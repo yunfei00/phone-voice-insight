@@ -33,6 +33,7 @@ x-backend-environment: &backend-environment
   AI_TEMPERATURE: ${AI_TEMPERATURE:-0}
   AI_MAX_OUTPUT_TOKENS: ${AI_MAX_OUTPUT_TOKENS:-1500}
   AI_ALLOW_FAKE_PROVIDER: ${AI_ALLOW_FAKE_PROVIDER:-false}
+  AI_CREDENTIAL_ENCRYPTION_KEY: ${AI_CREDENTIAL_ENCRYPTION_KEY:-}
 
 x-backend-service: &backend-service
   image: ${PROJECT_NAME:-phone-voice-insight}-backend:latest

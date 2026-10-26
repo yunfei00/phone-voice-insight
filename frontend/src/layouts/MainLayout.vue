@@ -9,6 +9,7 @@ import {
   Iphone,
   List,
   Monitor,
+  Setting,
   UserFilled,
 } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -47,6 +48,7 @@ const baseNavigationItems = [
   { path: '/reviews', label: '原始反馈', icon: Document },
   { path: '/data-quality', label: '数据质量', icon: CircleCheck },
   { path: '/analysis', label: 'AI分析', icon: DataAnalysis },
+  { path: '/ai-settings', label: 'AI配置', icon: Setting },
   { path: '/system', label: '系统状态', icon: Cpu },
 ]
 const navigationItems = computed(() => [

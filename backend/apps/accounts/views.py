@@ -1,5 +1,6 @@
 from typing import Any, cast
 
+from ai.providers import AIProviderError
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User as DjangoUser
 from django.db import transaction
@@ -10,11 +11,18 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
+from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
-from apps.accounts.models import UserProfile, UserRole
+from apps.accounts.ai_service import get_user_ai_provider
+from apps.accounts.models import UserAIConfiguration, UserProfile, UserRole
 from apps.accounts.permissions import IsAdministrator, get_user_role
-from apps.accounts.serializers import LoginSerializer, PasswordChangeSerializer, UserSerializer
+from apps.accounts.serializers import (
+    LoginSerializer,
+    PasswordChangeSerializer,
+    UserAIConfigurationSerializer,
+    UserSerializer,
+)
 
 User = get_user_model()
 
@@ -118,3 +126,60 @@ class UserViewSet(ModelViewSet):
                 from rest_framework.exceptions import ValidationError
 
                 raise ValidationError("系统必须至少保留一个启用的管理员账号。")
+
+
+class UserAIConfigurationView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        user = cast(DjangoUser, request.user)
+        configuration = UserAIConfiguration.objects.filter(user=user).first()
+        if configuration is None:
+            configuration = UserAIConfiguration(user=user)
+        return Response(UserAIConfigurationSerializer(configuration).data)
+
+    def put(self, request: Request) -> Response:
+        return self._save(request, partial=False)
+
+    def patch(self, request: Request) -> Response:
+        return self._save(request, partial=True)
+
+    def delete(self, request: Request) -> Response:
+        user = cast(DjangoUser, request.user)
+        UserAIConfiguration.objects.filter(user=user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @staticmethod
+    def _save(request: Request, *, partial: bool) -> Response:
+        user = cast(DjangoUser, request.user)
+        configuration = UserAIConfiguration.objects.filter(user=user).first()
+        serializer = UserAIConfigurationSerializer(
+            configuration,
+            data=request.data,
+            partial=partial,
+        )
+        serializer.is_valid(raise_exception=True)
+        saved = serializer.save(user=user)
+        return Response(UserAIConfigurationSerializer(saved).data)
+
+
+class UserAIConnectivityView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request) -> Response:
+        user = cast(DjangoUser, request.user)
+        try:
+            result = get_user_ai_provider(user).check_connectivity()
+        except AIProviderError as exc:
+            return Response(
+                {"status": "error", "error_code": exc.code},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "status": "ok",
+                "provider": result.provider,
+                "model": result.model,
+                "latency_ms": result.latency_ms,
+            }
+        )

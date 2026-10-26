@@ -1,7 +1,8 @@
-from typing import Any
+from typing import Any, cast
 
-from ai.providers import AIProviderError, get_ai_provider
+from ai.providers import AIProviderError
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.db import models
 from django.db.models import Avg, Count
 from django.shortcuts import get_object_or_404
@@ -11,6 +12,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet, ViewSet
 
+from apps.accounts.ai_service import get_user_ai_provider
+from apps.accounts.models import UserAIConfiguration
+from apps.accounts.serializers import UserAIConfigurationSerializer
 from apps.analysis.filters import AnalysisResultFilter
 from apps.analysis.models import AnalysisBatch, AnalysisEvaluation, AnalysisResult, AnalysisStatus
 from apps.analysis.serializers import (
@@ -107,14 +111,15 @@ class AnalysisResultViewSet(ReadOnlyModelViewSet):
 
 class AnalysisBatchViewSet(ViewSet):
     def list(self, _request: Request) -> Response:
-        queryset = AnalysisBatch.objects.select_related("product", "source")[:100]
+        queryset = AnalysisBatch.objects.select_related("product", "source", "created_by")[:100]
         return Response(AnalysisBatchSerializer(queryset, many=True).data)
 
     def retrieve(self, _request: Request, pk: str | None = None) -> Response:
-        batch = get_object_or_404(AnalysisBatch.objects.select_related("product", "source"), pk=pk)
+        batch = get_object_or_404(AnalysisBatch.objects.select_related("product", "source", "created_by"), pk=pk)
         return Response(AnalysisBatchSerializer(batch).data)
 
     def create(self, request: Request) -> Response:
+        user = cast(User, request.user)
         serializer = AnalysisBatchCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
@@ -129,7 +134,7 @@ class AnalysisBatchViewSet(ViewSet):
             )
         try:
             load_review_prompt(values["prompt_version"])
-            provider = get_ai_provider()
+            provider = get_user_ai_provider(user)
         except (ValueError, AIProviderError) as exc:
             code = exc.code if isinstance(exc, AIProviderError) else str(exc)
             return Response({"error_code": code}, status=status.HTTP_400_BAD_REQUEST)
@@ -149,6 +154,7 @@ class AnalysisBatchViewSet(ViewSet):
             model_name=provider.model,
             prompt_version=values["prompt_version"],
             requested_count=len(items),
+            created_by=user,
         )
         celery_result = run_analysis_batch_task.delay(
             batch.id,
@@ -162,14 +168,15 @@ class AnalysisBatchViewSet(ViewSet):
         )
 
     @action(detail=False, methods=("get",), url_path="configuration")
-    def configuration(self, _request: Request) -> Response:
-        configured = bool(settings.AI_BASE_URL and settings.AI_API_KEY and settings.AI_MODEL)
+    def configuration(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        configuration = UserAIConfiguration.objects.filter(user=user).first()
+        data = UserAIConfigurationSerializer(configuration or UserAIConfiguration(user=user)).data
         return Response(
             {
-                "provider": settings.AI_PROVIDER,
-                "model": settings.AI_MODEL or "NOT_CONFIGURED",
+                **data,
+                "model": data["model"] or "NOT_CONFIGURED",
                 "prompt_version": "review_analysis_v3",
-                "configured": configured,
                 "concurrency": settings.AI_CONCURRENCY,
             }
         )
