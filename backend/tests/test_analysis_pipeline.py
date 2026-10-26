@@ -143,10 +143,18 @@ def test_review_analysis_v3_prompt_has_question_and_content_boundaries() -> None
     assert "所有字段都必须存在" in prompt
 
 
-@pytest.mark.parametrize("sample_version", ("phase5-poc-v1", "phase5-poc-v2", "phase5-poc-v3"))
-def test_phase5_sample_manifest_contains_twenty_unique_review_ids(sample_version: str) -> None:
+@pytest.mark.parametrize(
+    ("sample_version", "seed"),
+    (
+        ("phase5-poc-v1", 20260808),
+        ("phase5-poc-v2", 20260808),
+        ("phase5-poc-v3", 20260808),
+        ("phase5-poc-v4", 20261026),
+    ),
+)
+def test_phase5_sample_manifest_contains_twenty_unique_review_ids(sample_version: str, seed: int) -> None:
     sample = load_evaluation_sample(sample_version)
-    assert sample.sample_version == sample_version and sample.seed == 20260808
+    assert sample.sample_version == sample_version and sample.seed == seed
     assert len(sample.review_ids) == 20 and len(set(sample.review_ids)) == 20
 
 

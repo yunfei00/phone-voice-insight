@@ -39,7 +39,7 @@ const selected = ref<AnalysisResult | null>(null)
 const samplePreview = ref<SamplePreview | null>(null)
 
 const filters = reactive({
-  sample_version: 'phase5-poc-v3',
+  sample_version: 'phase5-poc-v4',
   status: '',
   aspect: '',
   sentiment: '',
@@ -344,6 +344,7 @@ onMounted(loadAll)
         <el-option label="phase5-poc-v1（固定20条）" value="phase5-poc-v1" />
         <el-option label="phase5-poc-v2（待人工确认）" value="phase5-poc-v2" />
         <el-option label="phase5-poc-v3（真实 AI 结果）" value="phase5-poc-v3" />
+        <el-option label="phase5-poc-v4（新服务器固定20条）" value="phase5-poc-v4" />
       </el-select>
       <el-select v-model="filters.status" clearable placeholder="状态" @change="loadResults">
         <el-option

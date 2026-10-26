@@ -75,8 +75,8 @@ class Command(BaseCommand):
             raise CommandError("--record-ids 不能与 --record-id 或 --limit 同时使用")
         if sample_version and (record_ids or options["record_id"] is not None or limit is not None):
             raise CommandError("--sample-version 不能与记录或数量选择器同时使用")
-        if sample_version and sample_version != "phase5-poc-v3":
-            raise CommandError("ONLY_PHASE5_POC_V3_IS_ALLOWED")
+        if sample_version and sample_version not in {"phase5-poc-v3", "phase5-poc-v4"}:
+            raise CommandError("ONLY_PHASE5_POC_V3_OR_V4_IS_ALLOWED")
         try:
             load_review_prompt(options["prompt_version"])
         except ValueError as exc:
