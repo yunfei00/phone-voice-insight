@@ -177,6 +177,8 @@ class HonorClubClient:
             raise CollectorError("荣耀俱乐部出现验证码或访问限制页面", code="CHALLENGE_PAGE")
         if "<title>登录" in response.text and "threadlist" not in response.text:
             raise CollectorError("荣耀俱乐部出现登录墙", code="LOGIN_WALL")
+        if "<title>提示信息" in response.text or 'id="messagetext"' in response.text:
+            raise CollectorError("荣耀俱乐部返回提示/阻断页面", code="BLOCKED_INFO_PAGE", retryable=True)
 
         return HonorHttpResponse(
             text=response.text,

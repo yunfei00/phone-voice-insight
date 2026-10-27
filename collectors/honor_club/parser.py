@@ -128,6 +128,36 @@ def extract_topic_page_count(html: str, *, topic_id: int) -> int:
     return max(pages)
 
 
+def is_valid_topic_page(html: str) -> bool:
+    """Distinguish a real topic page (including an empty topic) from block/error HTML."""
+
+    soup = BeautifulSoup(html, "html.parser")
+    title = _text(soup.title).casefold()
+    if any(marker in title for marker in ("提示信息", "登录", "captcha", "安全验证")):
+        return False
+    return bool(soup.select_one("#threadlist, .threadlist, [data-topic-id]"))
+
+
+def extract_thread_page_count(html: str, *, thread_id: str) -> int:
+    """Read the public thread pager whose canonical path is thread-{id}-{page}-1.html."""
+
+    soup = BeautifulSoup(html, "html.parser")
+    pages = {1}
+    pattern = re.compile(rf"thread-{re.escape(thread_id)}-(\d+)-\d+\.html")
+    for anchor in soup.find_all("a", href=True):
+        if match := pattern.search(str(anchor.get("href", ""))):
+            pages.add(int(match.group(1)))
+    return max(pages)
+
+
+def is_valid_thread_page(html: str) -> bool:
+    soup = BeautifulSoup(html, "html.parser")
+    title = _text(soup.title).casefold()
+    if any(marker in title for marker in ("提示信息", "登录", "captcha", "安全验证")):
+        return False
+    return bool(soup.select_one(".wapFirstThread, #thread_subject, .thread-content, [id^='postmessage_']"))
+
+
 def _find_time(value: str) -> str:
     if match := _FULL_TIME_PATTERN.search(value):
         return match.group(0)

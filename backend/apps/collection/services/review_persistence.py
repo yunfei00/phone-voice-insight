@@ -21,6 +21,7 @@ _WHITESPACE_PATTERN = re.compile(r"\s+")
 class PersistenceResult:
     review: ReviewRecord
     inserted: bool
+    updated: bool = False
 
 
 def resolve_product_variant(source_target: SourceTarget, review: NormalizedReview) -> ProductVariant | None:
@@ -87,12 +88,46 @@ def persist_review(source_target: SourceTarget, review: NormalizedReview) -> Per
     try:
         with transaction.atomic():
             if review.external_id:
-                instance, created = ReviewRecord.objects.get_or_create(
-                    source=source_target.source,
-                    external_id=review.external_id,
-                    record_type=review.record_type,
-                    defaults=defaults,
+                instance = (
+                    ReviewRecord.objects.select_for_update()
+                    .filter(
+                        source=source_target.source,
+                        external_id=review.external_id,
+                        record_type=review.record_type,
+                    )
+                    .first()
                 )
+                if instance is None:
+                    instance = ReviewRecord.objects.create(
+                        source=source_target.source,
+                        external_id=review.external_id,
+                        record_type=review.record_type,
+                        **defaults,
+                    )
+                    created = True
+                    updated = False
+                else:
+                    created = False
+                    merged_raw_data = {**instance.raw_data, **review.raw_data}
+                    mutable = {
+                        "source_target": source_target,
+                        "product": source_target.product,
+                        "source_url": review.source_url or instance.source_url or source_target.target_url,
+                        "raw_data": merged_raw_data,
+                        "collected_at": defaults["collected_at"],
+                    }
+                    if review.record_type == "THREAD" and review.title:
+                        mutable["title"] = review.title
+                    if instance.published_at is None and review.published_at is not None:
+                        mutable["published_at"] = review.published_at
+                    if not instance.content.strip() and review.content.strip():
+                        mutable["content"] = review.content
+                        mutable["content_hash"] = content_hash
+                    updated = any(getattr(instance, name) != value for name, value in mutable.items())
+                    if updated:
+                        for name, value in mutable.items():
+                            setattr(instance, name, value)
+                        instance.save(update_fields=(*mutable.keys(), "updated_at"))
             else:
                 existing = ReviewRecord.objects.filter(
                     source=source_target.source,
@@ -109,6 +144,7 @@ def persist_review(source_target: SourceTarget, review: NormalizedReview) -> Per
                     **defaults,
                 )
                 created = True
+                updated = False
     except IntegrityError:
         instance = ReviewRecord.objects.get(
             source=source_target.source,
@@ -116,4 +152,5 @@ def persist_review(source_target: SourceTarget, review: NormalizedReview) -> Per
             record_type=review.record_type,
         )
         created = False
-    return PersistenceResult(review=instance, inserted=created)
+        updated = False
+    return PersistenceResult(review=instance, inserted=created, updated=updated)

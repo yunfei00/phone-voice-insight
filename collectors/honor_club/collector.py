@@ -67,7 +67,10 @@ class HonorClubCollector(BaseCollector):
             topic_id = _positive_int(request.target.config.get("topic_id", match.group(1)), default=595, maximum=999999)
             url = f"https://club.honor.com/cn/threadtopic-{topic_id}-{request.checkpoint.page}.html"
         elif page_kind == "thread":
-            url = request.target.target_url
+            thread_id = str(request.checkpoint.metadata.get("thread_id", ""))
+            if not thread_id:
+                raise CollectorError("帖子页缺少 thread id", code="INVALID_REQUEST")
+            url = f"https://club.honor.com/cn/thread-{thread_id}-{request.checkpoint.page}-1.html"
         else:
             raise CollectorError("未知页面类型", code="INVALID_REQUEST")
 

@@ -24,8 +24,13 @@ class FixtureHonorCollector(BaseCollector):
         return ValidationResult(is_valid=True)
 
     def fetch_page(self, request: CollectionRequest) -> RawPage:
+        page_kind = request.checkpoint.metadata.get("page_kind")
         return RawPage(
-            content="fixture",
+            content=(
+                '<div id="threadlist" data-topic-id="595"></div>'
+                if page_kind == "topic"
+                else '<div class="wapFirstThread">fixture</div>'
+            ),
             fetched_at=datetime.now(UTC),
             checkpoint=request.checkpoint,
             metadata={
@@ -187,7 +192,7 @@ class KnownBoundaryHonorCollector(FixtureHonorCollector):
 
 
 @pytest.mark.django_db
-def test_incremental_stops_after_twenty_consecutive_known_threads(
+def test_incremental_scans_configured_window_despite_known_threads(
     honor_source_target: SourceTarget,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -223,9 +228,9 @@ def test_incremental_stops_after_twenty_consecutive_known_threads(
     summary = run_collection(task.id)
     task.refresh_from_db()
 
-    assert summary.scanned_threads == 20
-    assert summary.known_threads == 20
-    assert summary.stopped_at_known_boundary
-    assert collector.thread_fetches == 20
-    assert task.known_threads == 20
-    assert task.stopped_at_known_boundary
+    assert summary.scanned_threads == 25
+    assert summary.known_threads == 25
+    assert not summary.stopped_at_known_boundary
+    assert collector.thread_fetches == 25
+    assert task.known_threads == 25
+    assert not task.stopped_at_known_boundary

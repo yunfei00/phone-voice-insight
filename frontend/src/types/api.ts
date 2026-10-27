@@ -113,6 +113,8 @@ export interface CollectionRun {
   stopped_at_known_boundary: boolean
   checkpoint_json: Record<string, unknown>
   error_message: string
+  completion_verified: boolean
+  verification_report: Record<string, unknown>
 }
 
 export interface CollectionTask {
@@ -122,6 +124,7 @@ export interface CollectionTask {
   product_name: string
   target_name: string
   task_type: 'FULL' | 'INCREMENTAL'
+  trigger_type: 'MANUAL' | 'SCHEDULED' | 'RETRY' | 'RECOVERY'
   status: CollectionStatus
   requested_limit: number | null
   success_count: number
@@ -133,12 +136,42 @@ export interface CollectionTask {
   duplicate_records: number
   stopped_at_known_boundary: boolean
   error_message: string
+  completion_verified: boolean
+  verification_report: Record<string, unknown>
   started_at: string | null
   finished_at: string | null
   last_checkpoint: Record<string, unknown>
   runs: CollectionRun[]
   created_at: string
   updated_at: string
+}
+
+export interface CollectionTargetState {
+  id: number
+  source_target: number
+  source_id: number
+  source_code: string
+  source_name: string
+  product_id: number
+  product_name: string
+  target_name: string
+  target_url: string
+  status: 'NOT_INITIALIZED' | 'FULL_RUNNING' | 'INCREMENTAL_RUNNING' | 'READY' | 'DEGRADED'
+  full_verified: boolean
+  full_verified_at: string | null
+  active_task: number | null
+  active_task_status: CollectionStatus | null
+  last_full_task: number | null
+  last_incremental_task: number | null
+  last_success_at: string | null
+  last_failure_at: string | null
+  last_discovered_thread_count: number
+  last_verified_thread_count: number
+  last_error: string
+  schedule_id: number | null
+  schedule_enabled: boolean
+  schedule_interval_hours: number | null
+  has_historical_data: boolean
 }
 
 export interface CollectionTaskRunResponse {

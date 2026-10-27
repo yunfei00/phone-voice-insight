@@ -16,12 +16,21 @@ from collectors.base import (
     NormalizedReview,
 )
 from collectors.honor_club.normalizer import is_power2_related
+from collectors.honor_club.parser import extract_thread_page_count, is_valid_thread_page
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 
 from apps.collection.models import CollectionRun, CollectionStatus, CollectionTask, CollectionTaskType
 from apps.collection.services.collector_registry import get_collector
+from apps.collection.services.honor_full import run_honor_full_chunk
+from apps.collection.services.orchestration import (
+    acquire_source_lease,
+    claim_existing_task,
+    refresh_source_lease,
+    release_source_lease,
+    release_target,
+)
 from apps.collection.services.review_persistence import persist_review
 from apps.products.models import ProductAlias
 from apps.reviews.models import ReviewRecord
@@ -43,6 +52,10 @@ class CollectionSummary:
     new_records: int = 0
     duplicate_records: int = 0
     stopped_at_known_boundary: bool = False
+    completed: bool = True
+    continuation_required: bool = False
+    completion_verified: bool = False
+    verification_report: dict[str, Any] | None = None
 
 
 def _int_config(config: dict[str, Any], name: str, default: int, maximum: int) -> int:
@@ -75,18 +88,26 @@ def _start_run(task_id: int) -> tuple[CollectionTask, CollectionRun]:
             .select_related("source_target__source", "source_target__product")
             .get(pk=task_id)
         )
+        claim_existing_task(task)
+        acquire_source_lease(task)
+        task.runs.filter(status=CollectionStatus.RUNNING).update(
+            status=CollectionStatus.FAILED,
+            finished_at=timezone.now(),
+            error_message="WORKER_RECOVERY: 上次运行中断; 已从持久化检查点恢复",
+        )
         task.transition_to(CollectionStatus.RUNNING)
         started_at = timezone.now()
         task.started_at = started_at
         task.finished_at = None
-        task.success_count = 0
-        task.skipped_count = 0
-        task.failure_count = 0
-        task.new_threads = 0
-        task.known_threads = 0
-        task.new_records = 0
-        task.duplicate_records = 0
-        task.stopped_at_known_boundary = False
+        if not task.last_checkpoint:
+            task.success_count = 0
+            task.skipped_count = 0
+            task.failure_count = 0
+            task.new_threads = 0
+            task.known_threads = 0
+            task.new_records = 0
+            task.duplicate_records = 0
+            task.stopped_at_known_boundary = False
         task.error_message = ""
         task.save(
             update_fields=(
@@ -175,19 +196,32 @@ def _save_progress(
                 "stopped_at_known_boundary",
             )
         )
+    refresh_source_lease(task_id)
 
 
-def _finish_success(task_id: int, run_id: int) -> None:
+def _finish_success(
+    task_id: int,
+    run_id: int,
+    *,
+    verified: bool = False,
+    report: dict[str, Any] | None = None,
+) -> None:
     finished_at = timezone.now()
     with transaction.atomic():
         task = CollectionTask.objects.select_for_update().get(pk=task_id)
         task.transition_to(CollectionStatus.SUCCESS)
         task.finished_at = finished_at
-        task.save(update_fields=("status", "finished_at", "updated_at"))
+        task.completion_verified = verified
+        task.verification_report = report or {}
+        task.save(update_fields=("status", "finished_at", "completion_verified", "verification_report", "updated_at"))
         run = CollectionRun.objects.select_for_update().get(pk=run_id)
         run.status = CollectionStatus.SUCCESS
         run.finished_at = finished_at
-        run.save(update_fields=("status", "finished_at"))
+        run.completion_verified = verified
+        run.verification_report = report or {}
+        run.save(update_fields=("status", "finished_at", "completion_verified", "verification_report"))
+    release_source_lease(task_id)
+    release_target(task, success=True, verified=verified)
 
 
 def _finish_failed(task_id: int, run_id: int, message: str) -> None:
@@ -205,6 +239,22 @@ def _finish_failed(task_id: int, run_id: int, message: str) -> None:
         run.failure_count = task.failure_count
         run.error_message = message
         run.save(update_fields=("status", "finished_at", "failure_count", "error_message"))
+    release_source_lease(task_id)
+    release_target(task, success=False, error=message)
+
+
+def _finish_continuation(task_id: int, run_id: int) -> None:
+    finished_at = timezone.now()
+    with transaction.atomic():
+        task = CollectionTask.objects.select_for_update().get(pk=task_id)
+        task.transition_to(CollectionStatus.SUCCESS)
+        task.transition_to(CollectionStatus.PENDING)
+        task.save(update_fields=("status", "updated_at"))
+        run = CollectionRun.objects.select_for_update().get(pk=run_id)
+        run.status = CollectionStatus.SUCCESS
+        run.finished_at = finished_at
+        run.save(update_fields=("status", "finished_at"))
+    refresh_source_lease(task_id)
 
 
 def _request_log(task_id: int, source: str, page: int, thread_id: str, metadata: dict[str, Any]) -> None:
@@ -392,20 +442,73 @@ def run_collection(
             raise
 
     if task.task_type == CollectionTaskType.FULL:
-        max_pages = _int_config(config, "full_max_topic_pages", 5000, 5000)
-        full_safety_threads = _int_config(config, "full_max_threads", 100000, 100000)
-        requested_limit = limit_override or task.requested_limit
-        max_threads = min(max(int(requested_limit), 1), full_safety_threads) if requested_limit else full_safety_threads
-    else:
-        max_pages = _int_config(config, "max_topic_pages", 5, 10)
-        configured_threads = _int_config(config, "max_threads", 100, 200)
-        requested_limit = limit_override or task.requested_limit or configured_threads
-        max_threads = min(max(int(requested_limit), 1), configured_threads, 200)
-    checkpoint = dict(task.last_checkpoint or {}) if task.task_type == CollectionTaskType.FULL else {}
-    start_page = int(checkpoint.get("topic_page", 1)) if task.task_type == CollectionTaskType.FULL else 1
-    start_index = int(checkpoint.get("thread_index", 0)) if task.task_type == CollectionTaskType.FULL else 0
+        try:
+            chunk = run_honor_full_chunk(
+                task=task,
+                source_target=source_target,
+                collector=collector,
+                target=target,
+            )
+            task.refresh_from_db()
+            discovered = task.discovered_threads.count()
+            completed_threads = task.discovered_threads.filter(status__in=("SUCCESS", "SKIPPED")).count()
+            task.success_count += chunk.inserted
+            task.skipped_count += chunk.duplicates
+            task.failure_count += chunk.failed
+            task.new_records += chunk.inserted
+            task.duplicate_records += chunk.duplicates
+            task.new_threads = task.discovered_threads.filter(status="SUCCESS").count()
+            task.last_checkpoint = chunk.checkpoint
+            task.verification_report = chunk.report
+            task.completion_verified = chunk.verified
+            task.save()
+            run.success_count = chunk.inserted
+            run.skipped_count = chunk.duplicates
+            run.failure_count = chunk.failed
+            run.new_threads = completed_threads
+            run.new_records = chunk.inserted
+            run.duplicate_records = chunk.duplicates
+            run.checkpoint_json = chunk.checkpoint
+            run.verification_report = chunk.report
+            run.completion_verified = chunk.verified
+            run.save()
+            if chunk.continuation_required:
+                _finish_continuation(task.id, run.id)
+            elif chunk.verified:
+                _finish_success(task.id, run.id, verified=True, report=chunk.report)
+            else:
+                unresolved = ", ".join(chunk.report.get("unresolved_thread_ids", [])[:20])
+                _finish_failed(task.id, run.id, f"FULL_VERIFICATION_FAILED: unresolved={unresolved}")
+            return CollectionSummary(
+                scanned_threads=discovered,
+                inserted_records=chunk.inserted,
+                skipped_records=chunk.duplicates,
+                failed_records=chunk.failed,
+                record_types={},
+                samples=[],
+                new_threads=task.new_threads,
+                new_records=chunk.inserted,
+                duplicate_records=chunk.duplicates,
+                completed=not chunk.continuation_required,
+                continuation_required=chunk.continuation_required,
+                completion_verified=chunk.verified,
+                verification_report=chunk.report,
+            )
+        except Exception as exc:
+            message = f"{exc.code}: {exc}" if isinstance(exc, CollectorError) else f"COLLECTION_ERROR: {exc}"
+            logger.exception("full_collection_failed collection_task_id=%s", task.id)
+            _finish_failed(task.id, run.id, message)
+            raise
+
+    max_pages = _int_config(config, "max_topic_pages", 5, 10)
+    configured_threads = _int_config(config, "max_threads", 100, 200)
+    requested_limit = limit_override or task.requested_limit or configured_threads
+    max_threads = min(max(int(requested_limit), 1), configured_threads, 200)
+    checkpoint: dict[str, Any] = {}
+    start_page = 1
+    start_index = 0
     inserted = skipped = failed = scanned = duplicate_records = 0
-    new_threads = known_threads = consecutive_known_threads = 0
+    new_threads = known_threads = 0
     stopped_at_known_boundary = False
     type_counts: Counter[str] = Counter()
     samples: list[dict[str, Any]] = []
@@ -457,9 +560,6 @@ def run_collection(
                 ).exists()
                 if thread_was_known:
                     known_threads += 1
-                    consecutive_known_threads += 1
-                else:
-                    consecutive_known_threads = 0
                 thread_url = str(listing_data["thread_url"])
                 thread_target = _build_collector_target(source_target, target_url=thread_url)
                 thread_request = CollectionRequest(
@@ -474,9 +574,47 @@ def run_collection(
                 )
                 raw_thread = collector.fetch_page(thread_request)
                 _request_log(task.id, source_target.source.code, topic_page, thread_id, raw_thread.metadata)
+                first_html = (
+                    raw_thread.content.decode("utf-8", errors="replace")
+                    if isinstance(raw_thread.content, bytes)
+                    else raw_thread.content
+                )
+                if not is_valid_thread_page(first_html):
+                    raise CollectorError(f"帖子 {thread_id} 返回异常页面", code="INVALID_THREAD_PAGE")
                 raw_records = collector.parse_records(raw_thread)
                 if not raw_records:
                     raise CollectorError(f"帖子 {thread_id} 未解析出记录", code="EMPTY_THREAD")
+                reply_pages = extract_thread_page_count(first_html, thread_id=thread_id)
+                for reply_page in range(2, reply_pages + 1):
+                    paged_request = CollectionRequest(
+                        target=thread_target,
+                        checkpoint=CollectionCheckpoint(
+                            page=reply_page,
+                            metadata={
+                                "page_kind": "thread",
+                                "thread_id": thread_id,
+                                "listing_data": listing_data,
+                            },
+                        ),
+                    )
+                    raw_reply_page = collector.fetch_page(paged_request)
+                    reply_html = (
+                        raw_reply_page.content.decode("utf-8", errors="replace")
+                        if isinstance(raw_reply_page.content, bytes)
+                        else raw_reply_page.content
+                    )
+                    if not is_valid_thread_page(reply_html):
+                        raise CollectorError(
+                            f"帖子 {thread_id} 第 {reply_page} 页返回异常页面",
+                            code="INVALID_THREAD_PAGE",
+                        )
+                    paged_records = collector.parse_records(raw_reply_page)
+                    if not paged_records:
+                        raise CollectorError(
+                            f"帖子 {thread_id} 第 {reply_page} 页无记录",
+                            code="EMPTY_THREAD_PAGE",
+                        )
+                    raw_records.extend(paged_records[1:])
 
                 thread_payload = raw_records[0].payload
                 raw_data = thread_payload.get("raw_data", {})
@@ -510,25 +648,6 @@ def run_collection(
                             "stopped_at_known_boundary": False,
                         },
                     )
-                    if task.task_type == CollectionTaskType.INCREMENTAL and consecutive_known_threads >= 20:
-                        stopped_at_known_boundary = True
-                        checkpoint["stopped_at_known_boundary"] = True
-                        _save_progress(
-                            task.id,
-                            run.id,
-                            inserted=inserted,
-                            skipped=skipped,
-                            failed=failed,
-                            checkpoint=checkpoint,
-                            progress_stats={
-                                "new_threads": new_threads,
-                                "known_threads": known_threads,
-                                "new_records": inserted,
-                                "duplicate_records": duplicate_records,
-                                "stopped_at_known_boundary": True,
-                            },
-                        )
-                        break
                     continue
 
                 for raw_record in raw_records:
@@ -591,26 +710,7 @@ def run_collection(
                     skipped,
                     checkpoint,
                 )
-                if task.task_type == CollectionTaskType.INCREMENTAL and consecutive_known_threads >= 20:
-                    stopped_at_known_boundary = True
-                    checkpoint["stopped_at_known_boundary"] = True
-                    _save_progress(
-                        task.id,
-                        run.id,
-                        inserted=inserted,
-                        skipped=skipped,
-                        failed=failed,
-                        checkpoint=checkpoint,
-                        progress_stats={
-                            "new_threads": new_threads,
-                            "known_threads": known_threads,
-                            "new_records": inserted,
-                            "duplicate_records": duplicate_records,
-                            "stopped_at_known_boundary": True,
-                        },
-                    )
-                    break
-            if scanned >= max_threads or stopped_at_known_boundary:
+            if scanned >= max_threads:
                 break
             checkpoint = {"topic_page": topic_page + 1, "thread_index": 0}
             _save_progress(

@@ -8,6 +8,7 @@ import type {
   AnalysisResult,
   AnalysisSummary,
   CollectionSchedule,
+  CollectionTargetState,
   CollectionTask,
   CollectionTaskRunResponse,
   DataQualitySummary,
@@ -80,6 +81,28 @@ export const getCollectionTasks = async (
   params: PageParams = {},
 ): Promise<PaginatedResponse<CollectionTask>> =>
   (await apiClient.get<PaginatedResponse<CollectionTask>>('/collection-tasks/', { params })).data
+
+export const getCollectionTargets = async (
+  params: PageParams = {},
+): Promise<PaginatedResponse<CollectionTargetState>> =>
+  (
+    await apiClient.get<PaginatedResponse<CollectionTargetState>>('/collection-targets/', {
+      params,
+    })
+  ).data
+
+export const startFullCollection = async (stateId: number): Promise<CollectionTaskRunResponse> =>
+  (await apiClient.post<CollectionTaskRunResponse>(`/collection-targets/${stateId}/start-full/`))
+    .data
+
+export const startIncrementalCollection = async (
+  stateId: number,
+): Promise<CollectionTaskRunResponse> =>
+  (
+    await apiClient.post<CollectionTaskRunResponse>(
+      `/collection-targets/${stateId}/start-incremental/`,
+    )
+  ).data
 
 export const createCollectionTask = async (payload: {
   source_target: number

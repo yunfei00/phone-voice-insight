@@ -5,3 +5,6 @@ class CollectionConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.collection"
     verbose_name = "采集任务"
+
+    def ready(self) -> None:
+        from apps.collection import signals  # noqa: F401

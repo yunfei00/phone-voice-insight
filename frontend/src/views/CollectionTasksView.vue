@@ -1,66 +1,36 @@
 <script setup lang="ts">
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import {
-  createCollectionTask,
-  getCollectionSchedules,
-  getCollectionTask,
+  getCollectionTargets,
   getCollectionTasks,
-  getProducts,
-  getSources,
-  runCollectionTask,
   saveCollectionSchedule,
+  startFullCollection,
+  startIncrementalCollection,
 } from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import type {
-  CollectionSchedule,
-  CollectionStatus,
-  CollectionTask,
-  DataSource,
-  Product,
-  SourceTarget,
-} from '@/types/api'
+import type { CollectionStatus, CollectionTargetState, CollectionTask } from '@/types/api'
 
-const tasks = ref<CollectionTask[]>([])
-const schedules = ref<CollectionSchedule[]>([])
 const auth = useAuthStore()
-const products = ref<Product[]>([])
-const sources = ref<DataSource[]>([])
+const targets = ref<CollectionTargetState[]>([])
 const loading = ref(false)
-const dialogVisible = ref(false)
-const submitting = ref(false)
+const error = ref('')
+const startingIds = ref(new Set<number>())
 const scheduleDialogVisible = ref(false)
 const scheduleSubmitting = ref(false)
-const scheduleTarget = ref<CollectionTask | null>(null)
-const scheduleForm = reactive({
-  enabled: true,
-  interval_hours: 6,
-})
-const runningTaskIds = ref(new Set<number>())
-const selected = ref<CollectionTask | null>(null)
-const error = ref('')
+const scheduleTarget = ref<CollectionTargetState | null>(null)
+const historyVisible = ref(false)
+const historyTarget = ref<CollectionTargetState | null>(null)
+const history = ref<CollectionTask[]>([])
+const historyCount = ref(0)
+const historyPage = ref(1)
+const historyLoading = ref(false)
+const selectedTask = ref<CollectionTask | null>(null)
+const scheduleForm = reactive({ enabled: true, interval_hours: 6 })
 let pollTimer: ReturnType<typeof setInterval> | undefined
-let pollAttempts = 0
-const form = reactive({
-  product: undefined as number | undefined,
-  source: undefined as number | undefined,
-  source_target: undefined as number | undefined,
-  task_type: 'INCREMENTAL' as 'FULL' | 'INCREMENTAL',
-  requested_limit: 10,
-})
 
-const targets = computed<SourceTarget[]>(() => {
-  const source = sources.value.find((item) => item.id === form.source)
-  return (source?.targets || []).filter(
-    (target) => target.is_active && (!form.product || target.product === form.product),
-  )
-})
-
-const selectedSourceCode = computed(
-  () => sources.value.find((item) => item.id === form.source)?.code || '',
-)
-const requestedLimitMax = computed(() => (selectedSourceCode.value === 'JD' ? 30 : 200))
-
+const hasActiveTarget = computed(() => targets.value.some((item) => Boolean(item.active_task)))
 const statusType: Record<CollectionStatus, 'info' | 'primary' | 'warning' | 'success' | 'danger'> =
   {
     PENDING: 'info',
@@ -70,102 +40,111 @@ const statusType: Record<CollectionStatus, 'info' | 'primary' | 'warning' | 'suc
     FAILED: 'danger',
     CANCELLED: 'info',
   }
+const triggerLabels: Record<CollectionTask['trigger_type'], string> = {
+  MANUAL: '手工',
+  SCHEDULED: '定时',
+  RETRY: '重试',
+  RECOVERY: '恢复',
+}
 
-async function loadData(): Promise<void> {
-  loading.value = true
+function formatTime(value: string | null): string {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function baselineText(target: CollectionTargetState): string {
+  if (target.full_verified) return '全量完整性验证通过'
+  if (target.has_historical_data) return '已有历史数据，待完整性验证'
+  return '尚未完成全量初始化'
+}
+
+function currentStatus(target: CollectionTargetState): string {
+  if (target.active_task_status === 'PENDING') return '等待执行'
+  if (target.active_task_status === 'RUNNING') return '采集中'
+  if (target.active_task_status === 'PAUSED') return '已暂停'
+  if (target.status === 'DEGRADED') return '最近运行异常'
+  return '空闲'
+}
+
+async function loadTargets(silent = false): Promise<void> {
+  if (!silent) loading.value = true
   error.value = ''
   try {
-    const [taskPage, schedulePage, productPage, sourcePage] = await Promise.all([
-      getCollectionTasks({ page_size: 100 }),
-      getCollectionSchedules(),
-      getProducts({ page_size: 100 }),
-      getSources({ page_size: 100 }),
-    ])
-    tasks.value = taskPage.results
-    schedules.value = schedulePage.results
-    products.value = productPage.results
-    sources.value = sourcePage.results
+    const response = await getCollectionTargets({ page_size: 100 })
+    targets.value = response.results
+    if (silent && !targets.value.some((item) => Boolean(item.active_task))) stopPolling()
   } catch {
-    error.value = '采集任务数据加载失败。'
+    error.value = '采集控制状态加载失败。'
   } finally {
-    loading.value = false
-  }
-}
-
-function stopPolling(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = undefined
-  }
-  pollAttempts = 0
-}
-
-async function pollActiveTasks(): Promise<void> {
-  const activeTasks = tasks.value.filter((task) => ['PENDING', 'RUNNING'].includes(task.status))
-  if (!activeTasks.length || pollAttempts >= 150) {
-    stopPolling()
-    return
-  }
-  pollAttempts += 1
-  const refreshed = await Promise.all(activeTasks.map((task) => getCollectionTask(task.id)))
-  const byId = new Map(refreshed.map((task) => [task.id, task]))
-  tasks.value = tasks.value.map((task) => byId.get(task.id) || task)
-  if (selected.value && byId.has(selected.value.id)) {
-    selected.value = byId.get(selected.value.id) || null
-  }
-  if (!tasks.value.some((task) => ['PENDING', 'RUNNING'].includes(task.status))) {
-    stopPolling()
+    if (!silent) loading.value = false
   }
 }
 
 function startPolling(): void {
   if (pollTimer) return
-  pollAttempts = 0
-  pollTimer = setInterval(() => void pollActiveTasks(), 4000)
+  pollTimer = setInterval(() => void loadTargets(true), 5000)
 }
 
-async function executeTask(task: CollectionTask): Promise<void> {
-  runningTaskIds.value.add(task.id)
-  error.value = ''
+function stopPolling(): void {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = undefined
+}
+
+async function startFull(target: CollectionTargetState): Promise<void> {
+  const action = target.full_verified ? '重新全量校验' : '执行完整性全量校验'
   try {
-    await runCollectionTask(task.id)
-    task.status = 'PENDING'
+    await ElMessageBox.confirm(
+      '系统会重新扫描全部话题页并核对已有数据，不会删除反馈；已有记录会更新、缺失记录会补齐。',
+      action,
+      { confirmButtonText: action, cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  startingIds.value.add(target.id)
+  try {
+    await startFullCollection(target.id)
+    ElMessage.success('全量任务已进入队列')
+    await loadTargets(true)
     startPolling()
   } catch {
-    error.value = `任务 #${task.id} 启动失败，请检查任务状态和 Celery。`
+    error.value = '全量任务启动失败，可能已有采集正在执行。'
   } finally {
-    runningTaskIds.value.delete(task.id)
+    startingIds.value.delete(target.id)
   }
 }
 
-async function refreshTasks(): Promise<void> {
-  await loadData()
-  if (tasks.value.some((task) => ['PENDING', 'RUNNING'].includes(task.status))) startPolling()
-}
-
-function canRun(task: CollectionTask): boolean {
-  return !['RUNNING', 'PAUSED', 'CANCELLED'].includes(task.status)
-}
-
-function handleSourceChange(): void {
-  form.source_target = undefined
-  if (form.requested_limit > requestedLimitMax.value) {
-    form.requested_limit = requestedLimitMax.value
+async function startIncremental(target: CollectionTargetState): Promise<void> {
+  startingIds.value.add(target.id)
+  try {
+    await startIncrementalCollection(target.id)
+    ElMessage.success('增量任务已进入队列')
+    await loadTargets(true)
+    startPolling()
+  } catch {
+    error.value = target.full_verified
+      ? '增量任务启动失败，可能已有采集正在执行。'
+      : '请先完成全量完整性校验。'
+  } finally {
+    startingIds.value.delete(target.id)
   }
 }
 
-function openSchedule(task: CollectionTask): void {
-  scheduleTarget.value = task
-  const existing = schedules.value.find((item) => item.source_target === task.source_target)
-  scheduleForm.enabled = existing?.enabled ?? true
-  scheduleForm.interval_hours = existing?.interval_hours ?? 6
+function openSchedule(target: CollectionTargetState): void {
+  scheduleTarget.value = target
+  scheduleForm.enabled = target.schedule_enabled
+  scheduleForm.interval_hours = target.schedule_interval_hours ?? 6
   scheduleDialogVisible.value = true
 }
 
 async function submitSchedule(): Promise<void> {
   if (!scheduleTarget.value) return
   scheduleSubmitting.value = true
-  error.value = ''
   try {
     await saveCollectionSchedule({
       source_target: scheduleTarget.value.source_target,
@@ -173,7 +152,8 @@ async function submitSchedule(): Promise<void> {
       interval_hours: scheduleForm.interval_hours,
     })
     scheduleDialogVisible.value = false
-    await loadData()
+    ElMessage.success('定时设置已保存')
+    await loadTargets(true)
   } catch {
     error.value = '定时采集保存失败。'
   } finally {
@@ -181,28 +161,37 @@ async function submitSchedule(): Promise<void> {
   }
 }
 
-async function submitTask(): Promise<void> {
-  if (!form.product || !form.source || !form.source_target) {
-    error.value = '请选择产品、数据来源和采集目标。'
-    return
-  }
-  submitting.value = true
+async function loadHistory(page = historyPage.value): Promise<void> {
+  if (!historyTarget.value) return
+  historyLoading.value = true
   try {
-    await createCollectionTask({
-      source_target: form.source_target,
-      task_type: form.task_type,
-      ...(form.task_type === 'FULL' ? {} : { requested_limit: form.requested_limit }),
+    const response = await getCollectionTasks({
+      source_target: historyTarget.value.source_target,
+      page,
+      page_size: 10,
+      ordering: '-created_at',
     })
-    dialogVisible.value = false
-    await refreshTasks()
+    history.value = response.results
+    historyCount.value = response.count
+    historyPage.value = page
   } catch {
-    error.value = '任务创建失败，请检查采集入口配置。'
+    error.value = '运行历史加载失败。'
   } finally {
-    submitting.value = false
+    historyLoading.value = false
   }
 }
 
-onMounted(refreshTasks)
+async function openHistory(target: CollectionTargetState): Promise<void> {
+  historyTarget.value = target
+  historyVisible.value = true
+  historyPage.value = 1
+  await loadHistory(1)
+}
+
+onMounted(async () => {
+  await loadTargets()
+  if (hasActiveTarget.value) startPolling()
+})
 onUnmounted(stopPolling)
 </script>
 
@@ -210,182 +199,117 @@ onUnmounted(stopPolling)
   <div>
     <div class="page-header">
       <div>
-        <h1 class="page-title">采集任务</h1>
-        <p class="page-description">首次可全量采集，之后可按小时自动执行增量采集。</p>
+        <h1 class="page-title">采集控制</h1>
+        <p class="page-description">每个采集入口只有一个控制中心：先验证完整基线，之后自动增量。</p>
       </div>
-      <div class="header-actions">
-        <el-button :loading="loading" @click="refreshTasks">刷新</el-button>
-        <el-button type="primary" :disabled="!auth.canWrite" @click="dialogVisible = true"
-          >创建任务</el-button
-        >
-      </div>
+      <el-button :loading="loading" @click="loadTargets()">刷新</el-button>
     </div>
+
     <el-alert
-      title="荣耀全量任务会持续翻页直到没有帖子；自动任务只执行增量采集，并保持至少 3 秒请求间隔。"
+      title="历史任务和反馈会完整保留；全量校验只会刷新、补漏和去重，不会删除已有数据。"
       type="info"
       show-icon
       :closable="false"
       class="notice"
     />
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
-    <div v-if="schedules.length" class="panel schedule-panel">
-      <h2>自动增量采集</h2>
-      <el-table :data="schedules">
-        <el-table-column prop="product_name" label="产品" min-width="150" />
-        <el-table-column prop="source_name" label="来源" width="130" />
-        <el-table-column prop="target_name" label="目标" min-width="180" />
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }: { row: CollectionSchedule }">
-            <el-tag :type="row.enabled ? 'success' : 'info'">
-              {{ row.enabled ? '启用' : '停用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="频率" width="140">
-          <template #default="{ row }: { row: CollectionSchedule }">
-            每 {{ row.interval_hours }} 小时
-          </template>
-        </el-table-column>
-        <el-table-column prop="updated_at" label="更新时间" min-width="170" />
-      </el-table>
-    </div>
 
-    <div class="panel">
-      <el-table v-loading="loading" :data="tasks" empty-text="暂无采集任务">
-        <el-table-column prop="id" label="ID" width="75" />
-        <el-table-column prop="product_name" label="产品" min-width="150" />
-        <el-table-column prop="source_name" label="来源" width="130" />
-        <el-table-column prop="target_name" label="目标" min-width="150" />
-        <el-table-column prop="task_type" label="类型" width="110" />
-        <el-table-column label="状态" width="110">
-          <template #default="{ row }: { row: CollectionTask }">
-            <el-tag :type="statusType[row.status]">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="success_count" label="成功" width="80" />
-        <el-table-column prop="skipped_count" label="跳过" width="80" />
-        <el-table-column prop="failure_count" label="失败" width="80" />
-        <el-table-column prop="new_threads" label="新帖" width="80" />
-        <el-table-column prop="known_threads" label="已知帖" width="85" />
-        <el-table-column prop="started_at" label="开始时间" min-width="170" />
-        <el-table-column prop="finished_at" label="结束时间" min-width="170" />
-        <el-table-column
-          prop="error_message"
-          label="错误信息"
-          min-width="190"
-          show-overflow-tooltip
-        />
-        <el-table-column label="操作" width="220" fixed="right">
-          <template #default="{ row }: { row: CollectionTask }">
-            <el-button link type="primary" @click="selected = row">详情</el-button>
-            <el-button
-              link
-              type="success"
-              :disabled="!auth.canWrite || !canRun(row)"
-              :loading="runningTaskIds.has(row.id)"
-              @click="executeTask(row)"
-              >执行</el-button
-            >
-            <el-button link type="warning" :disabled="!auth.canWrite" @click="openSchedule(row)"
-              >定时</el-button
-            >
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
+    <div v-loading="loading" class="target-grid">
+      <el-card v-for="target in targets" :key="target.id" class="target-card" shadow="hover">
+        <div class="card-heading">
+          <div>
+            <h2>{{ target.product_name }}</h2>
+            <p>{{ target.source_name }} · {{ target.target_name }}</p>
+          </div>
+          <el-tag
+            :type="
+              target.active_task ? 'primary' : target.status === 'DEGRADED' ? 'danger' : 'info'
+            "
+          >
+            {{ currentStatus(target) }}
+          </el-tag>
+        </div>
 
-    <el-dialog v-model="dialogVisible" title="创建采集任务" width="min(520px, 92vw)">
-      <el-form label-position="top">
-        <el-form-item label="手机产品" required>
-          <el-select
-            v-model="form.product"
-            placeholder="选择产品"
-            class="full-width"
-            @change="form.source_target = undefined"
+        <div class="state-block" :class="{ verified: target.full_verified }">
+          <span class="state-label">数据基线</span>
+          <strong>{{ baselineText(target) }}</strong>
+          <small v-if="target.full_verified_at"
+            >验证于 {{ formatTime(target.full_verified_at) }}</small
           >
-            <el-option
-              v-for="product in products"
-              :key="product.id"
-              :label="product.name"
-              :value="product.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="数据来源" required>
-          <el-select
-            v-model="form.source"
-            placeholder="选择来源"
-            class="full-width"
-            @change="handleSourceChange"
-          >
-            <el-option
-              v-for="source in sources"
-              :key="source.id"
-              :label="source.code === 'JD' ? '京东（暂未启用）' : source.name"
-              :value="source.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="采集目标" required>
-          <el-select
-            v-model="form.source_target"
-            placeholder="选择已在 Admin 配置的入口"
-            class="full-width"
-          >
-            <el-option
-              v-for="target in targets"
-              :key="target.id"
-              :label="target.name"
-              :value="target.id"
-            />
-          </el-select>
-          <small v-if="form.source && form.product && !targets.length" class="hint"
-            >没有可用入口，请先在 Django Admin 中录入真实且合规的目标。</small
-          >
-        </el-form-item>
-        <el-form-item label="任务类型">
-          <el-radio-group v-model="form.task_type">
-            <el-radio value="INCREMENTAL">增量</el-radio>
-            <el-radio value="FULL">全量</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item v-if="form.task_type !== 'FULL'" label="最多采集条数">
-          <el-input-number v-model="form.requested_limit" :min="1" :max="requestedLimitMax" />
-          <small class="hint">增量采集默认最多 200 个帖子；京东暂未启用。</small>
-        </el-form-item>
+        </div>
+
+        <div class="facts">
+          <div>
+            <span>自动增量</span>
+            <strong v-if="target.schedule_enabled"
+              >每 {{ target.schedule_interval_hours }} 小时</strong
+            >
+            <strong v-else>未启用</strong>
+          </div>
+          <div>
+            <span>最近成功</span>
+            <strong>{{ formatTime(target.last_success_at) }}</strong>
+          </div>
+          <div>
+            <span>最近验证帖子</span>
+            <strong>{{ target.last_verified_thread_count || '—' }}</strong>
+          </div>
+        </div>
+
         <el-alert
-          v-else
-          title="全量采集会持续翻页直到话题页没有帖子；失败后保留 checkpoint，可继续执行。"
-          type="info"
+          v-if="target.last_error"
+          :title="target.last_error"
+          type="error"
           :closable="false"
-          show-icon
+          class="target-error"
         />
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :disabled="!auth.canWrite"
-          :loading="submitting"
-          @click="submitTask"
-          >创建</el-button
-        >
-      </template>
-    </el-dialog>
 
-    <el-dialog v-model="scheduleDialogVisible" title="定时增量采集" width="min(460px, 92vw)">
+        <div class="card-actions">
+          <el-button
+            type="primary"
+            :disabled="!auth.canWrite || Boolean(target.active_task) || !target.full_verified"
+            :loading="startingIds.has(target.id)"
+            @click="startIncremental(target)"
+          >
+            立即增量
+          </el-button>
+          <el-button
+            :disabled="!auth.canWrite || Boolean(target.active_task)"
+            :loading="startingIds.has(target.id)"
+            @click="startFull(target)"
+          >
+            {{
+              target.full_verified
+                ? '重新全量校验'
+                : target.has_historical_data
+                  ? '执行完整性校验'
+                  : '开始全量初始化'
+            }}
+          </el-button>
+          <el-button :disabled="!auth.canWrite" @click="openSchedule(target)">定时设置</el-button>
+          <el-button @click="openHistory(target)">运行历史</el-button>
+        </div>
+      </el-card>
+      <el-empty v-if="!loading && !targets.length" description="暂无可用采集入口" />
+    </div>
+
+    <el-dialog v-model="scheduleDialogVisible" title="定时增量设置" width="min(460px, 92vw)">
       <el-form label-position="top">
-        <el-form-item label="采集目标">
+        <el-form-item label="采集入口">
           <strong>{{ scheduleTarget?.product_name }} / {{ scheduleTarget?.target_name }}</strong>
         </el-form-item>
-        <el-form-item label="启用">
+        <el-form-item label="启用自动增量">
           <el-switch v-model="scheduleForm.enabled" />
         </el-form-item>
         <el-form-item label="执行频率">
           <el-input-number v-model="scheduleForm.interval_hours" :min="1" :max="168" />
           <span class="schedule-unit">小时</span>
         </el-form-item>
-        <small class="hint">每次自动执行增量任务；连续遇到 20 个已知帖子后会自动停止本轮。</small>
+        <el-alert
+          title="全量基线未验证时会记录跳过，不会创建或堆积增量任务；验证通过后按此频率运行。"
+          type="info"
+          :closable="false"
+        />
       </el-form>
       <template #footer>
         <el-button @click="scheduleDialogVisible = false">取消</el-button>
@@ -395,42 +319,83 @@ onUnmounted(stopPolling)
       </template>
     </el-dialog>
 
-    <el-drawer
-      :model-value="Boolean(selected)"
-      title="采集任务详情"
-      size="min(640px, 94vw)"
-      @close="selected = null"
+    <el-drawer v-model="historyVisible" size="min(900px, 96vw)" title="运行历史">
+      <p v-if="historyTarget" class="history-subtitle">
+        {{ historyTarget.product_name }} · {{ historyTarget.source_name }} ·
+        {{ historyTarget.target_name }}
+      </p>
+      <el-table v-loading="historyLoading" :data="history" empty-text="暂无历史任务">
+        <el-table-column prop="id" label="任务" width="75" />
+        <el-table-column label="触发" width="80">
+          <template #default="{ row }: { row: CollectionTask }">{{
+            triggerLabels[row.trigger_type]
+          }}</template>
+        </el-table-column>
+        <el-table-column prop="task_type" label="类型" width="110" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }: { row: CollectionTask }">
+            <el-tag :type="statusType[row.status]">{{ row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="开始" min-width="135">
+          <template #default="{ row }: { row: CollectionTask }">{{
+            formatTime(row.started_at)
+          }}</template>
+        </el-table-column>
+        <el-table-column label="新增 / 重复 / 失败" min-width="150">
+          <template #default="{ row }: { row: CollectionTask }">
+            {{ row.new_records }} / {{ row.duplicate_records }} / {{ row.failure_count }}
+          </template>
+        </el-table-column>
+        <el-table-column label="完整性" width="100">
+          <template #default="{ row }: { row: CollectionTask }">
+            {{ row.task_type === 'FULL' ? (row.completion_verified ? '通过' : '未通过') : '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="75" fixed="right">
+          <template #default="{ row }: { row: CollectionTask }">
+            <el-button link type="primary" @click="selectedTask = row">详情</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-pagination
+        v-if="historyCount > 10"
+        class="history-pagination"
+        layout="prev, pager, next, total"
+        :current-page="historyPage"
+        :page-size="10"
+        :total="historyCount"
+        @current-change="loadHistory"
+      />
+    </el-drawer>
+
+    <el-dialog
+      :model-value="Boolean(selectedTask)"
+      title="任务详情"
+      width="min(700px, 94vw)"
+      @close="selectedTask = null"
     >
-      <el-descriptions v-if="selected" :column="1" border>
-        <el-descriptions-item label="任务">#{{ selected.id }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ selected.status }}</el-descriptions-item>
-        <el-descriptions-item label="来源 / 产品">
-          {{ selected.source_name }} / {{ selected.product_name }}
+      <el-descriptions v-if="selectedTask" :column="1" border>
+        <el-descriptions-item label="任务">#{{ selectedTask.id }}</el-descriptions-item>
+        <el-descriptions-item label="触发 / 类型 / 状态">
+          {{ triggerLabels[selectedTask.trigger_type] }} / {{ selectedTask.task_type }} /
+          {{ selectedTask.status }}
         </el-descriptions-item>
-        <el-descriptions-item label="目标">{{ selected.target_name }}</el-descriptions-item>
         <el-descriptions-item label="统计">
-          成功 {{ selected.success_count }} / 跳过 {{ selected.skipped_count }} / 失败
-          {{ selected.failure_count }}
+          新增 {{ selectedTask.new_records }}，重复 {{ selectedTask.duplicate_records }}，失败
+          {{ selectedTask.failure_count }}
         </el-descriptions-item>
-        <el-descriptions-item label="增量统计">
-          新帖 {{ selected.new_threads }} / 已知帖 {{ selected.known_threads }} / 新记录
-          {{ selected.new_records }} / 重复 {{ selected.duplicate_records }} / 已知边界停止
-          {{ selected.stopped_at_known_boundary ? '是' : '否' }}
+        <el-descriptions-item label="完整性报告">
+          <pre>{{ JSON.stringify(selectedTask.verification_report, null, 2) }}</pre>
         </el-descriptions-item>
-        <el-descriptions-item label="开始时间">{{
-          selected.started_at || '—'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="结束时间">{{
-          selected.finished_at || '—'
-        }}</el-descriptions-item>
         <el-descriptions-item label="Checkpoint">
-          <pre>{{ JSON.stringify(selected.last_checkpoint, null, 2) }}</pre>
+          <pre>{{ JSON.stringify(selectedTask.last_checkpoint, null, 2) }}</pre>
         </el-descriptions-item>
-        <el-descriptions-item label="错误信息">{{
-          selected.error_message || '—'
+        <el-descriptions-item label="错误">{{
+          selectedTask.error_message || '—'
         }}</el-descriptions-item>
       </el-descriptions>
-    </el-drawer>
+    </el-dialog>
   </div>
 </template>
 
@@ -438,37 +403,109 @@ onUnmounted(stopPolling)
 .notice {
   margin-bottom: 16px;
 }
-
-.schedule-panel {
-  margin-bottom: 16px;
+.target-grid {
+  display: grid;
+  gap: 16px;
+  min-height: 120px;
 }
-
-.schedule-panel h2 {
-  margin-top: 0;
+.target-card {
+  border-radius: 14px;
 }
-
+.card-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+.card-heading h2 {
+  margin: 0 0 5px;
+  font-size: 20px;
+  color: #172033;
+}
+.card-heading p,
+.history-subtitle {
+  margin: 0;
+  color: #667085;
+}
+.state-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 9px;
+  margin: 18px 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+.state-block.verified {
+  background: #ecfdf3;
+  color: #166534;
+}
+.state-block small {
+  color: #667085;
+}
+.state-label {
+  color: #667085;
+  margin-right: 4px;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.facts div {
+  padding: 12px 14px;
+  border: 1px solid #e9edf3;
+  border-radius: 10px;
+}
+.facts span {
+  display: block;
+  margin-bottom: 7px;
+  color: #667085;
+  font-size: 13px;
+}
+.facts strong {
+  color: #263244;
+}
+.target-error {
+  margin-top: 14px;
+}
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+.card-actions .el-button {
+  margin-left: 0;
+}
 .schedule-unit {
   margin-left: 8px;
 }
-
-.full-width {
-  width: 100%;
+.history-subtitle {
+  margin-bottom: 16px;
 }
-
-.hint {
-  display: block;
-  margin-top: 8px;
-  color: #b45309;
+.history-pagination {
+  justify-content: flex-end;
+  margin-top: 18px;
 }
-
-.header-actions {
-  display: flex;
-  gap: 10px;
-}
-
 pre {
   margin: 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  max-height: 320px;
+  overflow: auto;
+}
+@media (max-width: 720px) {
+  .facts {
+    grid-template-columns: 1fr;
+  }
+  .card-heading {
+    align-items: center;
+  }
+  .card-actions .el-button {
+    flex: 1 1 calc(50% - 8px);
+  }
 }
 </style>
