@@ -56,11 +56,15 @@ def parse_human_count(value: object) -> int | None:
 
 
 def _associated_replies() -> QuerySet[ReviewRecord]:
-    return ReviewRecord.objects.filter(
-        source_id=OuterRef("source_id"),
-        product_id=OuterRef("product_id"),
-        record_type__in=_REPLY_TYPES,
-    ).filter(Q(raw_data__thread_id=OuterRef("thread_id_value")) | Q(parent_external_id=OuterRef("external_id")))
+    return (
+        ReviewRecord.objects.filter(
+            source_id=OuterRef("source_id"),
+            product_id=OuterRef("product_id"),
+            record_type__in=_REPLY_TYPES,
+        )
+        .annotate(reply_thread_id=KeyTextTransform("thread_id", "raw_data"))
+        .filter(Q(reply_thread_id=OuterRef("thread_id_value")) | Q(parent_external_id=OuterRef("external_id")))
+    )
 
 
 def _count_subquery(queryset: QuerySet[ReviewRecord]) -> Subquery:
