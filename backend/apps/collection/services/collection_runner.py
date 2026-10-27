@@ -391,10 +391,16 @@ def run_collection(
             _finish_failed(task.id, run.id, message)
             raise
 
-    max_pages = _int_config(config, "max_topic_pages", 5, 10)
-    configured_threads = _int_config(config, "max_threads", 100, 200)
-    requested_limit = limit_override or task.requested_limit or configured_threads
-    max_threads = min(max(int(requested_limit), 1), configured_threads, 200)
+    if task.task_type == CollectionTaskType.FULL:
+        max_pages = _int_config(config, "full_max_topic_pages", 5000, 5000)
+        full_safety_threads = _int_config(config, "full_max_threads", 100000, 100000)
+        requested_limit = limit_override or task.requested_limit
+        max_threads = min(max(int(requested_limit), 1), full_safety_threads) if requested_limit else full_safety_threads
+    else:
+        max_pages = _int_config(config, "max_topic_pages", 5, 10)
+        configured_threads = _int_config(config, "max_threads", 100, 200)
+        requested_limit = limit_override or task.requested_limit or configured_threads
+        max_threads = min(max(int(requested_limit), 1), configured_threads, 200)
     checkpoint = dict(task.last_checkpoint or {}) if task.task_type == CollectionTaskType.FULL else {}
     start_page = int(checkpoint.get("topic_page", 1)) if task.task_type == CollectionTaskType.FULL else 1
     start_index = int(checkpoint.get("thread_index", 0)) if task.task_type == CollectionTaskType.FULL else 0
@@ -417,6 +423,24 @@ def run_collection(
             raw_topic = collector.fetch_page(topic_request)
             _request_log(task.id, source_target.source.code, topic_page, "", raw_topic.metadata)
             thread_links = collector.parse_records(raw_topic)
+            if not thread_links:
+                checkpoint = {"topic_page": topic_page, "thread_index": 0, "completed": True}
+                _save_progress(
+                    task.id,
+                    run.id,
+                    inserted=inserted,
+                    skipped=skipped,
+                    failed=failed,
+                    checkpoint=checkpoint,
+                    progress_stats={
+                        "new_threads": new_threads,
+                        "known_threads": known_threads,
+                        "new_records": inserted,
+                        "duplicate_records": duplicate_records,
+                        "stopped_at_known_boundary": stopped_at_known_boundary,
+                    },
+                )
+                break
             page_start_index = start_index if topic_page == start_page else 0
 
             for thread_index, thread_link in enumerate(thread_links[page_start_index:], start=page_start_index):

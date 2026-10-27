@@ -1,6 +1,7 @@
 """采集任务及单次运行记录。"""
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.common.models import TimeStampedModel
@@ -83,6 +84,29 @@ class CollectionTask(TimeStampedModel):
         if new_status not in ALLOWED_STATUS_TRANSITIONS.get(self.status, set()):
             raise ValidationError(f"采集任务不允许从 {self.status} 转换为 {new_status}")
         self.status = new_status
+
+
+class CollectionSchedule(TimeStampedModel):
+    source_target = models.OneToOneField(
+        SourceTarget,
+        on_delete=models.CASCADE,
+        related_name="collection_schedule",
+        verbose_name="采集入口",
+    )
+    enabled = models.BooleanField("启用", default=True)
+    interval_hours = models.PositiveSmallIntegerField(
+        "增量采集间隔（小时）",
+        default=6,
+        validators=(MinValueValidator(1), MaxValueValidator(168)),
+    )
+
+    class Meta:
+        ordering = ("source_target__product__name", "source_target__name")
+        verbose_name = "定时采集"
+        verbose_name_plural = verbose_name
+
+    def __str__(self) -> str:
+        return f"{self.source_target} / 每 {self.interval_hours} 小时"
 
 
 class CollectionRun(models.Model):

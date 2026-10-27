@@ -15,7 +15,7 @@ from apps.accounts.views import (
     me,
 )
 from apps.analysis.views import AnalysisBatchViewSet, AnalysisResultViewSet
-from apps.collection.views import CollectionTaskViewSet
+from apps.collection.views import CollectionScheduleViewSet, CollectionTaskViewSet
 from apps.common.views import health
 from apps.products.views import ProductViewSet
 from apps.reviews.views import ReviewQualityViewSet, ReviewRecordViewSet
@@ -26,6 +26,7 @@ router.register("users", UserViewSet, basename="user")
 router.register("products", ProductViewSet, basename="product")
 router.register("sources", DataSourceViewSet, basename="source")
 router.register("collection-tasks", CollectionTaskViewSet, basename="collection-task")
+router.register("collection-schedules", CollectionScheduleViewSet, basename="collection-schedule")
 router.register("reviews", ReviewRecordViewSet, basename="review")
 router.register("review-quality", ReviewQualityViewSet, basename="review-quality")
 router.register("analysis-results", AnalysisResultViewSet, basename="analysis-result")

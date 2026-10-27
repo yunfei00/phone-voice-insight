@@ -4,10 +4,10 @@ from rest_framework.decorators import action
 from rest_framework.mixins import CreateModelMixin, ListModelMixin, RetrieveModelMixin
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.viewsets import GenericViewSet
+from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
-from apps.collection.models import CollectionStatus, CollectionTask
-from apps.collection.serializers import CollectionTaskSerializer
+from apps.collection.models import CollectionSchedule, CollectionStatus, CollectionTask
+from apps.collection.serializers import CollectionScheduleSerializer, CollectionTaskSerializer
 from apps.collection.tasks import run_collection_task
 
 
@@ -53,3 +53,17 @@ class CollectionTaskViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+class CollectionScheduleViewSet(ModelViewSet):
+    queryset = CollectionSchedule.objects.select_related(
+        "source_target__source",
+        "source_target__product",
+    )
+    serializer_class = CollectionScheduleSerializer
+    filterset_fields = ("enabled", "source_target", "source_target__source", "source_target__product")
+
+    def perform_destroy(self, instance: CollectionSchedule) -> None:
+        from apps.collection.services.schedule_service import delete_collection_schedule
+        delete_collection_schedule(instance)
+        super().perform_destroy(instance)
