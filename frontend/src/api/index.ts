@@ -7,6 +7,7 @@ import type {
   AnalysisEvaluation,
   AnalysisResult,
   AnalysisSummary,
+  CollectionSchedule,
   CollectionTask,
   CollectionTaskRunResponse,
   DataQualitySummary,
@@ -90,6 +91,20 @@ export const getCollectionTask = async (taskId: number): Promise<CollectionTask>
 
 export const runCollectionTask = async (taskId: number): Promise<CollectionTaskRunResponse> =>
   (await apiClient.post<CollectionTaskRunResponse>(`/collection-tasks/${taskId}/run/`)).data
+
+export const getCollectionSchedules = async (): Promise<PaginatedResponse<CollectionSchedule>> =>
+  (
+    await apiClient.get<PaginatedResponse<CollectionSchedule>>('/collection-schedules/', {
+      params: { page_size: 100 },
+    })
+  ).data
+
+export const saveCollectionSchedule = async (payload: {
+  source_target: number
+  enabled: boolean
+  interval_hours: number
+}): Promise<CollectionSchedule> =>
+  (await apiClient.post<CollectionSchedule>('/collection-schedules/', payload)).data
 
 export const getReviews = async (
   params: PageParams = {},

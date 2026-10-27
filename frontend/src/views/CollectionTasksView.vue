@@ -3,14 +3,17 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import {
   createCollectionTask,
+  getCollectionSchedules,
   getCollectionTask,
   getCollectionTasks,
   getProducts,
   getSources,
   runCollectionTask,
+  saveCollectionSchedule,
 } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import type {
+  CollectionSchedule,
   CollectionStatus,
   CollectionTask,
   DataSource,
@@ -19,12 +22,20 @@ import type {
 } from '@/types/api'
 
 const tasks = ref<CollectionTask[]>([])
+const schedules = ref<CollectionSchedule[]>([])
 const auth = useAuthStore()
 const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const submitting = ref(false)
+const scheduleDialogVisible = ref(false)
+const scheduleSubmitting = ref(false)
+const scheduleTarget = ref<CollectionTask | null>(null)
+const scheduleForm = reactive({
+  enabled: true,
+  interval_hours: 6,
+})
 const runningTaskIds = ref(new Set<number>())
 const selected = ref<CollectionTask | null>(null)
 const error = ref('')
@@ -64,12 +75,14 @@ async function loadData(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    const [taskPage, productPage, sourcePage] = await Promise.all([
+    const [taskPage, schedulePage, productPage, sourcePage] = await Promise.all([
       getCollectionTasks({ page_size: 100 }),
+      getCollectionSchedules(),
       getProducts({ page_size: 100 }),
       getSources({ page_size: 100 }),
     ])
     tasks.value = taskPage.results
+    schedules.value = schedulePage.results
     products.value = productPage.results
     sources.value = sourcePage.results
   } catch {
@@ -141,6 +154,33 @@ function handleSourceChange(): void {
   }
 }
 
+function openSchedule(task: CollectionTask): void {
+  scheduleTarget.value = task
+  const existing = schedules.value.find((item) => item.source_target === task.source_target)
+  scheduleForm.enabled = existing?.enabled ?? true
+  scheduleForm.interval_hours = existing?.interval_hours ?? 6
+  scheduleDialogVisible.value = true
+}
+
+async function submitSchedule(): Promise<void> {
+  if (!scheduleTarget.value) return
+  scheduleSubmitting.value = true
+  error.value = ''
+  try {
+    await saveCollectionSchedule({
+      source_target: scheduleTarget.value.source_target,
+      enabled: scheduleForm.enabled,
+      interval_hours: scheduleForm.interval_hours,
+    })
+    scheduleDialogVisible.value = false
+    await loadData()
+  } catch {
+    error.value = '定时采集保存失败。'
+  } finally {
+    scheduleSubmitting.value = false
+  }
+}
+
 async function submitTask(): Promise<void> {
   if (!form.product || !form.source || !form.source_target) {
     error.value = '请选择产品、数据来源和采集目标。'
@@ -151,7 +191,9 @@ async function submitTask(): Promise<void> {
     await createCollectionTask({
       source_target: form.source_target,
       task_type: form.task_type,
-      requested_limit: form.requested_limit,
+      ...(form.task_type === 'FULL' && selectedSourceCode.value === 'HONOR_CLUB'
+        ? {}
+        : { requested_limit: form.requested_limit }),
     })
     dialogVisible.value = false
     await refreshTasks()
@@ -171,7 +213,7 @@ onUnmounted(stopPolling)
     <div class="page-header">
       <div>
         <h1 class="page-title">采集任务</h1>
-        <p class="page-description">创建任务、执行受限采集并查看分页 checkpoint。</p>
+        <p class="page-description">首次可全量采集，之后可按小时自动执行增量采集。</p>
       </div>
       <div class="header-actions">
         <el-button :loading="loading" @click="refreshTasks">刷新</el-button>
@@ -181,13 +223,31 @@ onUnmounted(stopPolling)
       </div>
     </div>
     <el-alert
-      title="Phase 4 扩容保持单并发和至少 3 秒请求间隔；京东已暂缓且采集入口保持停用。"
+      title="荣耀全量任务会持续翻页直到没有帖子；自动任务只执行增量采集，并保持至少 3 秒请求间隔。"
       type="info"
       show-icon
       :closable="false"
       class="notice"
     />
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
+    <div v-if="schedules.length" class="panel schedule-panel">
+      <h2>自动增量采集</h2>
+      <el-table :data="schedules">
+        <el-table-column prop="product_name" label="产品" min-width="150" />
+        <el-table-column prop="source_name" label="来源" width="130" />
+        <el-table-column prop="target_name" label="目标" min-width="180" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }: { row: CollectionSchedule }">
+            <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="频率" width="140">
+          <template #default="{ row }: { row: CollectionSchedule }">每 {{ row.interval_hours }} 小时</template>
+        </el-table-column>
+        <el-table-column prop="updated_at" label="更新时间" min-width="170" />
+      </el-table>
+    </div>
+
     <div class="panel">
       <el-table v-loading="loading" :data="tasks" empty-text="暂无采集任务">
         <el-table-column prop="id" label="ID" width="75" />
@@ -213,7 +273,7 @@ onUnmounted(stopPolling)
           min-width="190"
           show-overflow-tooltip
         />
-        <el-table-column label="操作" width="165" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }: { row: CollectionTask }">
             <el-button link type="primary" @click="selected = row">详情</el-button>
             <el-button
@@ -223,6 +283,9 @@ onUnmounted(stopPolling)
               :loading="runningTaskIds.has(row.id)"
               @click="executeTask(row)"
               >执行</el-button
+            >
+            <el-button link type="warning" :disabled="!auth.canWrite" @click="openSchedule(row)"
+              >定时</el-button
             >
           </template>
         </el-table-column>
@@ -284,10 +347,20 @@ onUnmounted(stopPolling)
             <el-radio value="FULL">全量</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="最多采集条数">
+        <el-form-item
+          v-if="form.task_type !== 'FULL' || selectedSourceCode !== 'HONOR_CLUB'"
+          label="最多采集条数"
+        >
           <el-input-number v-model="form.requested_limit" :min="1" :max="requestedLimitMax" />
-          <small class="hint">荣耀单任务硬上限 200 个帖子；京东暂未启用。</small>
+          <small class="hint">增量采集默认最多 200 个帖子；京东暂未启用。</small>
         </el-form-item>
+        <el-alert
+          v-else
+          title="全量采集会持续翻页直到话题页没有帖子；失败后保留 checkpoint，可继续执行。"
+          type="info"
+          :closable="false"
+          show-icon
+        />
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -298,6 +371,26 @@ onUnmounted(stopPolling)
           @click="submitTask"
           >创建</el-button
         >
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="scheduleDialogVisible" title="定时增量采集" width="min(460px, 92vw)">
+      <el-form label-position="top">
+        <el-form-item label="采集目标">
+          <strong>{{ scheduleTarget?.product_name }} / {{ scheduleTarget?.target_name }}</strong>
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="scheduleForm.enabled" />
+        </el-form-item>
+        <el-form-item label="执行频率">
+          <el-input-number v-model="scheduleForm.interval_hours" :min="1" :max="168" />
+          <span class="schedule-unit">小时</span>
+        </el-form-item>
+        <small class="hint">每次自动执行增量任务；连续遇到 20 个已知帖子后会自动停止本轮。</small>
+      </el-form>
+      <template #footer>
+        <el-button @click="scheduleDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="scheduleSubmitting" @click="submitSchedule">保存</el-button>
       </template>
     </el-dialog>
 
@@ -343,6 +436,18 @@ onUnmounted(stopPolling)
 <style scoped>
 .notice {
   margin-bottom: 16px;
+}
+
+.schedule-panel {
+  margin-bottom: 16px;
+}
+
+.schedule-panel h2 {
+  margin-top: 0;
+}
+
+.schedule-unit {
+  margin-left: 8px;
 }
 
 .full-width {

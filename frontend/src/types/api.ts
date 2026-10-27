@@ -147,6 +147,18 @@ export interface CollectionTaskRunResponse {
   celery_task_id: string
 }
 
+export interface CollectionSchedule {
+  id: number
+  source_target: number
+  source_name: string
+  product_name: string
+  target_name: string
+  enabled: boolean
+  interval_hours: number
+  created_at: string
+  updated_at: string
+}
+
 export interface ReviewRecord {
   id: number
   source: number
