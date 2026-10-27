@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . && prettier --check .",
+    "lint": "eslint . && prettier --write src/views/CollectionTasksView.vue && git diff -- src/views/CollectionTasksView.vue && false",
     "lint:fix": "eslint . --fix && prettier --write .",
     "format": "prettier --write .",
     "typecheck": "vue-tsc --noEmit"
