@@ -15,8 +15,8 @@ class Migration(migrations.Migration):
             name="CollectionSchedule",
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("created_at", models.DateTimeField(auto_now_add=True)),
-                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True, verbose_name="创建时间")),
+                ("updated_at", models.DateTimeField(auto_now=True, verbose_name="更新时间")),
                 ("enabled", models.BooleanField(default=True, verbose_name="启用")),
                 (
                     "interval_hours",
@@ -26,7 +26,7 @@ class Migration(migrations.Migration):
                             django.core.validators.MinValueValidator(1),
                             django.core.validators.MaxValueValidator(168),
                         ],
-                        verbose_name="增量采集间隔（小时）",
+                        verbose_name="增量采集间隔(小时)",
                     ),
                 ),
                 (
@@ -46,4 +46,3 @@ class Migration(migrations.Migration):
             },
         ),
     ]
-}
