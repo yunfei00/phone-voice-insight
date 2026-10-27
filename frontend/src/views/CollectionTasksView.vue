@@ -191,9 +191,7 @@ async function submitTask(): Promise<void> {
     await createCollectionTask({
       source_target: form.source_target,
       task_type: form.task_type,
-      ...(form.task_type === 'FULL' && selectedSourceCode.value === 'HONOR_CLUB'
-        ? {}
-        : { requested_limit: form.requested_limit }),
+      ...(form.task_type === 'FULL' ? {} : { requested_limit: form.requested_limit }),
     })
     dialogVisible.value = false
     await refreshTasks()
@@ -351,10 +349,7 @@ onUnmounted(stopPolling)
             <el-radio value="FULL">全量</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item
-          v-if="form.task_type !== 'FULL' || selectedSourceCode !== 'HONOR_CLUB'"
-          label="最多采集条数"
-        >
+        <el-form-item v-if="form.task_type !== 'FULL'" label="最多采集条数">
           <el-input-number v-model="form.requested_limit" :min="1" :max="requestedLimitMax" />
           <small class="hint">增量采集默认最多 200 个帖子；京东暂未启用。</small>
         </el-form-item>

@@ -80,6 +80,11 @@ class CollectionTaskSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("不能为停用的采集入口创建任务")
         return value
 
+    def validate(self, attrs: dict) -> dict:
+        if attrs.get("task_type") == "FULL":
+            attrs["requested_limit"] = None
+        return attrs
+
 
 class CollectionScheduleSerializer(serializers.ModelSerializer):
     source_target = serializers.PrimaryKeyRelatedField(queryset=SourceTarget.objects.all(), validators=[])
