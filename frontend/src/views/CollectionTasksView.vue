@@ -288,11 +288,7 @@ onUnmounted(stopPolling)
               @click="executeTask(row)"
               >执行</el-button
             >
-            <el-button
-              link
-              type="warning"
-              :disabled="!auth.canWrite"
-              @click="openSchedule(row)"
+            <el-button link type="warning" :disabled="!auth.canWrite" @click="openSchedule(row)"
               >定时</el-button
             >
           </template>
@@ -382,11 +378,7 @@ onUnmounted(stopPolling)
       </template>
     </el-dialog>
 
-    <el-dialog
-      v-model="scheduleDialogVisible"
-      title="定时增量采集"
-      width="min(460px, 92vw)"
-    >
+    <el-dialog v-model="scheduleDialogVisible" title="定时增量采集" width="min(460px, 92vw)">
       <el-form label-position="top">
         <el-form-item label="采集目标">
           <strong>{{ scheduleTarget?.product_name }} / {{ scheduleTarget?.target_name }}</strong>
@@ -398,9 +390,7 @@ onUnmounted(stopPolling)
           <el-input-number v-model="scheduleForm.interval_hours" :min="1" :max="168" />
           <span class="schedule-unit">小时</span>
         </el-form-item>
-        <small class="hint"
-          >每次自动执行增量任务；连续遇到 20 个已知帖子后会自动停止本轮。</small
-        >
+        <small class="hint">每次自动执行增量任务；连续遇到 20 个已知帖子后会自动停止本轮。</small>
       </el-form>
       <template #footer>
         <el-button @click="scheduleDialogVisible = false">取消</el-button>

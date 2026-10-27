@@ -95,7 +95,7 @@ class CollectionSchedule(TimeStampedModel):
     )
     enabled = models.BooleanField("启用", default=True)
     interval_hours = models.PositiveSmallIntegerField(
-        "增量采集间隔（小时）",
+        "增量采集间隔(小时)",
         default=6,
         validators=(MinValueValidator(1), MaxValueValidator(168)),
     )
