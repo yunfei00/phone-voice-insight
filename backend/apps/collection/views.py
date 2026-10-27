@@ -65,5 +65,6 @@ class CollectionScheduleViewSet(ModelViewSet):
 
     def perform_destroy(self, instance: CollectionSchedule) -> None:
         from apps.collection.services.schedule_service import delete_collection_schedule
+
         delete_collection_schedule(instance)
         super().perform_destroy(instance)

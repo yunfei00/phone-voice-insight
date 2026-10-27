@@ -114,6 +114,7 @@ class CollectionScheduleSerializer(serializers.ModelSerializer):
             defaults=validated_data,
         )
         from apps.collection.services.schedule_service import sync_collection_schedule
+
         sync_collection_schedule(schedule)
         return schedule
 
@@ -122,5 +123,6 @@ class CollectionScheduleSerializer(serializers.ModelSerializer):
             setattr(instance, name, value)
         instance.save()
         from apps.collection.services.schedule_service import sync_collection_schedule
+
         sync_collection_schedule(instance)
         return instance
