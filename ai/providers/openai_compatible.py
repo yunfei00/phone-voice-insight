@@ -136,6 +136,7 @@ class OpenAICompatibleProvider(AIProvider):
                 json=request_payload,
                 timeout=self.timeout_seconds,
                 follow_redirects=False,
+                trust_env=False,
             )
         except httpx.TimeoutException as exc:
             raise AIProviderError("AI_TIMEOUT", "AI request timed out", retriable=True) from exc
