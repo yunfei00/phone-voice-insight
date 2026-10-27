@@ -33,12 +33,17 @@ def test_thread_page_extracts_thread_reply_time_and_device() -> None:
         fixture("thread_page.html"),
         thread_id="10001",
         thread_url="https://club.honor.com/cn/thread-10001-1-1.html",
-        listing_data={"title": "荣耀Power2 续航体验", "topic_tags": ["#荣耀Power2#"]},
+        listing_data={
+            "title": "荣耀Power2 续航体验",
+            "topic_tags": ["#荣耀Power2#"],
+            "latest_reply_time": "2026-08-10 12:30",
+        },
     )
 
     assert [record.record_type for record in records] == ["THREAD", "REPLY"]
     assert "真实楼主正文" in records[0].payload["content"]
     assert records[0].payload["raw_data"]["device_source"] == "荣耀Power2"
+    assert records[0].payload["raw_data"]["latest_reply_time"] == "2026-08-10 12:30"
     assert records[1].external_id == "honor_post:20001"
     assert records[1].payload["parent_external_id"] == "thread:10001"
     assert records[1].payload["published_at"].year == 2026

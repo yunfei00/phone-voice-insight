@@ -3,6 +3,7 @@
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
+from django.db.models.fields.json import KeyTextTransform
 
 from apps.common.models import TimeStampedModel
 from apps.products.models import Product, ProductVariant
@@ -120,6 +121,8 @@ class ReviewRecord(TimeStampedModel):
         indexes = [
             models.Index(fields=("source", "record_type", "published_at"), name="review_source_type_time"),
             models.Index(fields=("product", "published_at"), name="review_product_time"),
+            models.Index(fields=("record_type", "parent_external_id"), name="review_type_parent"),
+            models.Index(KeyTextTransform("thread_id", "raw_data"), name="review_raw_thread"),
         ]
         verbose_name = "反馈记录"
         verbose_name_plural = verbose_name

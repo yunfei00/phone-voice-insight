@@ -19,6 +19,8 @@ import type {
   PersonalAIConfiguration,
   Product,
   SamplePreview,
+  ThreadDetail,
+  ThreadPage,
   ReviewQuality,
   ReviewRecord,
   UserAccount,
@@ -110,6 +112,12 @@ export const getReviews = async (
   params: PageParams = {},
 ): Promise<PaginatedResponse<ReviewRecord>> =>
   (await apiClient.get<PaginatedResponse<ReviewRecord>>('/reviews/', { params })).data
+
+export const getThreadTrees = async (params: PageParams = {}): Promise<ThreadPage> =>
+  (await apiClient.get<ThreadPage>('/thread-trees/', { params })).data
+
+export const getThreadTree = async (threadId: number): Promise<ThreadDetail> =>
+  (await apiClient.get<ThreadDetail>(`/thread-trees/${threadId}/`)).data
 
 export const getReviewQualities = async (
   params: PageParams = {},

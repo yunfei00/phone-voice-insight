@@ -19,6 +19,14 @@ vi.mock('@/api', () => ({
   getProducts: vi.fn().mockResolvedValue({ count: 1, results: [] }),
   getSources: vi.fn().mockResolvedValue({ count: 2, results: [] }),
   getReviews: vi.fn().mockResolvedValue({ count: 0, results: [] }),
+  getThreadTrees: vi.fn().mockResolvedValue({
+    count: 0,
+    next: null,
+    previous: null,
+    total_threads: 0,
+    matched_reply_count: 0,
+    results: [],
+  }),
   getCollectionTasks: vi.fn().mockResolvedValue({ count: 0, results: [] }),
   getAnalysisSummary: vi.fn().mockResolvedValue({
     eligible_corpus: 98,
@@ -80,6 +88,7 @@ const expectedNavigationLabels = [
   '数据总览',
   '手机产品',
   '采集任务',
+  '帖子视图',
   '原始反馈',
   '数据质量',
   'AI分析',
@@ -134,7 +143,7 @@ describe('App', () => {
       (item) => item.textContent?.trim(),
     )
     expect(navigationLabels).toEqual(expectedNavigationLabels)
-    expect(new Set(navigationLabels).size).toBe(8)
+    expect(new Set(navigationLabels).size).toBe(9)
     expect(container.querySelector('.el-menu--collapse')).toBeNull()
     expect(container.querySelector('.brand-copy')).not.toBeNull()
 
@@ -153,8 +162,8 @@ describe('App', () => {
     expect(container.querySelector('.sidebar')?.classList.contains('collapsed')).toBe(true)
     expect(container.querySelector('.nav-menu')?.classList.contains('el-menu--collapse')).toBe(true)
     expect(container.querySelector('.brand-copy')).toBeNull()
-    expect(container.querySelectorAll('.nav-menu .el-menu-item')).toHaveLength(8)
-    expect(container.querySelectorAll('.nav-menu .el-menu-item .el-icon')).toHaveLength(8)
+    expect(container.querySelectorAll('.nav-menu .el-menu-item')).toHaveLength(9)
+    expect(container.querySelectorAll('.nav-menu .el-menu-item .el-icon')).toHaveLength(9)
     expect(collapseButton?.getAttribute('aria-label')).toBe('展开菜单')
     expect(collapseButton?.textContent?.trim()).toBe('')
     expect(window.localStorage.getItem('pvi.sidebar.collapsed')).toBe('true')

@@ -182,6 +182,51 @@ export interface ReviewRecord {
   status: string
 }
 
+export interface ThreadSummary {
+  id: number
+  external_id: string | null
+  product: number
+  product_name: string
+  source: number
+  source_name: string
+  title: string
+  content: string
+  published_at: string | null
+  latest_reply_at: string | null
+  activity_at: string | null
+  reply_count: number | null
+  collected_reply_count: number
+  view_count: number | null
+  like_count: number | null
+  source_url: string
+  thread_match: boolean
+  reply_match_count: number
+}
+
+export interface ThreadReply {
+  id: number
+  external_id: string | null
+  parent_external_id: string
+  record_type: 'REPLY' | 'OFFICIAL_REPLY'
+  content: string
+  published_at: string | null
+  author_role: string
+  is_official: boolean
+  source_url: string
+  unresolved_parent: boolean
+  children: ThreadReply[]
+}
+
+export interface ThreadDetail {
+  thread: ThreadSummary
+  replies: ThreadReply[]
+}
+
+export interface ThreadPage extends PaginatedResponse<ThreadSummary> {
+  total_threads: number
+  matched_reply_count: number
+}
+
 export interface DashboardMetrics {
   threads: number
   replies: number

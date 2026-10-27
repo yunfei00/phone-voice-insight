@@ -315,6 +315,7 @@ def parse_thread_page(
                 view_count=listing_data.get("view_count"),
                 reply_count=listing_data.get("reply_count"),
                 like_count=listing_data.get("like_count"),
+                latest_reply_time=listing_data.get("latest_reply_time"),
                 has_image=image_count > 0,
                 image_count=image_count,
             ),

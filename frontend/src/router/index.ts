@@ -41,6 +41,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '采集任务' },
       },
       {
+        path: 'threads',
+        name: 'threads',
+        component: () => import('@/views/ThreadsView.vue'),
+        meta: { title: '帖子视图' },
+      },
+      {
         path: 'reviews',
         name: 'reviews',
         component: () => import('@/views/ReviewsView.vue'),

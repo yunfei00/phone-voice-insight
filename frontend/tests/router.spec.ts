@@ -10,6 +10,7 @@ describe('router', () => {
         'dashboard',
         'products',
         'collection-tasks',
+        'threads',
         'reviews',
         'data-quality',
         'analysis',
