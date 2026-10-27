@@ -68,7 +68,7 @@ module = ["config.settings.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["celery", "celery.*", "django_filters", "django_filters.*"]
+module = ["celery", "celery.*", "django_filters", "django_filters.*", "django_celery_beat", "django_celery_beat.*"]
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 

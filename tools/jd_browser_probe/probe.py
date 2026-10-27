@@ -164,8 +164,8 @@ def _wait_for_enter(context: BrowserContext, initial_page: Page) -> None:
             page = _active_page(context, initial_page)
             if page is None:
                 return
-            if msvcrt.kbhit():
-                character = msvcrt.getwch()
+            if msvcrt.kbhit():  # type: ignore[attr-defined]
+                character = msvcrt.getwch()  # type: ignore[attr-defined]
                 if character in {"\r", "\n"}:
                     print()
                     return
