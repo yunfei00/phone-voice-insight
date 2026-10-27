@@ -15,3 +15,10 @@ __all__ = (
     "ReviewAnalysisInput",
     "ReviewAnalysisOutput",
 )
+from ai.schemas.structured_analysis import (
+    SCHEMA_VERSION,
+    OpinionAspectPayload,
+    StructuredAnalysisPayload,
+)
+
+__all__ = ["SCHEMA_VERSION", "OpinionAspectPayload", "StructuredAnalysisPayload"]
