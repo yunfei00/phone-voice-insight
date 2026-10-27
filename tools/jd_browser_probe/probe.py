@@ -11,7 +11,7 @@ import sys
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 from urllib.parse import urlparse
 
 from playwright.sync_api import BrowserContext, Error, Frame, Page, Request, Response, sync_playwright
@@ -38,6 +38,12 @@ GENERATED_FILES = (
     "sanitized-sample.json",
     "discovery-report.json",
 )
+
+
+class _WindowsConsole(Protocol):
+    def kbhit(self) -> bool: ...
+
+    def getwch(self) -> str: ...
 
 
 @dataclass
@@ -160,12 +166,13 @@ def _wait_for_enter(context: BrowserContext, initial_page: Page) -> None:
     if os.name == "nt":
         import msvcrt
 
+        console = cast(_WindowsConsole, msvcrt)
         while True:
             page = _active_page(context, initial_page)
             if page is None:
                 return
-            if msvcrt.kbhit():
-                character = msvcrt.getwch()
+            if console.kbhit():
+                character = console.getwch()
                 if character in {"\r", "\n"}:
                     print()
                     return
