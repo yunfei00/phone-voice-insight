@@ -615,3 +615,50 @@ def test_user_ai_generated_sentence_is_not_removed_by_boilerplate_cleaner(
     GovernanceProcessor().process(review, persist=True, force=True)
 
     assert ReviewQuality.objects.get(review=review).normalized_text == raw
+
+
+@pytest.mark.django_db
+def test_manual_governance_batch_requires_admin_and_defaults_to_preview(
+    api_client: APIClient,
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+) -> None:
+    from django.contrib.auth import get_user_model
+
+    review = make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id="honor_thread:batch-preview",
+        content="荣耀Power2续航很好",
+    )
+    url = "/api/v1/review-quality/process-batch/"
+    payload = {"product_id": product.id, "limit": 20}
+    unauthenticated = api_client.post(url, payload, format="json")
+    assert unauthenticated.status_code in (401, 403)
+
+    user_model = get_user_model()
+    admin = user_model.objects.create_superuser(
+        username="governance_batch_admin", password="test-password-123"
+    )
+    api_client.force_authenticate(user=admin)
+    preview = api_client.post(url, payload, format="json")
+    assert preview.status_code == 200
+    assert preview.data["dry_run"] is True
+    assert preview.data["processed_review_ids"] == [review.id]
+    assert ReviewQuality.objects.count() == 0
+    assert AnalysisCorpusItem.objects.count() == 0
+
+    invalid = api_client.post(url, {**payload, "limit": 101}, format="json")
+    assert invalid.status_code == 400
+
+    executed = api_client.post(url, {**payload, "dry_run": False}, format="json")
+    assert executed.status_code == 200
+    assert ReviewQuality.objects.count() == 1
+    assert AnalysisCorpusItem.objects.count() == 1
+
+    repeated = api_client.post(url, {**payload, "dry_run": False}, format="json")
+    assert repeated.status_code == 200
+    assert ReviewQuality.objects.count() == 1
+    assert AnalysisCorpusItem.objects.count() == 1
