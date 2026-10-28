@@ -18,6 +18,7 @@ const filters = reactive({
   product_variant: undefined as number | undefined,
   rating: undefined as number | undefined,
   search: '',
+  source_region: '',
   record_type: '',
   author_role: '',
   is_official: '' as '' | 'true' | 'false',
@@ -37,11 +38,12 @@ async function loadReviews(): Promise<void> {
       record_type: filters.record_type || undefined,
       author_role: filters.author_role || undefined,
       search: filters.search || undefined,
+      source_region: filters.source_region || undefined,
     })
     reviews.value = response.results
     total.value = response.count
   } catch {
-    error.value = '原始反馈加载失败。'
+    error.value = '原始数据加载失败。'
   } finally {
     loading.value = false
   }
@@ -70,8 +72,8 @@ onMounted(async () => {
   <div>
     <div class="page-header">
       <div>
-        <h1 class="page-title">原始反馈</h1>
-        <p class="page-description">统一查看评价、追评、帖子、回复和官方回复。</p>
+        <h1 class="page-title">原始数据</h1>
+
       </div>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
@@ -98,6 +100,7 @@ onMounted(async () => {
             :value="variant.id"
           />
         </el-select>
+        <el-input v-model="filters.source_region" clearable placeholder="来源地域（精确匹配）" @keyup.enter="applyFilters"><template #append><el-button @click="applyFilters">筛选</el-button></template></el-input>
         <el-select v-model="filters.rating" clearable placeholder="评分" @change="applyFilters">
           <el-option
             v-for="rating in [5, 4, 3, 2, 1, 0]"
@@ -153,6 +156,7 @@ onMounted(async () => {
       >
         <el-table-column prop="source_name" label="来源" width="120" />
         <el-table-column prop="product_name" label="产品" width="150" />
+        <el-table-column label="来源地域" width="130"><template #default="{ row }">{{ row.source_region || "未知" }}</template></el-table-column>
         <el-table-column prop="record_type" label="类型" width="130" />
         <el-table-column prop="variant_name" label="产品版本" min-width="170" />
         <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip />
@@ -184,6 +188,8 @@ onMounted(async () => {
       <template v-if="selected">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="来源">{{ selected.source_name }}</el-descriptions-item>
+          <el-descriptions-item label="来源地域">{{ selected.source_region || "未知" }}</el-descriptions-item>
+          <el-descriptions-item label="地域依据">{{ selected.region_evidence || "未提供" }}</el-descriptions-item>
           <el-descriptions-item label="产品">{{ selected.product_name }}</el-descriptions-item>
           <el-descriptions-item label="类型">{{ selected.record_type }}</el-descriptions-item>
           <el-descriptions-item label="评分">{{ selected.rating || '—' }}</el-descriptions-item>
