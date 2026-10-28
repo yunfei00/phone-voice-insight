@@ -5,6 +5,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import {
   getCollectionTargets,
   recoverStaleCollectionTask,
+  stopCollectionTask,
   createCollectionTask,
   runCollectionTask,
   getCollectionTasks,
@@ -51,6 +52,7 @@ const statusType: Record<CollectionStatus, 'info' | 'primary' | 'warning' | 'suc
     SUCCESS: 'success',
     FAILED: 'danger',
     CANCELLED: 'info',
+    STOPPING: 'warning',
   }
 const triggerLabels: Record<CollectionTask['trigger_type'], string> = {
   MANUAL: '手工',
@@ -79,6 +81,7 @@ function currentStatus(target: CollectionTargetState): string {
   if (target.active_task_status === 'PENDING') return '等待执行'
   if (target.active_task_status === 'RUNNING') return staleTask(target) ? '采集可能卡住' : '采集中'
   if (target.active_task_status === 'PAUSED') return '已暂停'
+  if (target.active_task_status === 'STOPPING') return '正在停止'
   if (target.status === 'DEGRADED') return '最近运行异常'
   return '空闲'
 }
@@ -205,6 +208,21 @@ async function submitNewTask(): Promise<void> {
   } finally {
     newTaskSubmitting.value = false
   }
+}
+
+async function stopActive(target: CollectionTargetState): Promise<void> {
+  if (!target.active_task) return
+  try {
+    await ElMessageBox.confirm('停止当前采集？已入库的数据将保留。', '停止采集', {
+      type: 'warning', confirmButtonText: '停止采集', cancelButtonText: '返回',
+    })
+  } catch { return }
+  try {
+    const result = await stopCollectionTask(target.active_task)
+    ElMessage.info(result.status === 'CANCELLED' ? '待执行任务已取消' : '已请求停止，等待当前采集步骤安全结束')
+    await loadTargets(true)
+    startPolling()
+  } catch { ElMessage.error('停止请求失败，请检查任务状态或管理员权限') }
 }
 
 async function recoverStale(target: CollectionTargetState): Promise<void> {
@@ -338,6 +356,10 @@ onUnmounted(stopPolling)
             :closable="false"
             title="任务超过 10 分钟未更新，可能卡住或 Worker 已停止；请检查任务详情与 Worker 日志，暂勿重复创建任务。"
           /><el-button size="small" @click="openHistory(target)">查看任务详情</el-button
+          ><el-button
+            v-if="auth.canWrite && ['PENDING', 'RUNNING', 'PAUSED'].includes(activeTask(target)?.status || target.active_task_status || '')"
+            size="small" type="danger" plain @click="stopActive(target)"
+            >停止采集</el-button
           ><el-button
             v-if="staleTask(target) && auth.canWrite"
             size="small"
