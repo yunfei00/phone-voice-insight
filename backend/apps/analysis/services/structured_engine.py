@@ -5,12 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from functools import lru_cache
 from pathlib import Path
 
 from ai.providers import AIProvider, AIProviderError
 from ai.schemas.review_analysis import ReviewAnalysisInput
 from ai.schemas.structured_analysis import SCHEMA_VERSION, StructuredAnalysisPayload
-from ai.taxonomy import TAXONOMY_VERSION
+from ai.taxonomy import TAXONOMY_VERSION, load_taxonomy
 from ai.validation import StructuredValidationResult, validate_structured_payload
 from django.conf import settings
 from django.db import transaction
@@ -28,8 +29,24 @@ PROMPT_PATH = next((path for path in _PROMPT_CANDIDATES if path.is_file()), _PRO
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL | re.IGNORECASE)
 
 
+@lru_cache(maxsize=1)
 def _prompt() -> str:
-    return PROMPT_PATH.read_text(encoding="utf-8")
+    base_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+    taxonomy = load_taxonomy()
+    allowed_tags = {
+        domain.tag_id: [child.tag_id for child in domain.children if child.enabled]
+        for domain in taxonomy.domains
+        if domain.enabled
+    }
+    schema = StructuredAnalysisPayload.model_json_schema()
+    return (
+        f"{base_prompt}\n\n"
+        "## 本次必须遵循的完整 JSON Schema\n"
+        f"{json.dumps(schema, ensure_ascii=False, separators=(',', ':'))}\n\n"
+        "## 允许使用的一级标签与二级标签\n"
+        f"{json.dumps(allowed_tags, ensure_ascii=False, separators=(',', ':'))}\n"
+        "必须输出 Schema 顶层全部字段; aspects 中每个对象也必须输出全部必填字段。"
+    )
 
 
 def _provider_input(review: ReviewRecord) -> ReviewAnalysisInput:

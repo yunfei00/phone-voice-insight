@@ -45,10 +45,13 @@ class TimeoutProvider(StructuredProvider):
 
 
 def test_structured_prompt_exists() -> None:
-    from apps.analysis.services.structured_engine import _PROMPT_CANDIDATES, PROMPT_PATH
+    from apps.analysis.services.structured_engine import _PROMPT_CANDIDATES, PROMPT_PATH, _prompt
 
     assert PROMPT_PATH.is_file(), f"Structured analysis prompt missing: {PROMPT_PATH}"
     assert PROMPT_PATH in _PROMPT_CANDIDATES
+    rendered = _prompt()
+    assert '"overall_sentiment"' in rendered
+    assert '"BAT"' in rendered
 
 
 def payload(text: str) -> dict[str, Any]:
