@@ -40,10 +40,10 @@ class AutomaticPipelineResult:
 
 
 def _automation_configuration() -> UserAIConfiguration | None:
-    configurations = UserAIConfiguration.objects.select_related("user", "user__profile").filter(
-        is_active=True,
-        user__is_active=True,
-        user__profile__role__in=(UserRole.ADMIN, UserRole.ANALYST),
+    configurations = (
+        UserAIConfiguration.objects.select_related("user", "user__profile")
+        .filter(is_active=True, user__is_active=True)
+        .filter(Q(user__is_superuser=True) | Q(user__profile__role__in=(UserRole.ADMIN, UserRole.ANALYST)))
     )
     for configuration in configurations.order_by("user__profile__role", "user_id"):
         if configuration.is_configured:

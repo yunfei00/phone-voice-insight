@@ -48,8 +48,8 @@ def test_automatic_pipeline_queues_only_accepted_content(
     settings: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    user = django_user_model.objects.create_user(username="automatic-admin", password="test-pass")
-    UserProfile.objects.create(user=user, role=UserRole.ADMIN)
+    # Existing deployments may have a legacy Django superuser without a UserProfile row.
+    user = django_user_model.objects.create_superuser(username="automatic-admin", password="test-pass")
     UserAIConfiguration.objects.create(
         user=user,
         provider=AIProviderName.FAKE,
