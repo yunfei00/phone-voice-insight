@@ -4,6 +4,9 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import {
   getCollectionTargets,
+  getProducts,
+  getSources,
+  createSourceTarget,
   recoverStaleCollectionTask,
   stopCollectionTask,
   createCollectionTask,
@@ -12,10 +15,17 @@ import {
   saveCollectionSchedule,
 } from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import type { CollectionStatus, CollectionTargetState, CollectionTask } from '@/types/api'
+import type { CollectionStatus, CollectionTargetState, CollectionTask, Product, DataSource } from '@/types/api'
 
 const auth = useAuthStore()
 const targets = ref<CollectionTargetState[]>([])
+const products = ref<Product[]>([])
+const sources = ref<DataSource[]>([])
+const createDialogVisible = ref(false)
+const createSubmitting = ref(false)
+const createForm = reactive({ product: undefined as number | undefined, source_target: undefined as number | undefined, pages: 2, target_url: '', target_name: '' })
+const availableEntries = computed(() => sources.value.flatMap(source => (source.targets || []).filter(target => target.is_active && target.product === createForm.product).map(target => ({ id: target.id, label: `${source.name} / ${target.name}`, status: target.validation_status }))))
+
 const loading = ref(false)
 const error = ref('')
 const startingIds = ref(new Set<number>())
@@ -96,7 +106,9 @@ async function loadTargets(silent = false): Promise<void> {
   if (!silent) loading.value = true
   error.value = ''
   try {
-    const response = await getCollectionTargets({ page_size: 100 })
+    const [response, productResponse, sourceResponse] = await Promise.all([getCollectionTargets({ page_size: 100 }), getProducts({ page_size: 100 }), getSources({ page_size: 100 })])
+    products.value = productResponse.results
+    sources.value = sourceResponse.results
     targets.value = response.results
     const activeIds = targets.value
       .map((target) => target.active_task)
@@ -211,6 +223,38 @@ async function recoverStale(target: CollectionTargetState): Promise<void> {
   }
 }
 
+async function submitTestCollection(): Promise<void> {
+  if (!createForm.product) { ElMessage.warning('请选择手机产品'); return }
+  createSubmitting.value = true
+  try {
+    let targetId = createForm.source_target
+    if (!targetId) {
+      const source = sources.value.find(item => item.code === 'HONOR_CLUB')
+      if (!source || !createForm.target_url.trim()) {
+        ElMessage.warning('没有采集入口，请填写荣耀俱乐部入口 URL')
+        return
+      }
+      const created = await createSourceTarget({
+        source: source.id,
+        product: createForm.product,
+        name: createForm.target_name.trim() || '荣耀俱乐部测试入口',
+        target_type: 'COMMUNITY',
+        target_url: createForm.target_url.trim(),
+        external_id: '',
+        is_active: true,
+      })
+      targetId = created.id
+    }
+    const task = await createCollectionTask({ source_target: targetId, task_type: 'INCREMENTAL', requested_pages: createForm.pages })
+    await runCollectionTask(task.id)
+    createDialogVisible.value = false
+    ElMessage.success(`测试任务 #${task.id} 已启动，最多采集 ${createForm.pages} 页`)
+    await loadTargets(true)
+    startPolling()
+  } catch { ElMessage.error('创建失败：请检查采集入口、任务占用或网络配置') }
+  finally { createSubmitting.value = false }
+}
+
 function openSchedule(target: CollectionTargetState): void {
   scheduleTarget.value = target
   scheduleForm.enabled = target.schedule_enabled
@@ -281,7 +325,7 @@ onUnmounted(stopPolling)
       <div>
         <span v-if="refreshedAt" class="refresh-time"
           >最近刷新 {{ refreshedAt }} · 运行中每 5 秒自动更新</span
-        ><el-button :loading="loading" @click="loadTargets()">刷新</el-button>
+        ><el-button v-if="auth.canWrite" type="primary" @click="createDialogVisible = true">新建测试采集</el-button><el-button :loading="loading" @click="loadTargets()">刷新</el-button>
       </div>
     </div>
 
@@ -389,6 +433,20 @@ onUnmounted(stopPolling)
       </el-card>
       <el-empty v-if="!loading && !targets.length" description="暂无可用采集入口" />
     </div>
+
+    <el-dialog v-model="createDialogVisible" title="新建测试采集任务" width="min(520px, 94vw)">
+      <el-form label-position="top">
+        <el-form-item label="手机产品"><el-select v-model="createForm.product" filterable placeholder="选择产品" style="width:100%" @change="createForm.source_target = undefined"><el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" /></el-select></el-form-item>
+        <el-form-item label="已有采集入口"><el-select v-model="createForm.source_target" clearable placeholder="没有入口时可在下方新建" style="width:100%"><el-option v-for="entry in availableEntries" :key="entry.id" :label="entry.label" :value="entry.id" /></el-select></el-form-item>
+        <template v-if="!createForm.source_target">
+          <el-form-item label="荣耀俱乐部入口 URL"><el-input v-model="createForm.target_url" placeholder="https://club.honor.com/cn/threadtopic-..." /></el-form-item>
+          <el-form-item label="入口名称"><el-input v-model="createForm.target_name" placeholder="荣耀俱乐部测试入口" /></el-form-item>
+        </template>
+        <el-form-item label="最多采集页数"><el-input-number v-model="createForm.pages" :min="1" :max="10" /></el-form-item>
+        <el-alert type="info" :closable="false" title="测试采集无需全量基线；只保存本次采集结果，不标记全量完成。新入口需符合来源 URL 校验规则。" />
+      </el-form>
+      <template #footer><el-button @click="createDialogVisible = false">取消</el-button><el-button type="primary" :loading="createSubmitting" @click="submitTestCollection">创建并启动</el-button></template>
+    </el-dialog>
 
     <el-dialog v-model="scheduleDialogVisible" title="定时增量设置" width="min(460px, 92vw)">
       <el-form label-position="top">
