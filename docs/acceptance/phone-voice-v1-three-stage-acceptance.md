@@ -3,7 +3,7 @@
 ## 1. 交付基线
 
 - 开发基线：`eeed2d9`（PR #4 已由此前流程合入 `main`）
-- 功能实现提交：`2a0f9fb`
+- 功能实现提交：`2a0f9fb`；生产部署应用提交：`a8ae8f2`
 - 开发分支：`main`（遵循用户在本轮开始前“先合并全部分支到 main，再执行”的最新指令）
 - 原始数据处理：未删除、未重建任何现有 `ReviewRecord`
 - AI 密钥处理：未修改、未输出、未写入仓库或日志
@@ -69,8 +69,11 @@
 - 独立开关：`AI_LIVE_ACCEPTANCE_ENABLED=false`（默认）。
 - 硬上限：`AI_LIVE_ACCEPTANCE_MAX_ITEMS<=10`。
 - 显式命令：`python manage.py live_ai_acceptance --product-id <ID> --max-items 10`。
-- 本地环境没有可验证的用户生产凭据，因此本次真实 AI 调用为 **0 条**，Token 用量 **0**，未虚构真实模型验收结果。
-- Mock Provider/替身覆盖了自动接受、自动排除、不确定、技术错误、短回复上下文、日预算和接受项入分析队列。
+- 生产环境用户 AI 配置连通性已真实验证：OpenAI Compatible / `deepseek-flash`，HTTP 200；密钥未输出。
+- 真实治理小样本 3 条：接受 1、不确定 2、错误 0；输入 Token 1894、输出 Token 186。
+- 结构化分析共进行了 5 次受控调用（前两次为同一批有限重试，后三次均为单次重试），均收到 HTTP 200，但依次暴露并修复了容器 Prompt 路径、Schema/Taxonomy 注入、输出上限、证据偏移和业务域一致性问题。
+- 最后一条实际响应输入 Token 3000、输出 Token 2376；失败原因已收敛为模型没有把 `aspect_code` 放入冗余的 `business_domains`。代码已加入仅基于返回标签的确定性一致性校正并有自动测试，但为控制付费调用，本轮未再次请求模型，因此不把结构化真实验收标记为通过。
+- 生产 `AI_AUTOMATION_ENABLED` 继续保持 `false`，避免在结构化真实闭环尚未复验时自动消耗预算。
 
 ## 5. 自动化测试结果
 
@@ -79,7 +82,7 @@
 - `uv run ruff check .`：PASS
 - `uv run mypy . ../collectors ../ai ../tools`：PASS，208 个源文件无类型错误
 - `uv run python manage.py makemigrations --check --dry-run`：PASS，无模型差异
-- `uv run pytest --basetemp=<workspace-temp>`：**297 passed, 2 skipped, 0 failed**
+- `uv run pytest --basetemp=<workspace-temp>`：**301 passed, 2 skipped, 0 failed**
 - 两项跳过均为默认关闭的真实外网测试（荣耀、京东），不影响 Mock/解析器/业务闭环测试。
 
 ### 前端
@@ -89,17 +92,20 @@
 - `npm run test -- --run`：**15 passed, 0 failed**
 - `npm run build`：PASS
 
-### Docker
+### Docker 与生产健康检查
 
-- 当前 Windows 执行环境未安装 Docker CLI，因此容器级集成测试标记为 **未验证**，不能写为 PASS。
-- Compose 文件未被破坏；应在目标服务器按第 8 节执行容器验收。
+- 目标服务器：`106.52.122.214`，部署目录 `/opt/apps/phone-voice-insight`。
+- PostgreSQL、Redis、backend、frontend、celery-worker、celery-beat 共 6 个容器全部 healthy。
+- Celery inspect：1 个 worker 在线并返回 `pong`。
+- 公网 `/phone/`：HTTP 200；`/phone/api/v1/health/`：HTTP 200，数据库与 Redis 均为 `ok`。
+- 迁移一致性：`makemigrations --check --dry-run` 无差异。
+- 升级前数据库备份：`/opt/apps/backups/phone-voice-insight/postgres-20261028-204214.sql.gz`；环境配置备份：`env-20261028-205346`。
+- 升级后保留 9428 条原始记录、8 个采集任务、230 个采集运行；当前采集、治理、AI 治理、结构化分析活动任务均为 0。
 
 ### GitHub CI
 
-- 工作流：`CI`，运行编号 `40687379866`
-- backend：PASS（Ruff、Mypy、迁移检查、结构化分析契约、完整测试）
-- frontend：PASS（npm ci、lint、typecheck、test、build）
-- 结论：GitHub CI 全绿。
+- `dbd59b5` 及此前功能提交 CI 全绿。
+- `58edb6d` 曾因 Ruff format 门禁失败，已按 CI 同一命令修复并提交 `a8ae8f2`；最终提交的 CI 状态以 GitHub Actions 最新运行结果为准。
 
 ## 6. 主要修改文件
 
@@ -112,9 +118,9 @@
 
 ## 7. 已知风险与未完成外部验收
 
-- 本机没有 Docker，容器健康状态未验证。
-- 本机没有生产数据库和生产用户 AI 凭据，真实 AI 小样本调用未执行。
-- 荣耀真实站点测试默认关闭，未进行大规模真实抓取；所有网络限制与合规节流规则保持不变。
+- 真实 AI 治理已通过，但结构化分析在最后一项一致性修复后尚未再次调用模型复验，因此自动流水线保持关闭。
+- 历史两次结构化失败发生在失败 Token 记账修复之前，对应调用用量无法从本地记录精确恢复；后续失败已能保存 Token。
+- 荣耀真实站点测试默认关闭，本轮部署未发起大规模采集；所有网络限制与合规节流规则保持不变。
 - 前端生产构建仍有单个大于 500 kB 的公共依赖 chunk 警告，不影响构建成功，后续可单独做代码分包优化。
 
 ## 8. 部署升级步骤与回滚
@@ -137,4 +143,4 @@
 
 ## 9. 最终结论
 
-代码级三阶段功能、本地自动化门禁和 GitHub CI 已通过；真实 AI、Docker 与目标服务器部署属于当前环境缺失依赖，均如实标记为未验证。代码已具备部署升级条件，但在目标服务器容器健康检查完成前不宣称生产部署验收通过。
+代码、数据库迁移、Docker 部署、生产健康检查和真实 AI 治理小样本均已验证；现网服务可用且原有数据完整保留。结构化分析的最后一致性修复已通过自动测试但尚未再次进行付费模型复验，因此 AI 自动流水线仍安全关闭，本报告不宣称端到端 AI 自动结构化验收通过。
