@@ -406,6 +406,8 @@ export interface GovernanceAIResultInfo {
   reason: string
   evidence: string
   model: string
+  human_decision: boolean | null
+  human_reviewed_at: string | null
 }
 
 export const startGovernanceAIReview = async (payload: { product_id: number; limit: number }): Promise<{ id: number; total: number }> =>
@@ -416,3 +418,6 @@ export const getGovernanceAIHistory = async (): Promise<{ results: GovernanceAIB
 
 export const getGovernanceAIResults = async (productId: number): Promise<{ results: GovernanceAIResultInfo[] }> =>
   (await apiClient.get('/governance-ai/results/', { params: { product_id: productId } })).data
+
+export const confirmGovernanceAIReview = async (payload: { review_id: number; eligible: boolean; reason: string }): Promise<{ confirmed: boolean }> =>
+  (await apiClient.post('/governance-ai/confirm/', payload)).data
