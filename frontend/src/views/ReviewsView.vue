@@ -218,7 +218,11 @@ onMounted(async () => {
       >
         <el-table-column prop="source_name" label="来源" sortable="custom" width="120" />
         <el-table-column prop="product_name" label="产品" sortable="custom" width="150" />
-        <el-table-column prop="record_type" label="类型" sortable="custom" width="130" />
+        <el-table-column prop="record_type" label="类型" sortable="custom" width="130">
+          <template #default="{ row }: { row: ReviewRecord }">
+            {{ recordTypeLabels[row.record_type] || row.record_type }}
+          </template>
+        </el-table-column>
         <el-table-column prop="content" label="内容" sortable="custom" min-width="300" show-overflow-tooltip />
         <el-table-column prop="author_role" label="角色" width="90" sortable="custom">
           <template #default="{ row }: { row: ReviewRecord }">
