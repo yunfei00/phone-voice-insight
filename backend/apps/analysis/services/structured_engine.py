@@ -8,7 +8,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from ai.providers import AIProvider, AIProviderError
+from ai.providers import AIProvider, AIProviderError, AIProviderResponse
 from ai.schemas.review_analysis import ReviewAnalysisInput
 from ai.schemas.structured_analysis import SCHEMA_VERSION, StructuredAnalysisPayload
 from ai.taxonomy import TAXONOMY_VERSION, load_taxonomy
@@ -81,6 +81,33 @@ def _decode(content: str) -> dict[str, object]:
     return parsed
 
 
+def _normalize_evidence_offsets(payload: dict[str, object], source_text: str) -> dict[str, object]:
+    """Repair model-supplied offsets only when evidence is an exact source substring."""
+    aspects = payload.get("aspects")
+    if not isinstance(aspects, list):
+        return payload
+    for value in aspects:
+        if not isinstance(value, dict):
+            continue
+        evidence = value.get("evidence_text")
+        if not isinstance(evidence, str) or not evidence:
+            continue
+        start = value.get("evidence_start")
+        end = value.get("evidence_end")
+        if (
+            isinstance(start, int)
+            and isinstance(end, int)
+            and 0 <= start < end
+            and source_text[start:end] == evidence
+        ):
+            continue
+        exact_start = source_text.find(evidence)
+        if exact_start >= 0:
+            value["evidence_start"] = exact_start
+            value["evidence_end"] = exact_start + len(evidence)
+    return payload
+
+
 def _create_run(
     review: ReviewRecord, provider: AIProvider, *, force: bool, batch_id: int | None
 ) -> tuple[AnalysisRun, bool]:
@@ -121,13 +148,16 @@ def analyze_content(
     if not should_execute:
         return run
     feedback = ""
+    last_response: AIProviderResponse | None = None
     try:
         for attempt in range(max_retries + 1):
             run.attempt_count = attempt + 1
             response = provider.analyze_review(_provider_input(review), prompt=_prompt(), validation_feedback=feedback)
+            last_response = response
             result: StructuredValidationResult | None
             try:
-                result = validate_structured_payload(_decode(response.content), review.content)
+                decoded = _normalize_evidence_offsets(_decode(response.content), review.content)
+                result = validate_structured_payload(decoded, review.content)
             except (json.JSONDecodeError, ValueError) as exc:
                 result = None
                 feedback = f"INVALID_JSON:{exc}"
@@ -142,7 +172,7 @@ def analyze_content(
     except AIProviderError as exc:
         _persist_failure(run, exc.code, exc.safe_message)
     except (ValueError, TypeError) as exc:
-        _persist_failure(run, "STRUCTURED_VALIDATION_FAILED", str(exc)[:500])
+        _persist_failure(run, "STRUCTURED_VALIDATION_FAILED", str(exc)[:500], response=last_response)
     except OSError as exc:
         _persist_failure(run, "PROMPT_FILE_ERROR", str(exc)[:500])
     return run
@@ -181,9 +211,15 @@ def _persist_success(
         run.save()
 
 
-def _persist_failure(run: AnalysisRun, code: str, message: str) -> None:
+def _persist_failure(
+    run: AnalysisRun, code: str, message: str, *, response: AIProviderResponse | None = None
+) -> None:
     run.status = StructuredRunStatus.FAILED
     run.error_code = code
     run.error_message = message[:1000]
+    if response is not None:
+        run.latency_ms = response.latency_ms
+        run.input_tokens = response.prompt_tokens
+        run.output_tokens = response.completion_tokens
     run.completed_at = timezone.now()
     run.save()

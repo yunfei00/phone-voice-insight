@@ -216,5 +216,20 @@ def test_invalid_taxonomy_fails_without_saving_analysis(review):  # type: ignore
     raw["aspects"][0]["topic_code"] = "BAT.CHARGING"
     run = analyze_content(review.id, StructuredProvider([json.dumps(raw, ensure_ascii=False)]), max_retries=0)
     assert run.status == StructuredRunStatus.FAILED
+    assert run.input_tokens == 20
+    assert run.output_tokens == 30
     assert not StructuredAnalysis.objects.filter(run=run).exists()
     assert OpinionAspect.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_exact_evidence_repairs_invalid_model_offsets(review):  # type: ignore[no-untyped-def]
+    raw = payload(review.content)
+    raw["aspects"][0]["evidence_start"] = 0
+    raw["aspects"][0]["evidence_end"] = 0
+
+    run = analyze_content(review.id, StructuredProvider([json.dumps(raw, ensure_ascii=False)]), max_retries=0)
+
+    assert run.status == StructuredRunStatus.SUCCEEDED
+    aspect = run.structured_analysis.aspects.get()
+    assert review.content[aspect.evidence_start : aspect.evidence_end] == aspect.evidence_text
