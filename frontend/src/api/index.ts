@@ -86,6 +86,9 @@ export const getCollectionTasks = async (
 ): Promise<PaginatedResponse<CollectionTask>> =>
   (await apiClient.get<PaginatedResponse<CollectionTask>>('/collection-tasks/', { params })).data
 
+export const recoverStaleCollectionTask = async (taskId: number): Promise<CollectionTask> =>
+  (await apiClient.post<CollectionTask>(`/collection-tasks/${taskId}/recover-stale/`)).data
+
 export const getCollectionTargets = async (
   params: PageParams = {},
 ): Promise<PaginatedResponse<CollectionTargetState>> =>
