@@ -6,6 +6,13 @@ from apps.reviews.models import ReviewQuality, ReviewRecord
 class ReviewRecordFilter(django_filters.FilterSet):
     source = django_filters.CharFilter(method="filter_source")
     rating = django_filters.NumberFilter(field_name="rating")
+    source_region = django_filters.CharFilter(method="filter_region")
+
+    def filter_region(self, queryset, name, value):
+        del name
+        if value == "__UNKNOWN__":
+            return queryset.filter(source_region="")
+        return queryset.filter(source_region=value)
     product_variant = django_filters.NumberFilter(field_name="product_variant")
     published_at_after = django_filters.IsoDateTimeFilter(field_name="published_at", lookup_expr="gte")
     published_at_before = django_filters.IsoDateTimeFilter(field_name="published_at", lookup_expr="lte")
