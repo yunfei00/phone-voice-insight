@@ -5,6 +5,8 @@ x-backend-environment: &backend-environment
   SECRET_KEY: ${SECRET_KEY:-unsafe-development-only-key}
   DEBUG: ${DEBUG:-true}
   ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+  SSRF_ALLOWED_HOSTS: ${SSRF_ALLOWED_HOSTS:-club.honor.com}
+  SSRF_ALLOWED_PRIVATE_IPS: ${SSRF_ALLOWED_PRIVATE_IPS:-}
   POSTGRES_DB: ${POSTGRES_DB:-phone_voice_insight}
   POSTGRES_USER: ${POSTGRES_USER:-pvi}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
