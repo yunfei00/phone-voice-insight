@@ -122,7 +122,7 @@ export interface SourceTargetCleanupPreview {
   active_analysis_count: number
 }
 
-export type CollectionStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUCCESS' | 'FAILED' | 'CANCELLED'
+export type CollectionStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'STOPPING'
 
 export interface CollectionRun {
   id: number
