@@ -3,6 +3,7 @@
 ## 1. 交付基线
 
 - 开发基线：`eeed2d9`（PR #4 已由此前流程合入 `main`）
+- 功能实现提交：`2a0f9fb`
 - 开发分支：`main`（遵循用户在本轮开始前“先合并全部分支到 main，再执行”的最新指令）
 - 原始数据处理：未删除、未重建任何现有 `ReviewRecord`
 - AI 密钥处理：未修改、未输出、未写入仓库或日志
@@ -93,6 +94,13 @@
 - 当前 Windows 执行环境未安装 Docker CLI，因此容器级集成测试标记为 **未验证**，不能写为 PASS。
 - Compose 文件未被破坏；应在目标服务器按第 8 节执行容器验收。
 
+### GitHub CI
+
+- 工作流：`CI`，运行编号 `40687379866`
+- backend：PASS（Ruff、Mypy、迁移检查、结构化分析契约、完整测试）
+- frontend：PASS（npm ci、lint、typecheck、test、build）
+- 结论：GitHub CI 全绿。
+
 ## 6. 主要修改文件
 
 - 采集：`backend/apps/collection/models.py`、`tasks.py`、`views.py`、`services/orchestration.py`、`services/collection_runner.py`、`services/honor_full.py`
@@ -129,4 +137,4 @@
 
 ## 9. 最终结论
 
-代码级三阶段功能和本地自动化门禁已通过；真实 AI、Docker 与目标服务器部署属于当前环境缺失依赖，均如实标记为未验证。待 GitHub CI 与目标服务器容器验收通过后，可判定为可部署验收状态。
+代码级三阶段功能、本地自动化门禁和 GitHub CI 已通过；真实 AI、Docker 与目标服务器部署属于当前环境缺失依赖，均如实标记为未验证。代码已具备部署升级条件，但在目标服务器容器健康检查完成前不宣称生产部署验收通过。
