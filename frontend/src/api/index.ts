@@ -116,6 +116,9 @@ export const getCollectionTargets = async (
     })
   ).data
 
+export const startSmartCollection = async (stateId: number): Promise<{task_id:number; task_type?:'FULL'|'INCREMENTAL'; existing?:boolean; status:string}> =>
+  (await apiClient.post(`/collection-targets/${stateId}/start-smart/`)).data
+
 export const startFullCollection = async (stateId: number): Promise<CollectionTaskRunResponse> =>
   (await apiClient.post<CollectionTaskRunResponse>(`/collection-targets/${stateId}/start-full/`))
     .data
