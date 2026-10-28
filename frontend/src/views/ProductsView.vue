@@ -107,7 +107,10 @@ onMounted(load)
     <el-dialog v-model="targetDialog"  :title="targetId ? '编辑采集入口' : '新增采集入口'" width="min(520px,94vw)"><el-form label-position="top">
       <el-form-item label="数据来源"><el-select v-model="targetForm.source" :disabled="Boolean(targetId)"><el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id"/></el-select></el-form-item>
 
-      <el-form-item label="采集网址"><el-input v-model="targetForm.target_url" placeholder="荣耀俱乐部话题或入口地址"/></el-form-item>
+      <el-form-item label="采集网址">
+        <el-input v-model="targetForm.target_url" placeholder="荣耀俱乐部话题或入口地址"/>
+        <el-link v-if="/^https?:\/\//i.test(targetForm.target_url.trim())" :href="targetForm.target_url.trim()" target="_blank" rel="noopener noreferrer" type="primary" style="margin-top:8px">在浏览器打开采集页面 ↗</el-link>
+      </el-form-item>
 
       <el-alert title="采集入口需要与来源采集器的配置一致。新入口创建后自动初始化采集状态。" type="warning" :closable="false"/>
     </el-form><template #footer><el-button @click="targetDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveTarget">保存入口</el-button></template></el-dialog>
