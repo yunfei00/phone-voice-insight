@@ -5,6 +5,8 @@ import { useRoute } from 'vue-router'
 import { getReviewFacets, getReviewMetadataCompleteness, getReviews, getSources, getProducts } from '@/api'
 import type { DataSource, ReviewMetadataCompleteness, ReviewRecord, Product } from '@/types/api'
 
+const recordTypeLabels: Record<string, string> = { REVIEW: '评价', APPEND_REVIEW: '追评', THREAD: '帖子', REPLY: '回复', OFFICIAL_REPLY: '官方回复' }
+const authorRoleLabels: Record<string, string> = { USER: '普通用户', OFFICIAL: '官方', MODERATOR: '版主', EXPERT: '达人', UNKNOWN: '未知' }
 const reviews = ref<ReviewRecord[]>([])
 const route = useRoute()
 const sources = ref<DataSource[]>([])
@@ -220,7 +222,7 @@ onMounted(async () => {
         <el-table-column prop="content" label="内容" sortable="custom" min-width="300" show-overflow-tooltip />
         <el-table-column prop="author_role" label="角色" width="90" sortable="custom">
           <template #default="{ row }: { row: ReviewRecord }">
-            <el-tag :type="row.is_official ? 'warning' : 'info'">{{ row.author_role }}</el-tag>
+            <el-tag :type="row.is_official ? 'warning' : 'info'">{{ authorRoleLabels[row.author_role] || row.author_role }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="ip_location" label="IP 属地" sortable="custom" min-width="110" />
@@ -252,7 +254,7 @@ onMounted(async () => {
         <el-descriptions :column="1" border>
           <el-descriptions-item label="来源">{{ selected.source_name }}</el-descriptions-item>
           <el-descriptions-item label="产品">{{ selected.product_name }}</el-descriptions-item>
-          <el-descriptions-item label="类型">{{ selected.record_type }}</el-descriptions-item>
+          <el-descriptions-item label="类型">{{ recordTypeLabels[selected.record_type] || selected.record_type }}</el-descriptions-item>
           <el-descriptions-item label="标题">{{ selected.title || '—' }}</el-descriptions-item>
           <el-descriptions-item label="内容">{{ selected.content }}</el-descriptions-item>
           <el-descriptions-item label="发布时间">{{
@@ -263,7 +265,7 @@ onMounted(async () => {
           <el-descriptions-item label="软件版本">{{
             selected.software_version || '未提供'
           }}</el-descriptions-item>
-          <el-descriptions-item label="角色">{{ selected.author_role }}</el-descriptions-item>
+          <el-descriptions-item label="角色">{{ authorRoleLabels[selected.author_role] || selected.author_role }}</el-descriptions-item>
           <el-descriptions-item label="External ID">{{
             selected.external_id || '—'
           }}</el-descriptions-item>
