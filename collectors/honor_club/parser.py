@@ -158,6 +158,30 @@ def is_valid_thread_page(html: str) -> bool:
     return bool(soup.select_one(".wapFirstThread, #thread_subject, .thread-content, [id^='postmessage_']"))
 
 
+def _public_region(node: Tag | None) -> str:
+    """Only capture explicitly published coarse IP attribution, never an IP address."""
+    if node is None:
+        return ""
+    for candidate in node.select(".ip-location, .ip-region, .ip属地, [data-ip-location], [data-ip-region]"):
+        value = str(candidate.get("data-ip-location") or candidate.get("data-ip-region") or _text(candidate)).strip()
+        match = re.search(r"(?:IP属地|IP归属地|属地)\\s*[:：]?\\s*([\\u4e00-\\u9fff]{2,12})", value)
+        region = match.group(1) if match else value
+        if re.fullmatch(r"[\\u4e00-\\u9fff]{2,12}", region):
+            return region
+    return ""
+
+
+def _time_from_node(node: Tag | None) -> str:
+    if node is None:
+        return ""
+    for item in [node, *node.select("time, [datetime], [data-published-at], [title]")]:
+        for key in ("datetime", "data-published-at", "title"):
+            candidate = str(item.get(key, ""))
+            if found := _find_time(candidate):
+                return found
+    return _find_time(_text(node))
+
+
 def _find_time(value: str) -> str:
     if match := _FULL_TIME_PATTERN.search(value):
         return match.group(0)
@@ -215,15 +239,17 @@ def _extract_op_metadata(soup: BeautifulSoup) -> tuple[str, str, str]:
         role_text = _text(metadata_groups[0].select_one("b, .author-role"))
         device_source = _text(metadata_groups[0].select_one(".newPhonetype, .device-source"))
         for group in metadata_groups:
-            if candidate := _find_time(_text(group)):
+            if candidate := _time_from_node(group):
                 published_at_raw = candidate
                 break
 
     desktop_meta = soup.select_one(".authi, .post-meta")
     if desktop_meta is not None:
-        published_at_raw = published_at_raw or _find_time(_text(desktop_meta))
+        published_at_raw = published_at_raw or _time_from_node(desktop_meta)
         role_text = role_text or str(desktop_meta.get("data-author-role", ""))
         device_source = device_source or str(desktop_meta.get("data-device-source", ""))
+    if not published_at_raw:
+        published_at_raw = _time_from_node(soup.select_one(".wapFirstThread, .hbtTbox, .thread-content, .post-meta"))
     return role_text, device_source, published_at_raw
 
 
@@ -268,7 +294,7 @@ def _nested_records(
         if not content:
             continue
         role_text = str(node.get("data-author-role", "")) or _text(node.select_one(".author-role"))
-        published_at_raw = str(node.get("data-published-at", "")) or _find_time(_text(node))
+        published_at_raw = str(node.get("data-published-at", "")) or _time_from_node(node)
         published_at = parse_honor_datetime(published_at_raw, reference=thread_published_at)
         external_id = (
             f"honor_comment:{comment_id}"
@@ -295,6 +321,7 @@ def _nested_records(
                         thread_id=thread_id,
                         comment_id=comment_id,
                         published_at_raw=published_at_raw,
+                        public_region=_public_region(node),
                         has_image=image_count > 0,
                         image_count=image_count,
                         parent_resolution="post" if parent_pid else "thread_fallback",
@@ -338,6 +365,7 @@ def parse_thread_page(
             "raw_data": safe_raw_data(
                 thread_id=thread_id,
                 published_at_raw=published_at_raw,
+                public_region=_public_region(soup.select_one(".hbt-tinf, .thread-author-meta, .authi")),
                 device_source=device_source,
                 topic_tags=topic_tags,
                 forum_name=listing_data.get("forum_name"),
@@ -360,9 +388,9 @@ def parse_thread_page(
         if not reply_content:
             continue
         role_text = _text(container.select_one(".hbt-binf b, .author-role"))
-        published_at_raw = _text(container.select_one(".hbt-pltime, .published-at"))
+        published_at_raw = _time_from_node(container.select_one(".hbt-pltime, .published-at, time, [data-published-at]"))
         if not published_at_raw:
-            published_at_raw = _find_time(_text(container.select_one(".authi, .post-meta")))
+            published_at_raw = _time_from_node(container.select_one(".authi, .post-meta"))
         reply_published_at = parse_honor_datetime(published_at_raw, reference=published_at)
         floor = _text(container.select_one(".hbt-fav, .floor")) or str(index)
         external_id = (
@@ -390,6 +418,7 @@ def parse_thread_page(
                         post_id=pid,
                         floor=floor,
                         published_at_raw=published_at_raw,
+                        public_region=_public_region(container),
                         device_source=_text(container.select_one(".hbt-fphone, .device-source")),
                         has_image=reply_image_count > 0,
                         image_count=reply_image_count,
