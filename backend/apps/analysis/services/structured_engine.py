@@ -89,6 +89,13 @@ def _normalize_evidence_offsets(payload: dict[str, object], source_text: str) ->
     for value in aspects:
         if not isinstance(value, dict):
             continue
+        aspect_code = value.get("aspect_code")
+        business_domains = value.get("business_domains")
+        if isinstance(aspect_code, str) and aspect_code and isinstance(business_domains, list):
+            normalized_domains = [item for item in business_domains if isinstance(item, str) and item]
+            if aspect_code not in normalized_domains:
+                normalized_domains.append(aspect_code)
+            value["business_domains"] = normalized_domains
         evidence = value.get("evidence_text")
         if not isinstance(evidence, str) or not evidence:
             continue

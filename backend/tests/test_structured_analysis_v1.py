@@ -233,3 +233,14 @@ def test_exact_evidence_repairs_invalid_model_offsets(review):  # type: ignore[n
     assert run.status == StructuredRunStatus.SUCCEEDED
     aspect = run.structured_analysis.aspects.get()
     assert review.content[aspect.evidence_start : aspect.evidence_end] == aspect.evidence_text
+
+
+@pytest.mark.django_db
+def test_primary_aspect_is_added_to_business_domains(review):  # type: ignore[no-untyped-def]
+    raw = payload(review.content)
+    raw["aspects"][0]["business_domains"] = []
+
+    run = analyze_content(review.id, StructuredProvider([json.dumps(raw, ensure_ascii=False)]), max_retries=0)
+
+    assert run.status == StructuredRunStatus.SUCCEEDED
+    assert run.structured_analysis.aspects.get().business_domains == ["NET"]
