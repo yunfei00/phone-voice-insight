@@ -46,6 +46,7 @@ class CollectionTaskSerializer(serializers.ModelSerializer):
             "trigger_type",
             "status",
             "requested_limit",
+            "requested_pages",
             "started_at",
             "finished_at",
             "last_checkpoint",
@@ -88,6 +89,9 @@ class CollectionTaskSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs: dict) -> dict:
+        pages = attrs.get("requested_pages")
+        if pages is not None and not 1 <= pages <= 1000:
+            raise serializers.ValidationError({"requested_pages": "采集页数必须在 1 至 1000 之间"})
         if attrs.get("task_type") == "FULL":
             attrs["requested_limit"] = None
         return attrs
