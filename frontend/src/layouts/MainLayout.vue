@@ -19,7 +19,6 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
-import { CURRENT_PHASE_LABEL } from '@/config/project'
 
 const SIDEBAR_STORAGE_KEY = 'pvi.sidebar.collapsed'
 const DESKTOP_SIDEBAR_WIDTH = 220
@@ -161,7 +160,6 @@ watch(sidebarCollapsed, (collapsed) => {
             <el-icon><Expand v-if="sidebarCollapsed" /><Fold v-else /></el-icon>
           </el-button>
         </el-tooltip>
-        <span class="phase-label">{{ CURRENT_PHASE_LABEL }}</span>
         <div class="topbar-right">
           <el-dropdown trigger="click" @command="handleUserCommand">
             <button class="user-trigger" type="button">
@@ -408,7 +406,6 @@ watch(sidebarCollapsed, (collapsed) => {
     padding: 18px 14px;
   }
 
-  .phase-label,
   .user-name {
     display: none;
   }
