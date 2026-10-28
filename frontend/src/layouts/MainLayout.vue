@@ -18,7 +18,6 @@ import { ElMessage } from 'element-plus'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { CURRENT_PHASE_LABEL } from '@/config/project'
 import { useAuthStore } from '@/stores/auth'
 
 const SIDEBAR_STORAGE_KEY = 'pvi.sidebar.collapsed'
@@ -47,7 +46,7 @@ const baseNavigationItems = [
   { path: '/products', label: '手机产品', icon: Iphone },
   { path: '/collection-tasks', label: '采集任务', icon: List },
   { path: '/threads', label: '帖子视图', icon: ChatLineSquare },
-  { path: '/reviews', label: '原始反馈', icon: Document },
+  { path: '/reviews', label: '原始数据', icon: Document },
   { path: '/data-quality', label: '数据质量', icon: CircleCheck },
   { path: '/structured-analysis', label: 'AI结构化分析', icon: DataAnalysis },
   { path: '/ai-quality', label: 'AI质量中心', icon: CircleCheck },
@@ -159,7 +158,6 @@ watch(sidebarCollapsed, (collapsed) => {
           </el-button>
         </el-tooltip>
         <div class="topbar-right">
-          <span class="phase-label">{{ CURRENT_PHASE_LABEL }}</span>
           <el-dropdown trigger="click" @command="handleUserCommand">
             <button class="user-trigger" type="button">
               <el-avatar :size="32"
