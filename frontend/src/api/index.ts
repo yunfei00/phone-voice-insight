@@ -265,3 +265,12 @@ export const createStructuredBatch = async (payload: {
 
 export const cancelStructuredBatch = async (id: number): Promise<StructuredBatch> =>
   (await apiClient.post<StructuredBatch>(`/structured-batches/${id}/cancel/`)).data
+
+export const pauseStructuredBatch = async (id: number): Promise<StructuredBatch> =>
+  (await apiClient.post<StructuredBatch>(`/structured-batches/${id}/pause/`)).data
+
+export const resumeStructuredBatch = async (id: number): Promise<{ batch: StructuredBatch }> =>
+  (await apiClient.post(`/structured-batches/${id}/resume/`)).data
+
+export const retryStructuredBatch = async (id: number): Promise<{ batch: StructuredBatch }> =>
+  (await apiClient.post(`/structured-batches/${id}/retry-failed/`)).data

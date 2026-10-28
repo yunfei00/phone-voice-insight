@@ -177,6 +177,9 @@ def test_aggregate_counts_are_deterministic(api_client, review):  # type: ignore
     assert response.data["content_count"] == 1
     assert response.data["opinion_count"] == 1
     assert response.data["domain_distribution"] == [{"aspect_code": "NET", "count": 1}]
+    assert response.data["high_frequency_clusters"] == [{"topic_code": "NET.CELLULAR", "count": 1}]
+    assert response.data["independent_user_count"] is None
+    assert response.data["product_issue_comparison"][0]["opinion_count"] == 1
 
 
 @pytest.mark.django_db

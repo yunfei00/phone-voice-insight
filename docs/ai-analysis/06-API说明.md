@@ -9,7 +9,8 @@
 - `GET /api/v1/structured-analyses/quality/`：成功率、Schema 合法率、待复核数及人工评测状态。
 - `GET /api/v1/structured-analyses/aggregates/`：评论数、观点数、域/主题/情感/严重度、需求、竞品及可解释异常候选。
 - `GET|POST /api/v1/structured-batches/`：分页查看或创建批任务。支持内容 ID、时间、机型、来源、上限、dry-run、并发/RPM、Token/预算和重试限制。
-- `POST /api/v1/structured-batches/{id}/pause|cancel/`：阻止后续内容启动。
+- `POST /api/v1/structured-batches/{id}/pause|resume|cancel/`：暂停、恢复或阻止后续内容启动。
+- `POST /api/v1/structured-batches/{id}/retry-failed/`：只为失败内容创建新的可追溯重试批次。
 
 异常规则 V1：最近 7 天至少 5 条，且达到之前 28 天周均两倍。返回值明确声明论坛反馈占比不是设备故障率。
 

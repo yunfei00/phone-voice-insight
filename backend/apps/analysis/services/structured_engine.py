@@ -12,7 +12,7 @@ from ai.schemas.review_analysis import ReviewAnalysisInput
 from ai.schemas.structured_analysis import SCHEMA_VERSION, StructuredAnalysisPayload
 from ai.taxonomy import TAXONOMY_VERSION
 from ai.validation import StructuredValidationResult, validate_structured_payload
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.utils import timezone
 
 from apps.analysis.models import AnalysisRun, OpinionAspect, StructuredAnalysis, StructuredRunStatus
@@ -73,21 +73,16 @@ def _create_run(
         if current:
             current.is_current = False
             current.save(update_fields=("is_current", "updated_at"))
-        try:
-            run = AnalysisRun.objects.create(
-                content=review,
-                batch_id=batch_id,
-                status=StructuredRunStatus.RUNNING,
-                provider=provider.provider_name,
-                model=provider.model,
-                input_hash=input_hash,
-                configuration_hash=configuration_hash,
-                started_at=timezone.now(),
-            )
-        except IntegrityError:
-            return AnalysisRun.objects.get(
-                content=review, configuration_hash=configuration_hash, is_current=True
-            ), False
+        run = AnalysisRun.objects.create(
+            content=review,
+            batch_id=batch_id,
+            status=StructuredRunStatus.RUNNING,
+            provider=provider.provider_name,
+            model=provider.model,
+            input_hash=input_hash,
+            configuration_hash=configuration_hash,
+            started_at=timezone.now(),
+        )
     return run, True
 
 

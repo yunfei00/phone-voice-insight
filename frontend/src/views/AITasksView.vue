@@ -7,6 +7,9 @@ import {
   getProducts,
   getSources,
   getStructuredBatches,
+  pauseStructuredBatch,
+  resumeStructuredBatch,
+  retryStructuredBatch,
 } from '@/api'
 import type { DataSource, Product, StructuredBatch } from '@/types/api'
 const loading = ref(false)
@@ -56,6 +59,25 @@ async function cancel(id: number) {
   ElMessage.success('已停止启动后续项目')
   await load()
 }
+async function pause(id: number) {
+  await pauseStructuredBatch(id)
+  ElMessage.success('任务已暂停，不再启动新项目')
+  await load()
+}
+async function resume(id: number) {
+  await resumeStructuredBatch(id)
+  ElMessage.success('任务已恢复')
+  await load()
+}
+async function retry(id: number) {
+  try {
+    await retryStructuredBatch(id)
+    ElMessage.success('失败项目已创建重试任务')
+    await load()
+  } catch {
+    ElMessage.warning('该任务没有可重试的失败项目')
+  }
+}
 onMounted(load)
 </script>
 <template>
@@ -100,8 +122,14 @@ onMounted(load)
         ></el-table-column
       ><el-table-column prop="actual_cost" label="实际成本" /><el-table-column
         label="操作"
-        width="100"
+        min-width="230"
         ><template #default="{ row }"
+          ><el-button v-if="['PENDING', 'RUNNING'].includes(row.status)" text @click="pause(row.id)"
+            >暂停</el-button
+          ><el-button v-if="row.status === 'PAUSED'" text type="primary" @click="resume(row.id)"
+            >恢复</el-button
+          ><el-button v-if="row.failed_count" text type="warning" @click="retry(row.id)"
+            >重试失败</el-button
           ><el-button
             v-if="['PENDING', 'RUNNING', 'PAUSED'].includes(row.status)"
             text

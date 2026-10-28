@@ -8,7 +8,8 @@ from ai.taxonomy import load_taxonomy
 from ai.validation import validate_structured_payload
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
@@ -156,6 +157,57 @@ class StructuredBatchViewSet(ViewSet):
             batch.save()
         return Response(StructuredBatchSerializer(batch).data)
 
+    @action(detail=True, methods=("post",))
+    def resume(self, _request: Request, pk: str | None = None) -> Response:
+        assert pk is not None
+        batch = AnalysisBatch.objects.get(pk=pk)
+        if batch.status != AnalysisBatchStatus.PAUSED:
+            return Response({"error_code": "BATCH_NOT_PAUSED"}, status=status.HTTP_409_CONFLICT)
+        processed = AnalysisRun.objects.filter(batch=batch).values_list("content_id", flat=True)
+        remaining_ids = list(
+            ReviewRecord.objects.filter(product=batch.product, source=batch.source)
+            .exclude(id__in=processed)
+            .values_list("id", flat=True)[: max(batch.requested_count - batch.success_count - batch.failed_count, 0)]
+        )
+        batch.status = AnalysisBatchStatus.PENDING
+        batch.save()
+        result = run_structured_analysis_batch_task.delay(batch.id, remaining_ids)
+        return Response({"batch": StructuredBatchSerializer(batch).data, "celery_task_id": result.id})
+
+    @action(detail=True, methods=("post",), url_path="retry-failed")
+    def retry_failed(self, request: Request, pk: str | None = None) -> Response:
+        assert pk is not None
+        original = AnalysisBatch.objects.get(pk=pk)
+        failed_ids = list(
+            AnalysisRun.objects.filter(batch=original, status=StructuredRunStatus.FAILED).values_list(
+                "content_id", flat=True
+            )
+        )
+        if not failed_ids:
+            return Response({"error_code": "NO_FAILED_ITEMS"}, status=status.HTTP_409_CONFLICT)
+        retry = AnalysisBatch.objects.create(
+            created_by=cast(User, request.user),
+            product=original.product,
+            source=original.source,
+            corpus_version=original.corpus_version,
+            provider=original.provider,
+            model_name=original.model_name,
+            prompt_version=original.prompt_version,
+            requested_count=len(failed_ids),
+            dry_run=False,
+            max_concurrency=original.max_concurrency,
+            requests_per_minute=original.requests_per_minute,
+            token_limit=original.token_limit,
+            cost_budget=original.cost_budget,
+            input_cost_per_million=original.input_cost_per_million,
+            output_cost_per_million=original.output_cost_per_million,
+        )
+        result = run_structured_analysis_batch_task.delay(retry.id, failed_ids)
+        return Response(
+            {"batch": StructuredBatchSerializer(retry).data, "celery_task_id": result.id},
+            status=status.HTTP_201_CREATED,
+        )
+
 
 class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
     serializer_class = StructuredAnalysisSerializer
@@ -222,6 +274,23 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
             status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED)
         ).count()
         schema_valid = StructuredAnalysis.objects.filter(run__is_current=True, schema_valid=True).count()
+        error_distribution = list(
+            runs.filter(status=StructuredRunStatus.FAILED)
+            .values("error_code")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        model_comparison = list(
+            runs.values("provider", "model")
+            .annotate(
+                total=Count("id"),
+                successful=Count(
+                    "id",
+                    filter=Q(status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED)),
+                ),
+            )
+            .order_by("provider", "model")
+        )
         return Response(
             {
                 "total_runs": total,
@@ -233,6 +302,8 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
                 ).count(),
                 "human_evaluation_status": "NOT_EVALUATED",
                 "accuracy_metrics": None,
+                "error_distribution": error_distribution,
+                "model_comparison": model_comparison,
             }
         )
 
@@ -253,17 +324,40 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
             for products in aspects.exclude(compared_products=[]).values_list("compared_products", flat=True)
             for product in products
         )
+        trend = list(
+            aspects.annotate(day=TruncDate("analysis__content__published_at"))
+            .values("day", "sentiment")
+            .annotate(count=Count("id"))
+            .order_by("day", "sentiment")
+        )
+        product_comparison = list(
+            aspects.values("analysis__content__product__name", "topic_code")
+            .annotate(content_count=Count("analysis__content_id", distinct=True), opinion_count=Count("id"))
+            .order_by("analysis__content__product__name", "-opinion_count")
+        )
+        version_association = list(
+            aspects.exclude(analysis__content__software_version="")
+            .values("analysis__content__software_version", "topic_code")
+            .annotate(count=Count("id"))
+            .order_by("-count")[:100]
+        )
         return Response(
             {
                 "disclaimer": "论坛反馈占比不等于真实设备故障率",
                 "content_count": analyses.values("content_id").distinct().count(),
                 "opinion_count": aspects.count(),
+                "independent_user_count": None,
+                "independent_user_count_reason": "原始数据没有稳定个人标识 不能伪造独立用户数",
                 "domain_distribution": by_domain,
                 "topic_distribution": by_topic,
                 "sentiment_distribution": by_sentiment,
                 "severity_distribution": by_severity,
                 "requirement_ranking": needs,
                 "competitor_mentions": [{"product": key, "count": value} for key, value in competitors.most_common()],
+                "sentiment_trend": trend,
+                "product_issue_comparison": product_comparison,
+                "system_version_association": version_association,
+                "high_frequency_clusters": by_topic[:20],
                 "anomaly_candidates": _anomalies(aspects),
             }
         )
