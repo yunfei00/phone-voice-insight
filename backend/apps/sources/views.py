@@ -1,7 +1,7 @@
-from rest_framework.viewsets import ReadOnlyModelViewSet
+from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 
-from apps.sources.models import DataSource
-from apps.sources.serializers import DataSourceSerializer
+from apps.sources.models import DataSource, SourceTarget
+from apps.sources.serializers import DataSourceSerializer, SourceTargetSerializer
 
 
 class DataSourceViewSet(ReadOnlyModelViewSet):
@@ -10,3 +10,9 @@ class DataSourceViewSet(ReadOnlyModelViewSet):
     filterset_fields = ("source_type", "is_active")
     search_fields = ("name", "code")
     ordering_fields = ("name", "created_at")
+
+
+class SourceTargetViewSet(ModelViewSet):
+    queryset = SourceTarget.objects.select_related('product', 'source')
+    serializer_class = SourceTargetSerializer
+    filterset_fields = ('product', 'source', 'is_active')
