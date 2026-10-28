@@ -96,6 +96,8 @@ def _start_run(task_id: int) -> tuple[CollectionTask, CollectionRun]:
             .select_related("source_target__source", "source_target__product")
             .get(pk=task_id)
         )
+        if task.status in (CollectionStatus.STOPPING, CollectionStatus.CANCELLED):
+            raise CollectionStopRequested()
         claim_existing_task(task)
         acquire_source_lease(task)
         task.runs.filter(status=CollectionStatus.RUNNING).update(
@@ -265,6 +267,32 @@ def _finish_continuation(task_id: int, run_id: int) -> None:
     refresh_source_lease(task_id)
 
 
+
+
+class CollectionStopRequested(Exception):
+    """Cooperative cancellation; never treat a user stop as a collection failure."""
+
+
+def check_collection_stop(task_id: int) -> None:
+    if CollectionTask.objects.filter(pk=task_id, status__in=(CollectionStatus.STOPPING, CollectionStatus.CANCELLED)).exists():
+        raise CollectionStopRequested()
+
+
+def _finish_stopped(task_id: int, run_id: int) -> None:
+    now = timezone.now()
+    with transaction.atomic():
+        task = CollectionTask.objects.select_for_update().get(pk=task_id)
+        if task.status == CollectionStatus.STOPPING:
+            task.transition_to(CollectionStatus.CANCELLED)
+        task.finished_at = now
+        task.save(update_fields=("status", "finished_at", "updated_at"))
+        CollectionRun.objects.filter(pk=run_id, status=CollectionStatus.RUNNING).update(
+            status=CollectionStatus.CANCELLED, finished_at=now
+        )
+    release_source_lease(task_id)
+    release_target(task, success=False, error="用户主动停止采集")
+
+
 def _request_log(task_id: int, source: str, page: int, thread_id: str, metadata: dict[str, Any]) -> None:
     logger.info(
         "collection_request collection_task_id=%s source=%s topic_page=%s thread_id=%s "
@@ -327,6 +355,8 @@ def _collect_jd_pages(
     start_page = int((task.last_checkpoint if task else {}).get("page", 1))
 
     for page in range(start_page, pages + 1):
+        if task is not None:
+            check_collection_stop(task.id)
         raw_page = collector.fetch_page(
             CollectionRequest(
                 target=target,
@@ -417,7 +447,10 @@ def run_collection(
     limit_override: int | None = None,
     pages_override: int | None = None,
 ) -> CollectionSummary:
-    task, run = _start_run(task_id)
+    try:
+        task, run = _start_run(task_id)
+    except CollectionStopRequested:
+        return CollectionSummary(0, 0, 0, 0, {}, [], completed=False)
     source_target = task.source_target
     try:
         collector = get_collector(source_target.source.code)
@@ -441,8 +474,12 @@ def run_collection(
                 task=task,
                 run=run,
             )
+            check_collection_stop(task.id)
             _finish_success(task.id, run.id)
             return summary
+        except CollectionStopRequested:
+            _finish_stopped(task.id, run.id)
+            return CollectionSummary(0, 0, 0, 0, {}, [], completed=False)
         except Exception as exc:
             message = f"{exc.code}: {exc}" if isinstance(exc, CollectorError) else f"COLLECTION_ERROR: {exc}"
             logger.exception("collection_failed collection_task_id=%s source=%s", task.id, source_target.source.code)
@@ -451,12 +488,14 @@ def run_collection(
 
     if task.task_type == CollectionTaskType.FULL:
         try:
+            check_collection_stop(task.id)
             chunk = run_honor_full_chunk(
                 task=task,
                 source_target=source_target,
                 collector=collector,
                 target=target,
             )
+            check_collection_stop(task.id)
             task.refresh_from_db()
             discovered = task.discovered_threads.count()
             completed_threads = task.discovered_threads.filter(status__in=("SUCCESS", "SKIPPED")).count()
@@ -523,6 +562,7 @@ def run_collection(
 
     try:
         for topic_page in range(start_page, max_pages + 1):
+            check_collection_stop(task.id)
             topic_request = CollectionRequest(
                 target=target,
                 checkpoint=CollectionCheckpoint(
@@ -555,6 +595,7 @@ def run_collection(
             page_start_index = start_index if topic_page == start_page else 0
 
             for thread_index, thread_link in enumerate(thread_links[page_start_index:], start=page_start_index):
+                check_collection_stop(task.id)
                 if scanned >= max_threads:
                     break
                 scanned += 1
@@ -594,6 +635,7 @@ def run_collection(
                     raise CollectorError(f"帖子 {thread_id} 未解析出记录", code="EMPTY_THREAD")
                 reply_pages = extract_thread_page_count(first_html, thread_id=thread_id)
                 for reply_page in range(2, reply_pages + 1):
+                    check_collection_stop(task.id)
                     paged_request = CollectionRequest(
                         target=thread_target,
                         checkpoint=CollectionCheckpoint(
@@ -738,6 +780,9 @@ def run_collection(
                 },
             )
         _finish_success(task.id, run.id)
+    except CollectionStopRequested:
+        _finish_stopped(task.id, run.id)
+        return CollectionSummary(0, 0, 0, 0, {}, [], completed=False)
     except Exception as exc:
         if isinstance(exc, CollectorError):
             message = f"{exc.code}: {exc}"
