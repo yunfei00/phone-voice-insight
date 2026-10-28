@@ -1,5 +1,7 @@
 """AI-assisted governance endpoints."""
 from django.db import transaction
+from django.utils import timezone
+from apps.reviews.services.governance_pipeline import apply_manual_override
 from rest_framework import serializers, viewsets
 from apps.products.models import Product
 from apps.reviews.models import ReviewQuality
@@ -54,6 +56,33 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
             return Response({"detail": "AI 任务提交失败"}, status=503)
         return Response({"id": batch.id, "total": batch.total}, status=202)
 
+    @action(detail=False, methods=["post"])
+    def confirm(self, request):
+        class Parameters(serializers.Serializer):
+            review_id = serializers.IntegerField(min_value=1)
+            eligible = serializers.BooleanField()
+            reason = serializers.CharField(min_length=2, max_length=500)
+
+        params = Parameters(data=request.data)
+        params.is_valid(raise_exception=True)
+        data = params.validated_data
+        with transaction.atomic():
+            record = GovernanceAIReview.objects.select_for_update().filter(
+                quality__review_id=data["review_id"],
+                status="REVIEW_REQUIRED", human_reviewed_at__isnull=True
+            ).order_by("-id").first()
+            if record is None:
+                return Response({"detail": "没有待确认的 AI 复核记录"}, status=409)
+            apply_manual_override(data["review_id"], eligible=data["eligible"], reason=data["reason"])
+            record.human_decision = data["eligible"]
+            record.human_reason = data["reason"]
+            record.human_reviewer = request.user
+            record.human_reviewed_at = timezone.now()
+            record.save(update_fields=[
+                "human_decision", "human_reason", "human_reviewer", "human_reviewed_at", "updated_at"
+            ])
+        return Response({"id": record.id, "review_id": data["review_id"], "confirmed": True})
+
     @action(detail=False, methods=["get"])
     def history(self, request):
         items = GovernanceAIBatch.objects.filter(requested_by=request.user)[:30]
@@ -78,6 +107,7 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
              "status": x.status, "rule_eligible": x.rule_eligible,
              "ai_eligible": x.ai_eligible, "confidence": x.confidence,
              "reason": x.reason, "evidence": x.evidence,
-             "model": x.model_name}
+             "model": x.model_name, "human_decision": x.human_decision,
+             "human_reviewed_at": x.human_reviewed_at}
             for x in rows
         ]})
