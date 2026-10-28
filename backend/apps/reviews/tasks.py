@@ -97,12 +97,23 @@ def process_governance_ai_batch(self, batch_id: int) -> dict[str, Any]:
                 batch.failed += 1
                 batch.failure_ids.append(quality_id)
             batch.processed += 1
-            batch.save(update_fields=("processed", "succeeded", "review_required", "failed", "failure_ids", "updated_at"))
+            batch.save(
+                update_fields=(
+                    "processed", "succeeded", "review_required", "failed",
+                    "failure_ids", "updated_at",
+                )
+            )
         batch.status = GovernanceAIBatch.Status.PARTIAL if batch.failed else GovernanceAIBatch.Status.SUCCESS
     except Exception as exc:
         batch.status = GovernanceAIBatch.Status.FAILED
-        batch.error_code = getattr(exc, "code", type(exc).__name__)[:80]
+        batch.error_code = str(getattr(exc, "code", type(exc).__name__))[:80]
+        # Provider setup can fail before any record is processed.
+        # Preserve all unprocessed ids for a later retry.
+        batch.failure_ids = list(dict.fromkeys([
+            *batch.failure_ids, *batch.quality_ids[batch.processed:],
+        ]))
+        batch.failed = len(batch.failure_ids)
     finally:
         batch.finished_at = timezone.now()
-        batch.save(update_fields=("status", "error_code", "finished_at", "updated_at"))
+        batch.save(update_fields=("status", "error_code", "failed", "failure_ids", "finished_at", "updated_at"))
     return {"batch_id": batch.id, "status": batch.status, "processed": batch.processed}
