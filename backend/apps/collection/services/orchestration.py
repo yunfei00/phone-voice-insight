@@ -18,7 +18,7 @@ from apps.collection.models import (
 )
 from apps.sources.models import SourceTarget
 
-ACTIVE_STATUSES = (CollectionStatus.PENDING, CollectionStatus.RUNNING, CollectionStatus.PAUSED)
+ACTIVE_STATUSES = (CollectionStatus.PENDING, CollectionStatus.RUNNING, CollectionStatus.PAUSED, CollectionStatus.STOPPING)
 LEASE_TTL = timedelta(minutes=10)
 
 
@@ -45,7 +45,7 @@ def create_collection_task(
     state, _ = CollectionTargetState.objects.get_or_create(source_target=source_target)
     state = CollectionTargetState.objects.select_for_update().get(pk=state.pk)
     active = (
-        CollectionTask.objects.filter(source_target=source_target, status__in=ACTIVE_STATUSES)
+        CollectionTask.objects.filter(source_target__product_id=source_target.product_id, status__in=ACTIVE_STATUSES)
         .order_by("created_at", "id")
         .first()
     )
@@ -58,7 +58,7 @@ def create_collection_task(
         source_target=source_target,
         task_type=task_type,
         trigger_type=trigger_type,
-        requested_limit=None if task_type == CollectionTaskType.FULL else requested_limit,
+        requested_limit=requested_limit,
     )
     state.active_task = task
     state.status = (
@@ -76,7 +76,7 @@ def claim_existing_task(task: CollectionTask) -> CollectionTargetState:
     state, _ = CollectionTargetState.objects.get_or_create(source_target=task.source_target)
     state = CollectionTargetState.objects.select_for_update().get(pk=state.pk)
     active = (
-        CollectionTask.objects.filter(source_target=task.source_target, status__in=ACTIVE_STATUSES)
+        CollectionTask.objects.filter(source_target__product_id=task.source_target.product_id, status__in=ACTIVE_STATUSES)
         .exclude(pk=task.pk)
         .order_by("created_at", "id")
         .first()
