@@ -218,3 +218,22 @@ def test_live_smoke_one_topic_and_one_thread() -> None:
         )
     )
     assert collector.parse_records(thread_page)
+
+
+def test_public_region_and_datetime_attribute_extraction() -> None:
+    html = """
+    <div class="hbtTbox"><h1>荣耀Power2 体验</h1></div>
+    <div class="hbt-tinf hbfTinf"><div class="hbt-tmg">
+      <time datetime="2026-10-01 09:15">发表于</time>
+      <span class="ip-region">IP属地：陕西</span>
+    </div></div>
+    <div class="wapFirstThread">测试正文</div>
+    """
+    records = parse_thread_page(
+        html, thread_id="98765",
+        thread_url="https://club.honor.com/cn/thread-98765-1-1.html",
+        listing_data={},
+    )
+    assert records[0].payload["published_at"].year == 2026
+    assert records[0].payload["raw_data"]["public_region"] == "陕西"
+    assert "IP属地" not in records[0].payload["raw_data"]["public_region"]
