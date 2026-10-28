@@ -1,15 +1,15 @@
 """AI-assisted governance endpoints."""
 from django.db import transaction
 from django.utils import timezone
-from apps.reviews.services.governance_pipeline import apply_manual_override
 from rest_framework import serializers, viewsets
-from apps.products.models import Product
-from apps.reviews.models import ReviewQuality
-from apps.reviews.tasks import process_governance_ai_batch
 from rest_framework.decorators import action
 from rest_framework.response import Response
+
 from apps.accounts.permissions import IsAdministrator
-from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview
+from apps.products.models import Product
+from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, ReviewQuality
+from apps.reviews.services.governance_pipeline import apply_manual_override
+from apps.reviews.tasks import process_governance_ai_batch
 
 class GovernanceAIViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAdministrator]
