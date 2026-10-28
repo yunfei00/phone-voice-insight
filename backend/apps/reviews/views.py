@@ -14,6 +14,7 @@ from apps.reviews.serializers import (
     ReviewRecordSerializer,
 )
 from apps.reviews.services.governance_pipeline import apply_manual_override, clear_manual_override, process_reviews
+from apps.reviews.services.governance_selection import governance_selection
 from apps.reviews.tasks import process_governance_batch
 from apps.reviews.services.metadata_completeness import metadata_completeness as build_metadata_completeness
 from apps.reviews.services.thread_tree import (
@@ -171,10 +172,12 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
         params = GovernanceBatchRequestSerializer(data=request.data)
         params.is_valid(raise_exception=True)
         values = params.validated_data
-        queryset = ReviewRecord.objects.filter(product_id=values["product_id"])
-        if "source_id" in values:
-            queryset = queryset.filter(source_id=values["source_id"])
-        ids = list(queryset.order_by("id").values_list("id", flat=True)[: values["limit"]])
+        ids = governance_selection(
+            product_id=values["product_id"],
+            source_id=values.get("source_id"),
+            limit=values["limit"],
+            reprocess=values["reprocess"],
+        )
         result = process_reviews(
             ReviewRecord.objects.filter(id__in=ids),
             persist=not values["dry_run"],
@@ -210,10 +213,12 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
         values = params.validated_data
         if values["dry_run"]:
             return Response({"detail": "异步任务不支持预览，请使用 process-batch 接口"}, status=400)
-        queryset = ReviewRecord.objects.filter(product_id=values["product_id"])
-        if "source_id" in values:
-            queryset = queryset.filter(source_id=values["source_id"])
-        ids = list(queryset.order_by("id").values_list("id", flat=True)[: values["limit"]])
+        ids = governance_selection(
+            product_id=values["product_id"],
+            source_id=values.get("source_id"),
+            limit=values["limit"],
+            reprocess=values["reprocess"],
+        )
         task = GovernanceTask.objects.create(
             product_id=values["product_id"], source_id=values.get("source_id"),
             requested_by=request.user, review_ids=ids, total=len(ids),
