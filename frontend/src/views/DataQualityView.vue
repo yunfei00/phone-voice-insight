@@ -171,7 +171,7 @@ async function runGovernance(dryRun: boolean): Promise<void> {
       dry_run: dryRun,
     })
     preview.value = result
-    ElMessage.success(dryRun ? '预览完成，未写入治理结果' : '批量治理完成')
+    ElMessage.success(result.total === 0 ? '该产品没有待治理的数据' : (dryRun ? '预览完成，未写入治理结果' : '批量治理完成'))
     if (!dryRun) await loadData()
   } catch {
     ElMessage.error('治理执行失败，请检查管理员权限或后端日志')
@@ -205,7 +205,7 @@ async function startBackgroundGovernance(): Promise<void> {
       limit: governanceLimit.value,
       dry_run: false,
     })
-    ElMessage.success('后台治理任务已提交')
+    ElMessage.success('下一批未治理数据已提交后台处理')
     await loadGovernanceTasks()
   } catch {
     ElMessage.error('后台任务提交失败')
@@ -266,7 +266,7 @@ onMounted(async () => {
 
     <section v-if="auth.isAdmin" class="panel governance-actions">
       <h3>手动数据治理</h3>
-      <p>先预览，再执行。每批最多 100 条；当前为同步小批量处理。</p>
+      <p>默认自动选择该产品下一批尚未治理的数据，跳过已处理记录及正在后台处理的记录；每批最多 100 条。</p>
       <div class="filters">
         <el-select v-model="governanceProduct" placeholder="选择手机产品" style="width: 230px">
           <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" />
@@ -280,7 +280,7 @@ onMounted(async () => {
         </el-popconfirm>
       </div>
       <el-button :disabled="!governanceProduct || governanceBusy" :loading="governanceBusy" @click="startBackgroundGovernance">提交后台任务</el-button>
-      <p v-if="preview">本批处理 {{ preview.total }} 条，可用 {{ preview.eligible }} 条，排除 {{ preview.excluded }} 条。</p>
+      <p v-if="preview">本批选中 {{ preview.total }} 条（按记录 ID 顺序，自动跳过已治理数据），可用 {{ preview.eligible }} 条，排除 {{ preview.excluded }} 条。</p>
     </section>
 
     <section v-if="auth.isAdmin" class="panel table-panel">
