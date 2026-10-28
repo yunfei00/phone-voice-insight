@@ -67,7 +67,7 @@ function baselineText(target: CollectionTargetState): string {
 
 function currentStatus(target: CollectionTargetState): string {
   if (target.active_task_status === 'PENDING') return '等待执行'
-  if (target.active_task_status === 'RUNNING') return '采集中'
+  if (target.active_task_status === 'RUNNING') return staleTask(target) ? '采集可能卡住' : '采集中'
   if (target.active_task_status === 'PAUSED') return '已暂停'
   if (target.status === 'DEGRADED') return '最近运行异常'
   return '空闲'
