@@ -81,9 +81,9 @@ function collectionStatus(product: Product): {
   if (state?.status === 'FULL_RUNNING') return { text: '全量采集中', type: 'warning' }
   if (state?.status === 'INCREMENTAL_RUNNING') return { text: '增量采集中', type: 'warning' }
   if (state?.last_task_status === 'FAILED') return { text: '采集失败', type: 'danger' }
-  if (state?.last_task_status === 'SUCCESS') return { text: '采集成功', type: 'success' }
   if (state?.has_historical_data && !state.full_verified)
     return { text: '需要恢复', type: 'warning' }
+  if (state?.last_task_status === 'SUCCESS') return { text: '采集成功', type: 'success' }
   return { text: '待采集', type: 'info' }
 }
 
