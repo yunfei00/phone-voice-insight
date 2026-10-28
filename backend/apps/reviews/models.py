@@ -353,3 +353,32 @@ class GovernanceAIReview(TimeStampedModel):
     class Meta:
         ordering = ("-created_at", "-id")
         indexes = [models.Index(fields=("quality", "input_hash"), name="gov_ai_quality_hash")]
+
+
+class GovernanceAIBatch(TimeStampedModel):
+    """Bounded manual AI-review batch with durable progress and ownership."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "等待执行"
+        RUNNING = "RUNNING", "执行中"
+        SUCCESS = "SUCCESS", "完成"
+        PARTIAL = "PARTIAL", "部分失败"
+        FAILED = "FAILED", "失败"
+
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="governance_ai_batches")
+    requested_by = models.ForeignKey("auth.User", on_delete=models.PROTECT)
+    quality_ids = models.JSONField(default=list)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    celery_task_id = models.CharField(max_length=100, blank=True)
+    total = models.PositiveIntegerField(default=0)
+    processed = models.PositiveIntegerField(default=0)
+    succeeded = models.PositiveIntegerField(default=0)
+    review_required = models.PositiveIntegerField(default=0)
+    failed = models.PositiveIntegerField(default=0)
+    failure_ids = models.JSONField(default=list)
+    error_code = models.CharField(max_length=80, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
