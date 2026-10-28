@@ -34,7 +34,7 @@ class ReviewRecordViewSet(ReadOnlyModelViewSet):
     serializer_class = ReviewRecordSerializer
     filterset_class = ReviewRecordFilter
     search_fields = ("title", "content", "external_id")
-    ordering_fields = ("published_at", "collected_at", "created_at", "rating")
+    ordering_fields = ("published_at", "collected_at", "created_at", "rating", "source__name", "product__name", "record_type", "content", "author_role", "source_region")
 
     @action(detail=False, methods=["get"])
     def facets(self, request: Request) -> Response:
