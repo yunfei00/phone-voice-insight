@@ -35,6 +35,44 @@ class CollectionSourceBusy(RuntimeError):
         self.task_id = task_id
 
 
+def recover_stale_stopping_tasks(product_id: int) -> int:
+    """Recover abandoned STOPPING tasks after the source lease and grace period expire.
+
+    Call under the product row lock, before task admission. Never reclaim a live lease.
+    """
+    now = timezone.now()
+    recovered = 0
+    stale = CollectionTask.objects.select_for_update().filter(
+        source_target__product_id=product_id,
+        status=CollectionStatus.STOPPING,
+        updated_at__lt=now - LEASE_TTL,
+    )
+    for task in stale:
+        lease = CollectionSourceLease.objects.filter(source_id=task.source_target.source_id).first()
+        if lease and lease.owner_task_id == task.id and lease.expires_at and lease.expires_at > now:
+            continue
+        task.status = CollectionStatus.CANCELLED
+        task.finished_at = now
+        task.error_message = "WORKER_LOST_DURING_STOP: 停止过程中 Worker 失联，系统自动回收"
+        task.save(update_fields=("status", "finished_at", "error_message", "updated_at"))
+        task.runs.filter(status=CollectionStatus.RUNNING).update(
+            status=CollectionStatus.CANCELLED,
+            finished_at=now,
+            error_message=task.error_message,
+        )
+        CollectionSourceLease.objects.filter(owner_task_id=task.id).update(
+            owner_task=None, expires_at=None, updated_at=now
+        )
+        CollectionTargetState.objects.filter(active_task_id=task.id).update(
+            active_task=None,
+            status=CollectionTargetStatus.DEGRADED,
+            last_error=task.error_message,
+            updated_at=now,
+        )
+        recovered += 1
+    return recovered
+
+
 @transaction.atomic
 def create_collection_task(
     *,
@@ -45,6 +83,7 @@ def create_collection_task(
     requested_pages: int | None = None,
 ) -> CollectionTask:
     Product.objects.select_for_update().get(pk=source_target.product_id)
+    recover_stale_stopping_tasks(source_target.product_id)
     state, _ = CollectionTargetState.objects.get_or_create(source_target=source_target)
     state = CollectionTargetState.objects.select_for_update().get(pk=state.pk)
     active = (
