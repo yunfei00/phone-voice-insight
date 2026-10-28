@@ -101,12 +101,7 @@ def _normalize_evidence_offsets(payload: dict[str, object], source_text: str) ->
             continue
         start = value.get("evidence_start")
         end = value.get("evidence_end")
-        if (
-            isinstance(start, int)
-            and isinstance(end, int)
-            and 0 <= start < end
-            and source_text[start:end] == evidence
-        ):
+        if isinstance(start, int) and isinstance(end, int) and 0 <= start < end and source_text[start:end] == evidence:
             continue
         exact_start = source_text.find(evidence)
         if exact_start >= 0:
@@ -218,9 +213,7 @@ def _persist_success(
         run.save()
 
 
-def _persist_failure(
-    run: AnalysisRun, code: str, message: str, *, response: AIProviderResponse | None = None
-) -> None:
+def _persist_failure(run: AnalysisRun, code: str, message: str, *, response: AIProviderResponse | None = None) -> None:
     run.status = StructuredRunStatus.FAILED
     run.error_code = code
     run.error_message = message[:1000]
