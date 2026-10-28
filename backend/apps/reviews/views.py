@@ -1,5 +1,7 @@
 from django.db.models import Count, F, Sum
+from rest_framework import serializers
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAdminUser
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -11,7 +13,7 @@ from apps.reviews.serializers import (
     ReviewQualitySerializer,
     ReviewRecordSerializer,
 )
-from apps.reviews.services.governance_pipeline import apply_manual_override, clear_manual_override
+from apps.reviews.services.governance_pipeline import apply_manual_override, clear_manual_override, process_reviews
 from apps.reviews.services.metadata_completeness import metadata_completeness as build_metadata_completeness
 from apps.reviews.services.thread_tree import (
     annotate_thread_metrics,
@@ -142,6 +144,14 @@ class ThreadTreeViewSet(ReadOnlyModelViewSet):
         return get_object_or_404(queryset, pk=pk)
 
 
+class GovernanceBatchRequestSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField(min_value=1)
+    source_id = serializers.IntegerField(min_value=1, required=False)
+    limit = serializers.IntegerField(min_value=1, max_value=100, default=20)
+    dry_run = serializers.BooleanField(default=True)
+    reprocess = serializers.BooleanField(default=False)
+
+
 class ReviewQualityViewSet(ReadOnlyModelViewSet):
     queryset = ReviewQuality.objects.select_related(
         "review__source",
@@ -153,6 +163,31 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
     filterset_class = ReviewQualityFilter
     search_fields = ("review__title", "review__content", "review__external_id", "normalized_text")
     ordering_fields = ("quality_score", "processed_at", "review__published_at", "review_id")
+
+    @action(detail=False, methods=("post",), url_path="process-batch", permission_classes=[IsAdminUser])
+    def process_batch(self, request: Request) -> Response:
+        """Run a bounded manual batch; dry-run by default."""
+        params = GovernanceBatchRequestSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        values = params.validated_data
+        queryset = ReviewRecord.objects.filter(product_id=values["product_id"])
+        if "source_id" in values:
+            queryset = queryset.filter(source_id=values["source_id"])
+        ids = list(queryset.order_by("id").values_list("id", flat=True)[: values["limit"]])
+        result = process_reviews(
+            ReviewRecord.objects.filter(id__in=ids),
+            persist=not values["dry_run"],
+            reprocess=values["reprocess"],
+        )
+        return Response({
+            **result.as_dict(),
+            "product_id": values["product_id"],
+            "source_id": values.get("source_id"),
+            "limit": values["limit"],
+            "dry_run": values["dry_run"],
+            "reprocess": values["reprocess"],
+            "processed_review_ids": ids,
+        })
 
     @action(detail=False, methods=("get",))
     def summary(self, request: Request) -> Response:
