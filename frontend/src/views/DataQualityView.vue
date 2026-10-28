@@ -59,6 +59,40 @@ const filters = reactive({
   quality_score_max: undefined as number | undefined,
 })
 
+const recordTypeLabels: Record<string, string> = {
+  REVIEW: '评价',
+  APPEND_REVIEW: '追评',
+  THREAD: '帖子',
+  REPLY: '回复',
+  OFFICIAL_REPLY: '官方回复',
+}
+
+const authorRoleLabels: Record<string, string> = {
+  USER: '普通用户',
+  OFFICIAL: '官方',
+  MODERATOR: '版主',
+  EXPERT: '达人',
+  UNKNOWN: '未知',
+}
+
+function formatPublishedAt(value: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const part = (type: string) => parts.find(item => item.type === type)?.value || ''
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
+}
+
 const reasonLabels: Record<ExclusionReason, string> = {
   NONE: '不排除',
   EMPTY_CONTENT: '空文本',
@@ -330,14 +364,18 @@ onMounted(async () => {
         @row-click="selected = $event"
       >
         <el-table-column prop="review_id" label="ID" width="80" />
-        <el-table-column prop="record_type" label="类型" width="120" />
+        <el-table-column label="类型" width="120">
+          <template #default="{ row }: { row: ReviewQuality }">{{ recordTypeLabels[row.record_type] || '未知类型' }}</template>
+        </el-table-column>
         <el-table-column
           prop="normalized_text"
           label="正文摘要"
           min-width="300"
           show-overflow-tooltip
         />
-        <el-table-column prop="author_role" label="角色" width="110" />
+        <el-table-column label="角色" width="110">
+          <template #default="{ row }: { row: ReviewQuality }">{{ authorRoleLabels[row.author_role] || '未知' }}</template>
+        </el-table-column>
         <el-table-column label="AI 可用" width="100">
           <template #default="{ row }: { row: ReviewQuality }">
             <el-tag :type="row.eligible_for_ai ? 'success' : 'info'">{{
@@ -351,7 +389,9 @@ onMounted(async () => {
           }}</template>
         </el-table-column>
         <el-table-column prop="quality_score" label="质量分" width="90" />
-        <el-table-column prop="published_at" label="发布时间" min-width="180" />
+        <el-table-column label="发布时间" min-width="180">
+          <template #default="{ row }: { row: ReviewQuality }">{{ formatPublishedAt(row.published_at) }}</template>
+        </el-table-column>
       </el-table>
       <el-pagination
         v-model:current-page="page"
