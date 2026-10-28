@@ -124,7 +124,7 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
         return Response({"results": [
             {"id": x.id, "status": x.status, "total": x.total,
              "processed": x.processed, "succeeded": x.succeeded,
-             "review_required": x.review_required, "failed": x.failed}
+             "review_required": x.review_required, "failed": x.failed, "error_code": x.error_code}
             for x in items
         ]})
 
@@ -142,7 +142,7 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
              "status": x.status, "rule_eligible": x.rule_eligible,
              "ai_eligible": x.ai_eligible, "confidence": x.confidence,
              "reason": x.reason, "evidence": x.evidence,
-             "model": x.model_name, "human_decision": x.human_decision,
+             "model": x.model_name, "error_code": x.error_code, "human_decision": x.human_decision,
              "human_reviewed_at": x.human_reviewed_at}
             for x in rows
         ]})
