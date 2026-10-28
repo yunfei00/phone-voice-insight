@@ -36,11 +36,13 @@ let pollTimer: ReturnType<typeof setInterval> | undefined
 
 const productTargets = computed(() => {
   const seen = new Set<number>()
-  return targets.value.filter((target) => {
-    if (seen.has(target.product_id)) return false
-    seen.add(target.product_id)
-    return true
-  })
+  return [...targets.value]
+    .sort((a, b) => Number(Boolean(b.active_task)) - Number(Boolean(a.active_task)))
+    .filter((target) => {
+      if (seen.has(target.product_id)) return false
+      seen.add(target.product_id)
+      return true
+    })
 })
 const modeByProduct = reactive<Record<number, 'FULL' | 'INCREMENTAL' | 'PAGES'>>({})
 const pagesByProduct = reactive<Record<number, number>>({})
