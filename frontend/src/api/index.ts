@@ -33,6 +33,16 @@ import type {
   StructuredQuality,
   StructuredAggregates,
   TaxonomyDefinition,
+  DashboardFilters,
+  DashboardOverview,
+  DashboardTrend,
+  DashboardCategory,
+  DashboardProductSummary,
+  DashboardComparison,
+  DashboardIssue,
+  DashboardIssueDetail,
+  InsightReport,
+  OperationsStatus,
 } from '@/types/api'
 
 export const login = async (payload: LoginPayload): Promise<LoginResponse> =>
@@ -492,3 +502,69 @@ export const retryGovernanceAIBatch = async (
   batchId: number,
 ): Promise<{ id: number; total: number }> =>
   (await apiClient.post('/governance-ai/retry-failed/', { batch_id: batchId })).data
+
+export const getDashboardOverview = async (
+  params: DashboardFilters = {},
+): Promise<DashboardOverview> =>
+  (await apiClient.get<DashboardOverview>('/dashboard/overview/', { params })).data
+
+export const getDashboardTrends = async (
+  params: DashboardFilters = {},
+): Promise<DashboardTrend[]> =>
+  (await apiClient.get<{ results: DashboardTrend[] }>('/dashboard/trends/', { params })).data
+    .results
+
+export const getDashboardCategories = async (
+  params: DashboardFilters = {},
+): Promise<DashboardCategory[]> =>
+  (await apiClient.get<{ results: DashboardCategory[] }>('/dashboard/categories/', { params })).data
+    .results
+
+export const getDashboardProducts = async (
+  params: DashboardFilters = {},
+): Promise<DashboardProductSummary[]> =>
+  (await apiClient.get<{ results: DashboardProductSummary[] }>('/dashboard/products/', { params }))
+    .data.results
+
+export const getDashboardComparison = async (
+  params: DashboardFilters & { left_product_id?: number; right_product_id?: number },
+): Promise<DashboardComparison> =>
+  (await apiClient.get<DashboardComparison>('/dashboard/comparison/', { params })).data
+
+export const getDashboardIssues = async (
+  params: DashboardFilters & {
+    category?: string
+    severity?: string
+    search?: string
+    ordering?: string
+    page?: number
+    page_size?: number
+  } = {},
+): Promise<PaginatedResponse<DashboardIssue>> =>
+  (await apiClient.get<PaginatedResponse<DashboardIssue>>('/dashboard/issues/', { params })).data
+
+export const getDashboardIssue = async (
+  id: string,
+  params: DashboardFilters = {},
+): Promise<DashboardIssueDetail> =>
+  (
+    await apiClient.get<DashboardIssueDetail>(`/dashboard/issues/${encodeURIComponent(id)}/`, {
+      params,
+    })
+  ).data
+
+export const getInsightReports = async (
+  params: {
+    report_type?: 'DAILY' | 'WEEKLY'
+    product_id?: number
+    page?: number
+    page_size?: number
+  } = {},
+): Promise<PaginatedResponse<InsightReport>> =>
+  (await apiClient.get<PaginatedResponse<InsightReport>>('/dashboard/reports/', { params })).data
+
+export const getInsightReport = async (id: number): Promise<InsightReport> =>
+  (await apiClient.get<InsightReport>(`/dashboard/reports/${id}/`)).data
+
+export const getOperationsStatus = async (): Promise<OperationsStatus> =>
+  (await apiClient.get<OperationsStatus>('/dashboard/operations/')).data

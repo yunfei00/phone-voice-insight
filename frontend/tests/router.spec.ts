@@ -8,6 +8,10 @@ describe('router', () => {
     expect(names).toEqual(
       expect.arrayContaining([
         'dashboard',
+        'comparison',
+        'issues',
+        'insight-reports',
+        'operations',
         'products',
         'collection-tasks',
         'threads',
