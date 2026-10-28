@@ -347,3 +347,6 @@ export const resumeStructuredBatch = async (id: number): Promise<{ batch: Struct
 
 export const retryStructuredBatch = async (id: number): Promise<{ batch: StructuredBatch }> =>
   (await apiClient.post(`/structured-batches/${id}/retry-failed/`)).data
+
+export const processGovernanceBatch = async (payload: { product_id: number; limit: number; dry_run: boolean }): Promise<{ total: number; eligible: number; excluded: number; dry_run: boolean }> =>
+  (await apiClient.post('/review-quality/process-batch/', payload)).data
