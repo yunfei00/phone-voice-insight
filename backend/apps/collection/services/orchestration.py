@@ -17,6 +17,7 @@ from apps.collection.models import (
     CollectionTriggerType,
 )
 from apps.sources.models import SourceTarget
+from apps.products.models import Product
 
 ACTIVE_STATUSES = (CollectionStatus.PENDING, CollectionStatus.RUNNING, CollectionStatus.PAUSED, CollectionStatus.STOPPING)
 LEASE_TTL = timedelta(minutes=10)
@@ -43,6 +44,7 @@ def create_collection_task(
     requested_limit: int | None = None,
     requested_pages: int | None = None,
 ) -> CollectionTask:
+    Product.objects.select_for_update().get(pk=source_target.product_id)
     state, _ = CollectionTargetState.objects.get_or_create(source_target=source_target)
     state = CollectionTargetState.objects.select_for_update().get(pk=state.pk)
     active = (
@@ -75,6 +77,7 @@ def create_collection_task(
 
 @transaction.atomic
 def claim_existing_task(task: CollectionTask) -> CollectionTargetState:
+    Product.objects.select_for_update().get(pk=task.source_target.product_id)
     state, _ = CollectionTargetState.objects.get_or_create(source_target=task.source_target)
     state = CollectionTargetState.objects.select_for_update().get(pk=state.pk)
     active = (
