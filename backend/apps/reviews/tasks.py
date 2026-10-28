@@ -6,7 +6,8 @@ from typing import Any
 
 from celery import shared_task
 
-from apps.reviews.models import ReviewRecord
+from django.utils import timezone
+from apps.reviews.models import GovernanceTask, ReviewRecord
 from apps.reviews.services.governance_pipeline import GovernanceProcessor, process_reviews
 
 
@@ -30,30 +31,39 @@ def process_product_reviews(product_id: int, batch_size: int = 100) -> dict[str,
 
 
 @shared_task(bind=True, name="process_governance_batch")
-def process_governance_batch(self, review_ids: list[int], reprocess: bool = False) -> dict[str, Any]:
-    """Process a frozen, bounded set of review IDs and report incremental progress."""
-    if len(review_ids) > 1000:
-        raise ValueError("A governance task cannot exceed 1000 records")
+def process_governance_batch(self, governance_task_id: int) -> dict[str, Any]:
+    """Execute the frozen batch, checkpointing progress to PostgreSQL."""
+    task = GovernanceTask.objects.get(pk=governance_task_id)
+    if task.status != GovernanceTask.Status.PENDING:
+        return {"task_id": task.id, "status": task.status}
+    task.status = GovernanceTask.Status.RUNNING
+    task.started_at = timezone.now()
+    task.celery_task_id = self.request.id or ""
+    task.save(update_fields=("status", "started_at", "celery_task_id", "updated_at"))
     processor = GovernanceProcessor()
-    eligible = excluded = reused = 0
     failures: list[dict[str, Any]] = []
-    total = len(review_ids)
-    for index, review_id in enumerate(review_ids, 1):
-        try:
-            review = ReviewRecord.objects.select_related("source", "source_target", "product").get(pk=review_id)
-            decision = processor.process(review, persist=True, force=reprocess)
-            eligible += int(decision.eligible)
-            excluded += int(not decision.eligible)
-            reused += int(decision.reused)
-        except Exception as exc:
-            # Do not leak exception details or raw user content to API clients.
-            failures.append({"review_id": review_id, "error_type": type(exc).__name__})
-        self.update_state(state="PROGRESS", meta={
-            "total": total, "processed": index, "eligible": eligible,
-            "excluded": excluded, "reused": reused, "failed": len(failures),
-        })
-    return {
-        "total": total, "processed": total, "eligible": eligible,
-        "excluded": excluded, "reused": reused, "failed": len(failures),
-        "failures": failures,
-    }
+    try:
+        for review_id in task.review_ids:
+            try:
+                review = ReviewRecord.objects.select_related("source", "source_target", "product").get(pk=review_id)
+                decision = processor.process(review, persist=True, force=task.reprocess)
+                task.eligible += int(decision.eligible)
+                task.excluded += int(not decision.eligible)
+                task.reused += int(decision.reused)
+            except Exception as exc:
+                failures.append({"review_id": review_id, "error_type": type(exc).__name__})
+                task.failed += 1
+            task.processed += 1
+            task.failures = failures
+            task.save(update_fields=("eligible", "excluded", "reused", "failed", "processed", "failures", "updated_at"))
+            self.update_state(state="PROGRESS", meta={"task_id": task.id, "processed": task.processed, "total": task.total})
+    except Exception as exc:
+        task.status = GovernanceTask.Status.FAILED
+        task.error_message = type(exc).__name__
+        raise
+    else:
+        task.status = GovernanceTask.Status.PARTIAL if task.failed else GovernanceTask.Status.SUCCESS
+    finally:
+        task.finished_at = timezone.now()
+        task.save(update_fields=("status", "error_message", "finished_at", "updated_at"))
+    return {"task_id": task.id, "status": task.status, "processed": task.processed, "failed": task.failed}
