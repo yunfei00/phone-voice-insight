@@ -337,3 +337,22 @@ def test_relative_time_uses_page_fetch_time_and_preserves_raw_value() -> None:
     assert record.payload["published_at"] == datetime(2026, 10, 27, 11, 4, tzinfo=ZoneInfo("Asia/Shanghai"))
     assert record.payload["raw_data"]["published_at_raw"] == "昨天 11:04"
     assert record.payload["raw_data"]["published_at_parse_status"] == "parsed"
+
+
+def test_day_relative_time_without_clock_stays_null_with_reason() -> None:
+    html = """
+    <div class="hbtTbox"><h1>荣耀 Power2</h1></div>
+    <div class="hbt-tinf hbfTinf"><div class="hbt-tmg"><span class="hbt-ptime">6 天前</span></div></div>
+    <div class="wapFirstThread">正文</div>
+    """
+    record = parse_thread_page(
+        html,
+        thread_id="2",
+        thread_url="https://club.honor.com/cn/thread-2-1-1.html",
+        listing_data={},
+        fetched_at=datetime(2026, 10, 28, 16, 30, tzinfo=ZoneInfo("Asia/Shanghai")),
+    )[0]
+
+    assert record.payload["published_at"] is None
+    assert record.payload["raw_data"]["published_at_raw"] == "6 天前"
+    assert record.payload["raw_data"]["published_at_parse_reason"] == ("relative_day_without_time_precision")

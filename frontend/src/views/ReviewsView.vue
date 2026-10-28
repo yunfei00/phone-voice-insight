@@ -75,6 +75,7 @@ const reasonLabels: Record<string, string> = {
   source_time_missing_or_legacy_not_captured: '页面未提供或历史版本未保存时间',
   legacy_relative_time_not_normalized: '历史相对时间未标准化',
   legacy_time_parse_failed: '历史时间格式无法解析',
+  relative_day_without_time_precision: '页面仅显示“几天前”，缺少具体时分',
   unsupported_time_format: '时间格式不受支持',
   legacy_ip_location_not_captured: '历史版本未采集 IP 属地',
   source_ip_location_missing: '页面未提供 IP 属地',

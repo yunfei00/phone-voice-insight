@@ -22,7 +22,7 @@ _THREAD_PATH_PATTERN = re.compile(r"thread-(?P<thread_id>\d+)-(?:\d+)-(?:\d+)\.h
 _PID_PATTERN = re.compile(r"(?:pid|post_?)(?P<pid>\d+)")
 _FULL_TIME_PATTERN = re.compile(r"\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?")
 _PARTIAL_TIME_PATTERN = re.compile(r"(?<!\d)\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?")
-_RELATIVE_TIME_PATTERN = re.compile(r"(?:今天|昨天|前天)\s+\d{1,2}:\d{2}(?::\d{2})?|\d+\s*(?:分钟|小时)前")
+_RELATIVE_TIME_PATTERN = re.compile(r"(?:今天|昨天|前天)\s+\d{1,2}:\d{2}(?::\d{2})?|\d+\s*(?:分钟|小时|天)前")
 _COARSE_REGION_PATTERN = re.compile(r"^[\u4e00-\u9fff]{2,12}$")
 _UI_TEXT = {
     "举报",

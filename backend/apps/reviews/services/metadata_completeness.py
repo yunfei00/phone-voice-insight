@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from typing import Any
 
@@ -55,6 +56,8 @@ def _published_failure_reasons(queryset: QuerySet[ReviewRecord]) -> dict[str, in
         if not reason:
             if raw_value.startswith(("今天", "昨天", "前天")):
                 reason = "legacy_relative_time_not_normalized"
+            elif re.search(r"\d+\s*天前", raw_value):
+                reason = "relative_day_without_time_precision"
             elif raw_value:
                 reason = "legacy_time_parse_failed"
             else:

@@ -95,6 +95,8 @@ def honor_datetime_failure_reason(value: str, *, reference: datetime | None = No
     normalized = " ".join(value.split())
     if not normalized:
         return "source_time_missing"
+    if re.search(r"\d+\s*天前", normalized):
+        return "relative_day_without_time_precision"
     if reference is None and (_PARTIAL_PATTERN.search(normalized) or _DAY_RELATIVE_PATTERN.search(normalized)):
         return "reference_time_required"
     if (
