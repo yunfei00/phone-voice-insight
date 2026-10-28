@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from apps.sources.services.target_validation import _public_addresses, diagnose_dns
 from collectors.base import CollectorError
@@ -29,5 +29,20 @@ class NetworkDiagnosticsTests(SimpleTestCase):
             (2, 1, 6, "", ("172.31.0.12", 443)),
         ]
         self.assertEqual(diagnose_dns("club.honor.com")["dns_status"], "SSRF_BLOCKED")
+        with self.assertRaises(CollectorError):
+            _public_addresses("club.honor.com")
+
+    @override_settings(SSRF_ALLOWED_HOSTS=["club.honor.com"], SSRF_ALLOWED_PRIVATE_IPS=["172.31.0.12"])
+    @patch("apps.sources.services.target_validation.socket.getaddrinfo")
+    def test_explicit_pinned_enterprise_dns(self, resolver):
+        resolver.return_value = [(2, 1, 6, "", ("172.31.0.12", 443))]
+        self.assertEqual(_public_addresses("club.honor.com"), ["172.31.0.12"])
+        with self.assertRaises(CollectorError):
+            _public_addresses("other.example.com")
+
+    @override_settings(SSRF_ALLOWED_HOSTS=["club.honor.com"], SSRF_ALLOWED_PRIVATE_IPS=["172.31.0.12"])
+    @patch("apps.sources.services.target_validation.socket.getaddrinfo")
+    def test_unpinned_private_ip_still_blocked(self, resolver):
+        resolver.return_value = [(2, 1, 6, "", ("10.0.0.1", 443))]
         with self.assertRaises(CollectorError):
             _public_addresses("club.honor.com")
