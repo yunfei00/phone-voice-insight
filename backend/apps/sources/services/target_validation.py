@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import ipaddress
 import re
 import socket
@@ -32,18 +33,54 @@ def target_url_hash(url: str) -> str:
     return hashlib.sha256(url.encode("utf-8")).hexdigest()
 
 
-def _public_addresses(hostname: str) -> list[str]:
+def diagnose_dns(hostname: str) -> dict[str, object]:
+    """Read-only DNS diagnostics. Never connect to blocked/private addresses."""
+    report: dict[str, object] = {
+        "hostname": hostname,
+        "runtime": "docker-or-linux",
+        "httpx_trust_env": False,
+        "proxy_environment_present": any(
+            os.environ.get(key) for key in (
+                "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                "http_proxy", "https_proxy", "all_proxy",
+            )
+        ),
+    }
     try:
-        addresses = sorted({str(item[4][0]) for item in socket.getaddrinfo(hostname, 443, type=socket.SOCK_STREAM)})
-    except OSError as exc:
-        raise CollectorError("采集入口 DNS 解析失败", code="DNS_ERROR", retryable=True) from exc
-    if not addresses:
-        raise CollectorError("采集入口 DNS 未返回地址", code="DNS_ERROR")
-    for value in addresses:
-        address = ipaddress.ip_address(value)
-        if not address.is_global:
-            raise CollectorError("采集入口解析到非公网地址; 已拒绝访问", code="SSRF_BLOCKED")
-    return addresses
+        with open("/etc/resolv.conf", encoding="utf-8") as handle:
+            report["dns_nameservers"] = [
+                line.split()[1] for line in handle
+                if line.strip().startswith("nameserver ") and len(line.split()) >= 2
+            ]
+    except OSError:
+        report["dns_nameservers"] = []
+    try:
+        addresses = sorted({
+            str(item[4][0]) for item in socket.getaddrinfo(
+                hostname, 443, type=socket.SOCK_STREAM
+            )
+        })
+    except OSError:
+        report.update({"dns_status": "DNS_ERROR", "resolved_addresses": []})
+        return report
+    report["resolved_addresses"] = addresses
+    blocked = [value for value in addresses if not ipaddress.ip_address(value).is_global]
+    report["blocked_addresses"] = blocked
+    report["dns_status"] = "SSRF_BLOCKED" if blocked else ("PUBLIC" if addresses else "DNS_ERROR")
+    report["recommendation"] = (
+        "检查 Windows/WSL2/Docker DNS 分流及经批准的企业代理；禁止直接放行私网 IP"
+        if blocked else "DNS 检查通过；仍需检查真实请求路径、代理与重定向"
+    )
+    return report
+
+
+def _public_addresses(hostname: str) -> list[str]:
+    diagnosis = diagnose_dns(hostname)
+    if diagnosis["dns_status"] == "DNS_ERROR":
+        raise CollectorError("采集入口 DNS 解析失败", code="DNS_ERROR", retryable=True)
+    if diagnosis["dns_status"] == "SSRF_BLOCKED":
+        raise CollectorError("采集入口解析到非公网地址; 已拒绝访问", code="SSRF_BLOCKED")
+    return list(diagnosis["resolved_addresses"])
 
 
 def _identity_matches(target: SourceTarget, identity: str) -> bool:
@@ -80,6 +117,8 @@ def _persist(target: SourceTarget, result: TargetValidationResult) -> TargetVali
 
 def validate_source_target(target: SourceTarget) -> TargetValidationResult:
     report: dict[str, object] = {"url": target.target_url, "source": target.source.code}
+    if target.source.code == "HONOR_CLUB":
+        report["network_diagnostics"] = diagnose_dns("club.honor.com")
     try:
         if target.source.code != "HONOR_CLUB":
             raise CollectorError("当前仅支持验证荣耀俱乐部入口", code="UNSUPPORTED_SOURCE")
