@@ -96,12 +96,6 @@ const reasonLabels: Record<string, string> = {
   profile_region_not_publicly_labeled: '页面未公开标注用户填写地区',
 }
 
-function summarizeReasons(reasons: Record<string, number>): string {
-  const items = Object.entries(reasons)
-  if (!items.length) return '无'
-  return items.map(([reason, count]) => `${reasonLabels[reason] || reason} ${count}`).join('；')
-}
-
 function onSortChange(sort: { prop: string | null; order: 'ascending' | 'descending' | null }): void {
   const fields: Record<string, string> = {
     source_name: 'source__name', product_name: 'product__name', record_type: 'record_type',
