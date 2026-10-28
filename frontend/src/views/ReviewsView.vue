@@ -15,7 +15,6 @@ const filters = reactive({
   page: 1,
   page_size: 20,
   source: undefined as number | undefined,
-  product_variant: undefined as number | undefined,
   rating: undefined as number | undefined,
   search: '',
   source_region: '',
@@ -83,20 +82,7 @@ onMounted(async () => {
             :value="source.id"
           />
         </el-select>
-        <el-select
-          v-model="filters.product_variant"
-          clearable
-          placeholder="产品版本"
-          @change="applyFilters"
-        >
-          <el-option
-            v-for="variant in facets.variants"
-            :key="variant.product_variant_id"
-            :label="`${variant.product_variant__sku_name} (${variant.count})`"
-            :value="variant.product_variant_id"
-          />
-        </el-select>
-        <el-select v-model="filters.source_region" clearable placeholder="来源地域" @change="applyFilters"><el-option v-for="region in facets.regions" :key="region.source_region" :label="`${region.source_region} (${region.count})`" :value="region.source_region" /><el-option label="未知地域" value="__UNKNOWN__" /></el-select>
+<el-select v-model="filters.source_region" clearable placeholder="来源地域" @change="applyFilters"><el-option v-for="region in facets.regions" :key="region.source_region" :label="`${region.source_region} (${region.count})`" :value="region.source_region" /><el-option label="未知地域" value="__UNKNOWN__" /></el-select>
         <el-select v-if="facets.ratings.length" v-model="filters.rating" clearable placeholder="原始评分" @change="applyFilters"><el-option v-for="item in facets.ratings" :key="item.rating" :label="`${item.rating} 分 (${item.count})`" :value="Number(item.rating)" /></el-select>
         <el-select
           v-model="filters.record_type"
@@ -147,7 +133,6 @@ onMounted(async () => {
         <el-table-column prop="product_name" label="产品" width="150" />
         <el-table-column label="来源地域" width="130"><template #default="{ row }">{{ row.source_region || "未知" }}</template></el-table-column>
         <el-table-column prop="record_type" label="类型" width="130" />
-        <el-table-column prop="variant_name" label="产品版本" min-width="170" />
         <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip />
         <el-table-column label="原始评分" width="100"><template #default="{ row }">{{ row.rating == null ? "未提供" : row.rating }}</template></el-table-column>
         <el-table-column label="角色" width="90">
@@ -183,9 +168,6 @@ onMounted(async () => {
           <el-descriptions-item label="产品">{{ selected.product_name }}</el-descriptions-item>
           <el-descriptions-item label="类型">{{ selected.record_type }}</el-descriptions-item>
           <el-descriptions-item label="评分">{{ selected.rating ?? '未提供' }}</el-descriptions-item>
-          <el-descriptions-item label="产品版本">{{
-            selected.variant_name || '—'
-          }}</el-descriptions-item>
           <el-descriptions-item label="标题">{{ selected.title || '—' }}</el-descriptions-item>
           <el-descriptions-item label="内容">{{ selected.content }}</el-descriptions-item>
           <el-descriptions-item label="发布时间">{{
