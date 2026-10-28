@@ -1,4 +1,6 @@
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
+from django.db import transaction
+from apps.collection.models import CollectionTargetState
 
 from apps.sources.models import DataSource, SourceTarget
 from apps.sources.serializers import DataSourceSerializer, SourceTargetSerializer
@@ -16,3 +18,13 @@ class SourceTargetViewSet(ModelViewSet):
     queryset = SourceTarget.objects.select_related('product', 'source')
     serializer_class = SourceTargetSerializer
     filterset_fields = ('product', 'source', 'is_active')
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        target = serializer.save()
+        CollectionTargetState.objects.get_or_create(source_target=target)
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        target = serializer.save()
+        CollectionTargetState.objects.get_or_create(source_target=target)
