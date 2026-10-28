@@ -65,6 +65,7 @@ class CollectionTaskViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin
                 task_type=serializer.validated_data.get("task_type", CollectionTaskType.INCREMENTAL),
                 trigger_type=CollectionTriggerType.MANUAL,
                 requested_limit=serializer.validated_data.get("requested_limit"),
+                requested_pages=serializer.validated_data.get("requested_pages"),
             )
         except CollectionAlreadyActive as exc:
             return Response(
