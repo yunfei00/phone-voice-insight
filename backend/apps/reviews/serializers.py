@@ -26,6 +26,8 @@ class ReviewRecordSerializer(serializers.ModelSerializer):
             "content",
             "rating",
             "published_at",
+            "source_region",
+            "region_evidence",
             "software_version",
             "author_role",
             "is_official",
