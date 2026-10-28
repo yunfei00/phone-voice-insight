@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 
-import { getProducts, getReviews, getSources } from '@/api'
-import type { DataSource, Product, ProductVariant, ReviewRecord } from '@/types/api'
+import { getReviewFacets, getReviews, getSources } from '@/api'
+import type { DataSource, ReviewRecord } from '@/types/api'
 
 const reviews = ref<ReviewRecord[]>([])
 const sources = ref<DataSource[]>([])
-const products = ref<Product[]>([])
+const facets = ref<{ variants: { product_variant_id: number; product_variant__sku_name: string; count: number }[]; regions: { source_region: string; count: number }[]; ratings: { rating: string; count: number }[] }>({ variants: [], regions: [], ratings: [] })
 const selected = ref<ReviewRecord | null>(null)
 const loading = ref(false)
 const error = ref('')
@@ -23,10 +23,6 @@ const filters = reactive({
   author_role: '',
   is_official: '' as '' | 'true' | 'false',
 })
-
-const variants = computed<ProductVariant[]>(() =>
-  products.value.flatMap((product) => product.variants),
-)
 
 async function loadReviews(): Promise<void> {
   loading.value = true
@@ -56,12 +52,12 @@ function applyFilters(): void {
 
 onMounted(async () => {
   try {
-    const [sourcePage, productPage] = await Promise.all([
+    const [sourcePage, facetPage] = await Promise.all([
       getSources({ page_size: 100 }),
-      getProducts({ page_size: 100 }),
+      getReviewFacets(),
     ])
     sources.value = sourcePage.results
-    products.value = productPage.results
+    facets.value = facetPage
   } finally {
     await loadReviews()
   }
@@ -94,21 +90,14 @@ onMounted(async () => {
           @change="applyFilters"
         >
           <el-option
-            v-for="variant in variants"
-            :key="variant.id"
-            :label="variant.sku_name"
-            :value="variant.id"
+            v-for="variant in facets.variants"
+            :key="variant.product_variant_id"
+            :label="`${variant.product_variant__sku_name} (${variant.count})`"
+            :value="variant.product_variant_id"
           />
         </el-select>
-        <el-input v-model="filters.source_region" clearable placeholder="来源地域（精确匹配）" @keyup.enter="applyFilters"><template #append><el-button @click="applyFilters">筛选</el-button></template></el-input>
-        <el-select v-model="filters.rating" clearable placeholder="评分" @change="applyFilters">
-          <el-option
-            v-for="rating in [5, 4, 3, 2, 1, 0]"
-            :key="rating"
-            :label="`${rating} 星`"
-            :value="rating"
-          />
-        </el-select>
+        <el-select v-model="filters.source_region" clearable placeholder="来源地域" @change="applyFilters"><el-option v-for="region in facets.regions" :key="region.source_region" :label="`${region.source_region} (${region.count})`" :value="region.source_region" /><el-option label="未知地域" value="__UNKNOWN__" /></el-select>
+        <el-select v-if="facets.ratings.length" v-model="filters.rating" clearable placeholder="原始评分" @change="applyFilters"><el-option v-for="item in facets.ratings" :key="item.rating" :label="`${item.rating} 分 (${item.count})`" :value="Number(item.rating)" /></el-select>
         <el-select
           v-model="filters.record_type"
           clearable
@@ -160,13 +149,14 @@ onMounted(async () => {
         <el-table-column prop="record_type" label="类型" width="130" />
         <el-table-column prop="variant_name" label="产品版本" min-width="170" />
         <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip />
-        <el-table-column prop="rating" label="评分" width="80" />
+        <el-table-column label="原始评分" width="100"><template #default="{ row }">{{ row.rating == null ? "未提供" : row.rating }}</template></el-table-column>
         <el-table-column label="角色" width="90">
           <template #default="{ row }: { row: ReviewRecord }">
             <el-tag :type="row.is_official ? 'warning' : 'info'">{{ row.author_role }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="published_at" label="发布时间" min-width="170" />
+        <el-table-column label="发布时间" min-width="170"><template #default="{ row }">{{ row.published_at || "未提供" }}</template></el-table-column>
+        <el-table-column prop="collected_at" label="采集时间" min-width="170" />
       </el-table>
 
       <el-pagination
@@ -192,7 +182,7 @@ onMounted(async () => {
           <el-descriptions-item label="地域依据">{{ selected.region_evidence || "未提供" }}</el-descriptions-item>
           <el-descriptions-item label="产品">{{ selected.product_name }}</el-descriptions-item>
           <el-descriptions-item label="类型">{{ selected.record_type }}</el-descriptions-item>
-          <el-descriptions-item label="评分">{{ selected.rating || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="评分">{{ selected.rating ?? '未提供' }}</el-descriptions-item>
           <el-descriptions-item label="产品版本">{{
             selected.variant_name || '—'
           }}</el-descriptions-item>
@@ -201,6 +191,8 @@ onMounted(async () => {
           <el-descriptions-item label="发布时间">{{
             selected.published_at || '—'
           }}</el-descriptions-item>
+          <el-descriptions-item label="采集时间">{{ selected.collected_at }}</el-descriptions-item>
+          <el-descriptions-item label="软件版本">{{ selected.software_version || "未提供" }}</el-descriptions-item>
           <el-descriptions-item label="角色">{{ selected.author_role }}</el-descriptions-item>
           <el-descriptions-item label="External ID">{{
             selected.external_id || '—'
