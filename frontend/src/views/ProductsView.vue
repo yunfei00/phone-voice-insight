@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
-import { createBrand, createProduct, createSourceTarget, updateSourceTarget, getBrands, getProducts, getSources, updateProduct } from '@/api'
+import { createBrand, createProduct, createSourceTarget, updateSourceTarget, getCollectionTargets, startSmartCollection, getBrands, getProducts, getSources, updateProduct } from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import type { Product, DataSource } from '@/types/api'
+import type { Product, DataSource, CollectionTargetState } from '@/types/api'
 
 const auth = useAuthStore()
 const products = ref<Product[]>([])
 const brands = ref<{id:number; name:string; code:string}[]>([])
 const sources = ref<DataSource[]>([])
+const states = ref<CollectionTargetState[]>([])
+const startingId = ref<number|null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const dialog = ref(false)
@@ -22,8 +24,8 @@ const targetForm = reactive({ product:undefined as number|undefined, source:unde
 async function load() {
   loading.value = true
   try {
-    const [p,b,s] = await Promise.all([getProducts({page_size:100}),getBrands(),getSources({page_size:100})])
-    products.value=p.results; brands.value=b.results; sources.value=s.results
+    const [p,b,s,t] = await Promise.all([getProducts({page_size:100}),getBrands(),getSources({page_size:100}),getCollectionTargets({page_size:100})])
+    products.value=p.results; brands.value=b.results; sources.value=s.results; states.value=t.results
   } catch { ElMessage.error('手机或采集来源加载失败') }
   finally { loading.value=false }
 }
@@ -69,6 +71,19 @@ async function saveTarget() {
   } catch { ElMessage.error('采集入口保存失败，请检查网址或是否存在重复配置') }
   finally { saving.value=false }
 }
+async function smartStart(p:Product) {
+  const target = sources.value.flatMap(s=>s.targets).find(t=>t.product===p.id && t.is_active)
+  if(!target) { ElMessage.warning('请先配置采集入口'); return }
+  const state = states.value.find(s=>s.source_target===target.id)
+  if(!state) { ElMessage.warning('采集状态尚未初始化，请刷新页面'); return }
+  startingId.value=p.id
+  try {
+    const result=await startSmartCollection(state.id)
+    ElMessage.success(result.existing ? `已有采集任务 #${result.task_id}，请查看进度` : `已启动${result.task_type==='FULL'?'全量':'增量'}采集任务 #${result.task_id}`)
+    await load()
+  } catch { ElMessage.error('启动失败，请检查采集入口及后台任务服务') }
+  finally { startingId.value=null }
+}
 onMounted(load)
 </script>
 <template>
@@ -81,7 +96,7 @@ onMounted(load)
     <div class="panel"><el-table v-loading="loading" :data="products" empty-text="暂无手机产品">
       <el-table-column prop="name" label="手机" min-width="170"/><el-table-column prop="brand.name" label="品牌" width="130"/>
       <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="row.is_active?'success':'info'">{{row.is_active?'启用':'停用'}}</el-tag></template></el-table-column>
-      <el-table-column label="操作" min-width="210"><template #default="{row}"><el-button v-if="auth.canWrite" link type="primary" @click="openEdit(row)">编辑</el-button><el-button v-if="auth.canWrite" link type="primary" @click="openTarget(row)">配置采集入口</el-button></template></el-table-column>
+      <el-table-column label="操作" min-width="210"><template #default="{row}"><el-button v-if="auth.canWrite" link type="primary" @click="openEdit(row)">编辑</el-button><el-button v-if="auth.canWrite" link type="primary" @click="openTarget(row)">配置采集入口</el-button><el-button v-if="auth.canWrite" link type="success" :loading="startingId===row.id" @click="smartStart(row)">智能采集</el-button></template></el-table-column>
     </el-table></div>
     <el-dialog v-model="dialog" :title="editingId?'编辑手机':'新增手机'" width="min(520px,94vw)"><el-form label-position="top">
       <el-form-item label="品牌"><el-select v-model="form.brand_id" :disabled="Boolean(editingId)" placeholder="选择品牌"><el-option v-for="b in brands" :key="b.id" :label="b.name" :value="b.id"/></el-select></el-form-item>
