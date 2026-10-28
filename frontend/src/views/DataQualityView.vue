@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import { getDataQualitySummary, getReviewQualities, getProducts, processGovernanceBatch, startAsyncGovernance, getGovernanceTaskHistory, getGovernanceTaskStatus, retryGovernanceTask } from '@/api'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import type { GovernanceTaskInfo, Product, DataQualitySummary, ExclusionReason, ReviewQuality } from '@/types/api'
+import type { Product, DataQualitySummary, ExclusionReason, ReviewQuality } from '@/types/api'
+import type { GovernanceTaskInfo } from '@/api'
 
 const emptySummary = (): DataQualitySummary => ({
   total: 0,
@@ -42,6 +43,8 @@ const governanceLimit = ref(20)
 const governanceBusy = ref(false)
 const governanceTasks = ref<GovernanceTaskInfo[]>([])
 const taskLoading = ref(false)
+let taskPollTimer: ReturnType<typeof setInterval> | undefined
+let taskPollInFlight = false
 const preview = ref<{ total: number; eligible: number; excluded: number } | null>(null)
 const rows = ref<ReviewQuality[]>([])
 const summary = ref<DataQualitySummary>(emptySummary())
@@ -189,11 +192,33 @@ async function loadGovernanceTasks(): Promise<void> {
       if (task.status !== 'RUNNING' && task.status !== 'PENDING') return task
       try { return await getGovernanceTaskStatus(task.id) } catch { return task }
     }))
+    if (!governanceTasks.value.some(task => task.status === 'RUNNING' || task.status === 'PENDING')) stopTaskPolling()
   } catch {
     ElMessage.error('治理任务列表加载失败')
   } finally {
     taskLoading.value = false
   }
+}
+
+function stopTaskPolling(): void {
+  if (taskPollTimer !== undefined) {
+    clearInterval(taskPollTimer)
+    taskPollTimer = undefined
+  }
+}
+
+function startTaskPolling(): void {
+  if (taskPollTimer !== undefined) return
+  taskPollTimer = setInterval(async () => {
+    if (taskPollInFlight) return
+    taskPollInFlight = true
+    try {
+      await loadGovernanceTasks()
+      await loadData()
+    } finally {
+      taskPollInFlight = false
+    }
+  }, 3000)
 }
 
 async function startBackgroundGovernance(): Promise<void> {
@@ -207,6 +232,7 @@ async function startBackgroundGovernance(): Promise<void> {
     })
     ElMessage.success('下一批未治理数据已提交后台处理')
     await loadGovernanceTasks()
+    startTaskPolling()
   } catch {
     ElMessage.error('后台任务提交失败')
   } finally {
@@ -219,6 +245,7 @@ async function retryBackgroundGovernance(taskId: number): Promise<void> {
     await retryGovernanceTask(taskId)
     ElMessage.success('失败记录重试任务已提交')
     await loadGovernanceTasks()
+    startTaskPolling()
   } catch {
     ElMessage.error('重试失败')
   }
@@ -228,6 +255,7 @@ onMounted(async () => {
   await loadData()
   if (auth.isAdmin) {
     await loadGovernanceTasks()
+    if (governanceTasks.value.some(task => task.status === 'RUNNING' || task.status === 'PENDING')) startTaskPolling()
     try {
       products.value = (await getProducts({ page_size: 100 })).results
     } catch {
@@ -235,6 +263,7 @@ onMounted(async () => {
     }
   }
 })
+onUnmounted(stopTaskPolling)
 </script>
 
 <template>
@@ -266,27 +295,27 @@ onMounted(async () => {
 
     <section v-if="auth.isAdmin" class="panel governance-actions">
       <h3>手动数据治理</h3>
-      <p>默认自动选择该产品下一批尚未治理的数据，跳过已处理记录及正在后台处理的记录；每批最多 100 条。</p>
+      <p>填写的是本批最大处理条数，不是必须处理的数量。系统自动跳过已治理或正在处理的记录；点击「开始治理」后在后台运行并自动刷新进度。</p>
       <div class="filters">
         <el-select v-model="governanceProduct" placeholder="选择手机产品" style="width: 230px">
           <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" />
         </el-select>
         <el-input-number v-model="governanceLimit" :min="1" :max="100" />
         <el-button :disabled="!governanceProduct" :loading="governanceBusy" @click="runGovernance(true)">预览治理</el-button>
-        <el-popconfirm title="确认写入本批治理结果？原始记录不会修改。" @confirm="runGovernance(false)">
+        <el-popconfirm title="确认将下一批未治理数据提交后台处理？原始记录不会修改。" @confirm="startBackgroundGovernance">
           <template #reference>
-            <el-button type="primary" :disabled="!governanceProduct || governanceBusy" :loading="governanceBusy">执行治理</el-button>
+            <el-button type="primary" :disabled="!governanceProduct || governanceBusy" :loading="governanceBusy">开始治理</el-button>
           </template>
         </el-popconfirm>
       </div>
-      <el-button :disabled="!governanceProduct || governanceBusy" :loading="governanceBusy" @click="startBackgroundGovernance">提交后台任务</el-button>
-      <p v-if="preview">本批选中 {{ preview.total }} 条（按记录 ID 顺序，自动跳过已治理数据），可用 {{ preview.eligible }} 条，排除 {{ preview.excluded }} 条。</p>
+      <p v-if="preview">本次请求上限 {{ governanceLimit }} 条，实际选中 {{ preview.total }} 条（其余已治理、正在处理或不符合筛选条件）；预计可用 {{ preview.eligible }} 条，排除 {{ preview.excluded }} 条。预览不写入结果。</p>
     </section>
 
     <section v-if="auth.isAdmin" class="panel table-panel">
       <div class="page-header">
         <h3>后台治理任务</h3>
-        <el-button :loading="taskLoading" @click="loadGovernanceTasks">刷新进度</el-button>
+        <span v-if="governanceTasks.some(task => task.status === 'RUNNING' || task.status === 'PENDING')">每 3 秒自动刷新</span>
+        <el-button :loading="taskLoading" @click="loadGovernanceTasks">立即刷新</el-button>
       </div>
       <el-table :data="governanceTasks" empty-text="暂无后台治理任务">
         <el-table-column prop="id" label="任务 ID" width="100" />
