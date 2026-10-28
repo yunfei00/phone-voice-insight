@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 
-import { getDataQualitySummary, getReviewQualities, getProducts, processGovernanceBatch } from '@/api'
+import { getDataQualitySummary, getReviewQualities, getProducts, processGovernanceBatch, startAsyncGovernance, getGovernanceTaskHistory, getGovernanceTaskStatus, retryGovernanceTask } from '@/api'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import type { Product, DataQualitySummary, ExclusionReason, ReviewQuality } from '@/types/api'
+import type { GovernanceTaskInfo, Product, DataQualitySummary, ExclusionReason, ReviewQuality } from '@/types/api'
 
 const emptySummary = (): DataQualitySummary => ({
   total: 0,
@@ -40,6 +40,8 @@ const products = ref<Product[]>([])
 const governanceProduct = ref<number | undefined>(undefined)
 const governanceLimit = ref(20)
 const governanceBusy = ref(false)
+const governanceTasks = ref<GovernanceTaskInfo[]>([])
+const taskLoading = ref(false)
 const preview = ref<{ total: number; eligible: number; excluded: number } | null>(null)
 const rows = ref<ReviewQuality[]>([])
 const summary = ref<DataQualitySummary>(emptySummary())
@@ -144,9 +146,54 @@ async function runGovernance(dryRun: boolean): Promise<void> {
   }
 }
 
+async function loadGovernanceTasks(): Promise<void> {
+  if (!auth.isAdmin) return
+  taskLoading.value = true
+  try {
+    const history = await getGovernanceTaskHistory()
+    governanceTasks.value = await Promise.all(history.results.map(async (task) => {
+      if (task.status !== 'RUNNING' && task.status !== 'PENDING') return task
+      try { return await getGovernanceTaskStatus(task.id) } catch { return task }
+    }))
+  } catch {
+    ElMessage.error('治理任务列表加载失败')
+  } finally {
+    taskLoading.value = false
+  }
+}
+
+async function startBackgroundGovernance(): Promise<void> {
+  if (!governanceProduct.value) return
+  governanceBusy.value = true
+  try {
+    await startAsyncGovernance({
+      product_id: governanceProduct.value,
+      limit: governanceLimit.value,
+      dry_run: false,
+    })
+    ElMessage.success('后台治理任务已提交')
+    await loadGovernanceTasks()
+  } catch {
+    ElMessage.error('后台任务提交失败')
+  } finally {
+    governanceBusy.value = false
+  }
+}
+
+async function retryBackgroundGovernance(taskId: number): Promise<void> {
+  try {
+    await retryGovernanceTask(taskId)
+    ElMessage.success('失败记录重试任务已提交')
+    await loadGovernanceTasks()
+  } catch {
+    ElMessage.error('重试失败')
+  }
+}
+
 onMounted(async () => {
   await loadData()
   if (auth.isAdmin) {
+    await loadGovernanceTasks()
     try {
       products.value = (await getProducts({ page_size: 100 })).results
     } catch {
@@ -198,7 +245,32 @@ onMounted(async () => {
           </template>
         </el-popconfirm>
       </div>
+      <el-button :disabled="!governanceProduct || governanceBusy" :loading="governanceBusy" @click="startBackgroundGovernance">提交后台任务</el-button>
       <p v-if="preview">本批处理 {{ preview.total }} 条，可用 {{ preview.eligible }} 条，排除 {{ preview.excluded }} 条。</p>
+    </section>
+
+    <section v-if="auth.isAdmin" class="panel table-panel">
+      <div class="page-header">
+        <h3>后台治理任务</h3>
+        <el-button :loading="taskLoading" @click="loadGovernanceTasks">刷新进度</el-button>
+      </div>
+      <el-table :data="governanceTasks" empty-text="暂无后台治理任务">
+        <el-table-column prop="id" label="任务 ID" width="100" />
+        <el-table-column prop="status" label="状态" width="120" />
+        <el-table-column label="进度" min-width="200">
+          <template #default="{ row }: { row: GovernanceTaskInfo }">
+            <el-progress :percentage="row.total ? Math.round(row.processed / row.total * 100) : 100" />
+            <small>{{ row.processed }} / {{ row.total }}</small>
+          </template>
+        </el-table-column>
+        <el-table-column prop="eligible" label="有效" width="85" />
+        <el-table-column prop="failed" label="失败" width="85" />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }: { row: GovernanceTaskInfo }">
+            <el-button v-if="row.status === 'FAILED' || row.status === 'PARTIAL'" link type="primary" @click="retryBackgroundGovernance(row.id)">重试</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </section>
 
     <section class="panel breakdown">
