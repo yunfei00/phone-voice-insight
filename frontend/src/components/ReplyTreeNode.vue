@@ -29,6 +29,7 @@ function formatDate(value: string | null): string {
         <el-icon><Warning /></el-icon>
         原父回复未采集
       </el-tag>
+      <span>IP 属地：{{ reply.ip_location || '未提供' }}</span>
       <time>{{ formatDate(reply.published_at) }}</time>
     </div>
     <p class="reply-content">

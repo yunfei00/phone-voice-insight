@@ -113,6 +113,7 @@ class HonorClubCollector(BaseCollector):
                 thread_id=thread_id,
                 thread_url=thread_url,
                 listing_data=listing_data,
+                fetched_at=raw_page.fetched_at,
             )
         raise CollectorError("未知页面类型", code="PARSE_CONTEXT")
 

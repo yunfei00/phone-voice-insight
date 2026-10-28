@@ -11,13 +11,19 @@ from urllib.parse import parse_qs, urlparse
 from bs4 import BeautifulSoup, Tag
 
 from collectors.base import RawRecord
-from collectors.honor_club.date_parser import parse_honor_datetime
+from collectors.honor_club.date_parser import (
+    HONOR_TIME_ZONE,
+    honor_datetime_failure_reason,
+    parse_honor_datetime,
+)
 from collectors.honor_club.normalizer import build_fallback_external_id, safe_raw_data
 
 _THREAD_PATH_PATTERN = re.compile(r"thread-(?P<thread_id>\d+)-(?:\d+)-(?:\d+)\.html")
 _PID_PATTERN = re.compile(r"(?:pid|post_?)(?P<pid>\d+)")
 _FULL_TIME_PATTERN = re.compile(r"\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?")
 _PARTIAL_TIME_PATTERN = re.compile(r"(?<!\d)\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?")
+_RELATIVE_TIME_PATTERN = re.compile(r"(?:今天|昨天|前天)\s+\d{1,2}:\d{2}(?::\d{2})?|\d+\s*(?:分钟|小时)前")
+_COARSE_REGION_PATTERN = re.compile(r"^[\u4e00-\u9fff]{2,12}$")
 _UI_TEXT = {
     "举报",
     "评论",
@@ -173,17 +179,46 @@ def is_valid_thread_page(html: str) -> bool:
     return bool(soup.select_one(".wapFirstThread, #thread_subject, .thread-content, [id^='postmessage_']"))
 
 
-def _public_region(node: Tag | None) -> str:
-    """Only capture explicitly published coarse IP attribution, never an IP address."""
+def _normalize_public_ip_location(value: str) -> tuple[str, str]:
+    normalized = " ".join(value.split()).strip()
+    match = re.search(r"(?:IP属地|IP归属地|属地)\s*[:\uFF1A]?\s*([\u4e00-\u9fff]{2,12})", normalized)
+    region = match.group(1) if match else normalized
+    if region in {"属地未知", "IP属地未知", "未知", "未提供", "未显示"}:
+        return "", "source_ip_location_unknown"
+    if _COARSE_REGION_PATTERN.fullmatch(region):
+        return region, ""
+    return "", "source_ip_location_missing"
+
+
+def _public_ip_location(node: Tag | None) -> tuple[str, str]:
+    """Capture only Honor's public coarse IP attribution, never an IP address.
+
+    The current public HTML places the province beside the published time. Honor's
+    privacy notice identifies that public province/country value as IP attribution.
+    A profile-supplied residence field is not exposed with a distinct label.
+    """
+
     if node is None:
-        return ""
+        return "", "metadata_container_missing"
     for candidate in node.select(".ip-location, .ip-region, .ip属地, [data-ip-location], [data-ip-region]"):
         value = str(candidate.get("data-ip-location") or candidate.get("data-ip-region") or _text(candidate)).strip()
-        match = re.search(r"(?:IP属地|IP归属地|属地)\s*[:\uFF1A]?\s*([\u4e00-\u9fff]{2,12})", value)
-        region = match.group(1) if match else value
-        if re.fullmatch(r"[\u4e00-\u9fff]{2,12}", region):
-            return region
-    return ""
+        region, reason = _normalize_public_ip_location(value)
+        if region or reason == "source_ip_location_unknown":
+            return region, reason
+
+    # Current mobile HTML: the time and coarse IP region share one metadata row.
+    for group in node.select(".hbt-tmg, .hbt-binf"):
+        if group.select_one(".hbt-ptime") is not None:
+            candidates = group.select(".newPhonetype")
+        elif group.select_one(".hbt-pltime") is not None:
+            candidates = group.select(".hbt-lz")
+        else:
+            continue
+        for candidate in candidates:
+            region, reason = _normalize_public_ip_location(_text(candidate))
+            if region or reason == "source_ip_location_unknown":
+                return region, reason
+    return "", "source_ip_location_missing"
 
 
 def _time_from_node(node: Tag | None) -> str:
@@ -202,7 +237,41 @@ def _find_time(value: str) -> str:
         return match.group(0)
     if match := _PARTIAL_TIME_PATTERN.search(value):
         return match.group(0)
+    if match := _RELATIVE_TIME_PATTERN.search(value):
+        return match.group(0)
     return ""
+
+
+def _published_at_metadata(raw_value: str, parsed: datetime | None, *, source: str) -> dict[str, str]:
+    metadata = {
+        "published_at_timezone": "Asia/Shanghai",
+        "published_at_source": source,
+        "published_at_parse_status": "parsed" if parsed is not None else "missing",
+    }
+    if raw_value:
+        metadata["published_at_raw"] = raw_value
+    if parsed is not None:
+        metadata["published_at_normalized"] = parsed.isoformat()
+    else:
+        metadata["published_at_parse_reason"] = honor_datetime_failure_reason(raw_value)
+    return metadata
+
+
+def _region_metadata(node: Tag | None) -> dict[str, str]:
+    ip_location, reason = _public_ip_location(node)
+    metadata = {
+        "ip_location_parse_status": "parsed" if ip_location else "missing",
+        # The public profile shows the same IP attribution without a separate,
+        # labeled user-entered residence field. Do not infer one from it.
+        "profile_region_parse_status": "missing",
+        "profile_region_parse_reason": "profile_region_not_publicly_labeled",
+    }
+    if ip_location:
+        metadata["ip_location"] = ip_location
+        metadata["region_evidence"] = "public_ip_region"
+    else:
+        metadata["ip_location_parse_reason"] = reason
+    return metadata
 
 
 def _clean_content(node: Tag | None) -> tuple[str, int]:
@@ -296,7 +365,7 @@ def _nested_records(
     thread_id: str,
     thread_url: str,
     parent_pid: str | None,
-    thread_published_at: datetime | None,
+    fetched_at: datetime,
 ) -> list[RawRecord]:
     records: list[RawRecord] = []
     nested_nodes = container.select(".comment-item, .nested-comment, [data-comment-id]")
@@ -310,7 +379,7 @@ def _nested_records(
             continue
         role_text = str(node.get("data-author-role", "")) or _text(node.select_one(".author-role"))
         published_at_raw = str(node.get("data-published-at", "")) or _time_from_node(node)
-        published_at = parse_honor_datetime(published_at_raw, reference=thread_published_at)
+        published_at = parse_honor_datetime(published_at_raw, reference=fetched_at)
         external_id = (
             f"honor_comment:{comment_id}"
             if comment_id
@@ -333,10 +402,10 @@ def _nested_records(
                     "author_role_text": role_text,
                     "source_url": f"{thread_url}#{external_id}",
                     "raw_data": safe_raw_data(
+                        **_published_at_metadata(published_at_raw, published_at, source="nested_reply"),
+                        **_region_metadata(node),
                         thread_id=thread_id,
                         comment_id=comment_id,
-                        published_at_raw=published_at_raw,
-                        public_region=_public_region(node),
                         has_image=image_count > 0,
                         image_count=image_count,
                         parent_resolution="post" if parent_pid else "thread_fallback",
@@ -348,8 +417,18 @@ def _nested_records(
 
 
 def parse_thread_page(
-    html: str, *, thread_id: str, thread_url: str, listing_data: dict[str, object]
+    html: str,
+    *,
+    thread_id: str,
+    thread_url: str,
+    listing_data: dict[str, object],
+    fetched_at: datetime | None = None,
 ) -> list[RawRecord]:
+    fetched_at = fetched_at or datetime.now(tz=HONOR_TIME_ZONE)
+    if fetched_at.tzinfo is None:
+        fetched_at = fetched_at.replace(tzinfo=HONOR_TIME_ZONE)
+    else:
+        fetched_at = fetched_at.astimezone(HONOR_TIME_ZONE)
     soup = BeautifulSoup(html, "html.parser")
     title = _text(soup.select_one(".hbtTbox h1, h1.thread-title, #thread_subject"))
     content_node = soup.select_one(".wapFirstThread, [id^='postmessage_'], .thread-content")
@@ -360,7 +439,7 @@ def parse_thread_page(
         content = title
 
     role_text, device_source, published_at_raw = _extract_op_metadata(soup)
-    published_at = parse_honor_datetime(published_at_raw)
+    published_at = parse_honor_datetime(published_at_raw, reference=fetched_at)
     topic_tags = _topic_tags(soup)
     if not topic_tags:
         listing_tags = listing_data.get("topic_tags", [])
@@ -378,9 +457,9 @@ def parse_thread_page(
             "author_role_text": role_text or str(listing_data.get("author_role_text", "")),
             "source_url": thread_url,
             "raw_data": safe_raw_data(
+                **_published_at_metadata(published_at_raw, published_at, source="thread_detail"),
+                **_region_metadata(soup.select_one(".hbt-tinf.hbfTinf, .thread-author-meta, .authi")),
                 thread_id=thread_id,
-                published_at_raw=published_at_raw,
-                public_region=_public_region(soup.select_one(".hbt-tinf, .thread-author-meta, .authi")),
                 device_source=device_source,
                 topic_tags=topic_tags,
                 forum_name=listing_data.get("forum_name"),
@@ -408,7 +487,7 @@ def parse_thread_page(
         )
         if not published_at_raw:
             published_at_raw = _time_from_node(container.select_one(".authi, .post-meta"))
-        reply_published_at = parse_honor_datetime(published_at_raw, reference=published_at)
+        reply_published_at = parse_honor_datetime(published_at_raw, reference=fetched_at)
         floor = _text(container.select_one(".hbt-fav, .floor")) or str(index)
         external_id = (
             f"honor_post:{pid}"
@@ -431,11 +510,11 @@ def parse_thread_page(
                     "author_role_text": role_text,
                     "source_url": f"{thread_url}#pid{pid}" if pid else thread_url,
                     "raw_data": safe_raw_data(
+                        **_published_at_metadata(published_at_raw, reply_published_at, source="reply_detail"),
+                        **_region_metadata(container),
                         thread_id=thread_id,
                         post_id=pid,
                         floor=floor,
-                        published_at_raw=published_at_raw,
-                        public_region=_public_region(container),
                         device_source=_text(container.select_one(".hbt-fphone, .device-source")),
                         has_image=reply_image_count > 0,
                         image_count=reply_image_count,
@@ -449,7 +528,7 @@ def parse_thread_page(
                 thread_id=thread_id,
                 thread_url=thread_url,
                 parent_pid=pid,
-                thread_published_at=published_at,
+                fetched_at=fetched_at,
             )
         )
     return records

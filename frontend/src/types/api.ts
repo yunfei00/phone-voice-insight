@@ -243,6 +243,8 @@ export interface ReviewRecord {
   published_at: string | null
   source_region: string
   region_evidence: string
+  ip_location: string
+  profile_region: string
   software_version: string
   author_role: string
   is_official: boolean
@@ -252,6 +254,27 @@ export interface ReviewRecord {
   raw_data: Record<string, unknown>
   collected_at: string
   status: string
+}
+
+export interface ReviewMetadataCounts {
+  total: number
+  published_at_count: number
+  published_at_rate: number
+  ip_location_count: number
+  ip_location_rate: number
+  profile_region_count: number
+  profile_region_rate: number
+}
+
+export interface ReviewMetadataCompleteness {
+  summary: ReviewMetadataCounts
+  by_product: (ReviewMetadataCounts & { product: number; product_name: string })[]
+  by_record_type: (ReviewMetadataCounts & { record_type: string })[]
+  failure_reasons: {
+    published_at: Record<string, number>
+    ip_location: Record<string, number>
+    profile_region: Record<string, number>
+  }
 }
 
 export interface ThreadSummary {
@@ -264,6 +287,8 @@ export interface ThreadSummary {
   title: string
   content: string
   published_at: string | null
+  ip_location: string
+  profile_region: string
   latest_reply_at: string | null
   activity_at: string | null
   reply_count: number | null
@@ -282,6 +307,8 @@ export interface ThreadReply {
   record_type: 'REPLY' | 'OFFICIAL_REPLY'
   content: string
   published_at: string | null
+  ip_location: string
+  profile_region: string
   author_role: string
   is_official: boolean
   source_url: string

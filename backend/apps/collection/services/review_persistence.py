@@ -65,6 +65,10 @@ def build_content_hash(source_code: str, review: NormalizedReview) -> str:
 def persist_review(source_target: SourceTarget, review: NormalizedReview) -> PersistenceResult:
     content_hash = build_content_hash(source_target.source.code, review)
     product_variant = resolve_product_variant(source_target, review)
+    ip_location = str(review.raw_data.get("ip_location") or review.raw_data.get("public_region") or "")
+    profile_region = str(review.raw_data.get("profile_region") or "")
+    source_region = ip_location or profile_region
+    region_evidence = "public_ip_region" if ip_location else "public_profile_region" if profile_region else ""
     defaults = {
         "source_target": source_target,
         "product": source_target.product,
@@ -74,8 +78,8 @@ def persist_review(source_target: SourceTarget, review: NormalizedReview) -> Per
         "content": review.content,
         "rating": review.rating,
         "published_at": review.published_at,
-        "source_region": str(review.raw_data.get("public_region") or ""),
-        "region_evidence": "public_ip_region" if review.raw_data.get("public_region") else "",
+        "source_region": source_region,
+        "region_evidence": region_evidence,
         "author_role": review.author_role,
         "is_official": review.is_official,
         "is_append_review": review.is_append_review,

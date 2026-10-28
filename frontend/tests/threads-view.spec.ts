@@ -23,6 +23,8 @@ const thread = {
   title: '真实使用体验',
   content: '整体不错',
   published_at: '2026-10-27T08:00:00Z',
+  ip_location: '陕西',
+  profile_region: '',
   latest_reply_at: '2026-10-27T09:00:00Z',
   activity_at: '2026-10-27T09:00:00Z',
   reply_count: 2,

@@ -24,6 +24,7 @@ import type {
   ThreadDetail,
   ThreadPage,
   ReviewQuality,
+  ReviewMetadataCompleteness,
   ReviewRecord,
   UserAccount,
   UserPayload,
@@ -201,6 +202,12 @@ export interface ReviewFacets {
 }
 export const getReviewFacets = async (): Promise<ReviewFacets> =>
   (await apiClient.get<ReviewFacets>('/reviews/facets/')).data
+
+export const getReviewMetadataCompleteness = async (
+  params: PageParams = {},
+): Promise<ReviewMetadataCompleteness> =>
+  (await apiClient.get<ReviewMetadataCompleteness>('/reviews/metadata-completeness/', { params }))
+    .data
 
 export const getThreadTrees = async (params: PageParams = {}): Promise<ThreadPage> =>
   (await apiClient.get<ThreadPage>('/thread-trees/', { params })).data

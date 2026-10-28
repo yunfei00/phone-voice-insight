@@ -2,8 +2,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
-import { getReviewFacets, getReviews, getSources } from '@/api'
-import type { DataSource, ReviewRecord } from '@/types/api'
+import { getReviewFacets, getReviewMetadataCompleteness, getReviews, getSources } from '@/api'
+import type { DataSource, ReviewMetadataCompleteness, ReviewRecord } from '@/types/api'
 
 const reviews = ref<ReviewRecord[]>([])
 const route = useRoute()
@@ -17,6 +17,7 @@ const selected = ref<ReviewRecord | null>(null)
 const loading = ref(false)
 const error = ref('')
 const total = ref(0)
+const metadata = ref<ReviewMetadataCompleteness | null>(null)
 const filters = reactive({
   page: 1,
   page_size: 20,
@@ -56,19 +57,55 @@ async function loadReviews(): Promise<void> {
   }
 }
 
+async function loadMetadata(): Promise<void> {
+  metadata.value = await getReviewMetadataCompleteness({
+    source: filters.source,
+    product: filters.product,
+    source_target: filters.source_target,
+    record_type: filters.record_type || undefined,
+  })
+}
+
+function formatRate(value: number): string {
+  return `${(value * 100).toFixed(2)}%`
+}
+
+const reasonLabels: Record<string, string> = {
+  source_time_missing: '页面未提供发布时间',
+  source_time_missing_or_legacy_not_captured: '页面未提供或历史版本未保存时间',
+  legacy_relative_time_not_normalized: '历史相对时间未标准化',
+  legacy_time_parse_failed: '历史时间格式无法解析',
+  unsupported_time_format: '时间格式不受支持',
+  legacy_ip_location_not_captured: '历史版本未采集 IP 属地',
+  source_ip_location_missing: '页面未提供 IP 属地',
+  source_ip_location_unknown: '页面显示属地未知',
+  profile_region_not_publicly_labeled: '页面未公开标注用户填写地区',
+}
+
+function summarizeReasons(reasons: Record<string, number>): string {
+  const items = Object.entries(reasons)
+  if (!items.length) return '无'
+  return items.map(([reason, count]) => `${reasonLabels[reason] || reason} ${count}`).join('；')
+}
+
 function applyFilters(): void {
   filters.page = 1
-  void loadReviews()
+  void Promise.all([loadReviews(), loadMetadata()])
 }
 
 onMounted(async () => {
   try {
-    const [sourcePage, facetPage] = await Promise.all([
+    const [sourcePage, facetPage, metadataPage] = await Promise.all([
       getSources({ page_size: 100 }),
       getReviewFacets(),
+      getReviewMetadataCompleteness({
+        product: filters.product,
+        source_target: filters.source_target,
+      }),
     ])
     sources.value = sourcePage.results
     facets.value = facetPage
+    metadata.value = metadataPage
   } finally {
     await loadReviews()
   }
@@ -83,6 +120,30 @@ onMounted(async () => {
       </div>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
+    <div v-if="metadata" class="metadata-grid">
+      <div class="metadata-card">
+        <span>发布时间完整率</span>
+        <strong>{{ formatRate(metadata.summary.published_at_rate) }}</strong>
+        <small>{{ metadata.summary.published_at_count }} / {{ metadata.summary.total }}</small>
+      </div>
+      <div class="metadata-card">
+        <span>公开 IP 属地完整率</span>
+        <strong>{{ formatRate(metadata.summary.ip_location_rate) }}</strong>
+        <small>{{ metadata.summary.ip_location_count }} / {{ metadata.summary.total }}</small>
+      </div>
+      <div class="metadata-card">
+        <span>用户填写地区完整率</span>
+        <strong>{{ formatRate(metadata.summary.profile_region_rate) }}</strong>
+        <small>{{ metadata.summary.profile_region_count }} / {{ metadata.summary.total }}</small>
+      </div>
+    </div>
+    <el-alert
+      v-if="metadata"
+      type="info"
+      :closable="false"
+      class="notice"
+      :title="`缺失原因｜发布时间：${summarizeReasons(metadata.failure_reasons.published_at)}｜IP 属地：${summarizeReasons(metadata.failure_reasons.ip_location)}｜用户填写地区：${summarizeReasons(metadata.failure_reasons.profile_region)}`"
+    />
     <div class="panel">
       <div class="filters">
         <el-select v-model="filters.source" clearable placeholder="全部来源" @change="applyFilters">
@@ -163,9 +224,14 @@ onMounted(async () => {
       >
         <el-table-column prop="source_name" label="来源" width="120" />
         <el-table-column prop="product_name" label="产品" width="150" />
-        <el-table-column label="来源地域" width="130"
+        <el-table-column label="IP 属地" width="130"
           ><template #default="{ row }">{{
-            row.source_region || '未知'
+            row.ip_location || '未提供'
+          }}</template></el-table-column
+        >
+        <el-table-column label="用户填写地区" width="140"
+          ><template #default="{ row }">{{
+            row.profile_region || '未提供'
           }}</template></el-table-column
         >
         <el-table-column prop="record_type" label="类型" width="130" />
@@ -207,8 +273,11 @@ onMounted(async () => {
       <template v-if="selected">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="来源">{{ selected.source_name }}</el-descriptions-item>
-          <el-descriptions-item label="来源地域">{{
-            selected.source_region || '未知'
+          <el-descriptions-item label="公开 IP 属地">{{
+            selected.ip_location || '未提供'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="用户填写地区">{{
+            selected.profile_region || '未提供'
           }}</el-descriptions-item>
           <el-descriptions-item label="地域依据">{{
             selected.region_evidence || '未提供'
@@ -259,6 +328,32 @@ onMounted(async () => {
   margin-bottom: 16px;
 }
 
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.metadata-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+}
+
+.metadata-card span,
+.metadata-card small {
+  color: var(--el-text-color-secondary);
+}
+
+.metadata-card strong {
+  color: var(--el-text-color-primary);
+  font-size: 24px;
+}
+
 .filters {
   display: grid;
   grid-template-columns: repeat(6, minmax(120px, 1fr));
@@ -278,6 +373,10 @@ pre {
 }
 
 @media (max-width: 900px) {
+  .metadata-grid {
+    grid-template-columns: 1fr;
+  }
+
   .filters {
     grid-template-columns: 1fr 1fr;
   }

@@ -5,13 +5,16 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from collectors.honor_club.date_parser import parse_honor_datetime
+from collectors.honor_club.date_parser import (
+    HONOR_TIME_ZONE,
+    honor_datetime_failure_reason,
+    parse_honor_datetime,
+)
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
 from apps.reviews.models import ReviewRecord
 
-_FULL_DATE = re.compile(r"\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}")
 _PUBLIC_REGION = re.compile(r"^[\u4e00-\u9fff]{2,12}$")
 
 
@@ -34,24 +37,80 @@ class Command(BaseCommand):
             for review in queryset.iterator(chunk_size=500):
                 counters["scanned"] += 1
                 changed: list[str] = []
+                recovered = False
                 try:
-                    raw = review.raw_data if isinstance(review.raw_data, dict) else {}
+                    raw = dict(review.raw_data) if isinstance(review.raw_data, dict) else {}
+                    original_raw = dict(raw)
                     raw_time = str(raw.get("published_at_raw", "")).strip()
-                    if review.published_at is None and _FULL_DATE.search(raw_time):
-                        parsed = parse_honor_datetime(raw_time)
+                    if review.published_at is None and raw_time:
+                        parsed = parse_honor_datetime(raw_time, reference=review.collected_at)
                         if parsed is not None:
                             review.published_at = parsed
                             changed.append("published_at")
                             counters["published"] += 1
-                    region = str(raw.get("public_region", "")).strip()
+                            recovered = True
+
+                    if review.published_at is not None:
+                        normalized_time = review.published_at.astimezone(HONOR_TIME_ZONE)
+                        raw.update(
+                            {
+                                "published_at_parse_status": "parsed",
+                                "published_at_timezone": "Asia/Shanghai",
+                                "published_at_normalized": normalized_time.isoformat(),
+                            }
+                        )
+                        raw.pop("published_at_parse_reason", None)
+                    else:
+                        raw.update(
+                            {
+                                "published_at_parse_status": "missing",
+                                "published_at_timezone": "Asia/Shanghai",
+                                "published_at_parse_reason": honor_datetime_failure_reason(
+                                    raw_time, reference=review.collected_at
+                                ),
+                            }
+                        )
+
+                    ip_location = str(raw.get("ip_location") or raw.get("public_region") or "").strip()
+                    profile_region = str(raw.get("profile_region") or "").strip()
+                    region = ip_location or profile_region
                     if not review.source_region and _PUBLIC_REGION.fullmatch(region):
                         review.source_region = region
-                        review.region_evidence = "public_ip_region"
+                        review.region_evidence = "public_ip_region" if ip_location else "public_profile_region"
                         changed.extend(("source_region", "region_evidence"))
                         counters["region"] += 1
-                    if not changed:
+                        recovered = True
+
+                    if review.region_evidence == "public_ip_region" and review.source_region:
+                        raw.update(
+                            {
+                                "ip_location": review.source_region,
+                                "ip_location_parse_status": "parsed",
+                                "region_evidence": "public_ip_region",
+                            }
+                        )
+                        raw.pop("ip_location_parse_reason", None)
+                    elif review.region_evidence == "public_profile_region" and review.source_region:
+                        raw.update(
+                            {
+                                "profile_region": review.source_region,
+                                "profile_region_parse_status": "parsed",
+                                "region_evidence": "public_profile_region",
+                            }
+                        )
+                        raw.pop("profile_region_parse_reason", None)
+                    else:
+                        raw.setdefault("ip_location_parse_status", "missing")
+                        raw.setdefault("ip_location_parse_reason", "legacy_ip_location_not_captured")
+                        raw.setdefault("profile_region_parse_status", "missing")
+                        raw.setdefault("profile_region_parse_reason", "profile_region_not_publicly_labeled")
+
+                    if raw != original_raw:
+                        review.raw_data = raw
+                        changed.append("raw_data")
+                    if not recovered:
                         counters["unresolved"] += 1
-                    elif apply_changes:
+                    if changed and apply_changes:
                         review.save(update_fields=(*changed, "updated_at"))
                 except Exception:
                     counters["errors"] += 1

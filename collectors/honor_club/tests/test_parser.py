@@ -1,6 +1,8 @@
 import gzip
 import os
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -278,5 +280,60 @@ def test_public_region_and_datetime_attribute_extraction() -> None:
         listing_data={},
     )
     assert records[0].payload["published_at"].year == 2026
-    assert records[0].payload["raw_data"]["public_region"] == "陕西"
-    assert "IP属地" not in records[0].payload["raw_data"]["public_region"]
+    raw_data = records[0].payload["raw_data"]
+    assert raw_data["ip_location"] == "陕西"
+    assert raw_data["region_evidence"] == "public_ip_region"
+    assert "IP属地" not in raw_data["ip_location"]
+    assert raw_data["published_at_raw"] == "2026-10-01 09:15"
+    assert raw_data["published_at_normalized"] == "2026-10-01T09:15:00+08:00"
+    assert raw_data["published_at_timezone"] == "Asia/Shanghai"
+
+
+def test_current_honor_metadata_rows_extract_ip_location_without_guessing_profile_region() -> None:
+    html = """
+    <div class="hbtTbox"><h1>荣耀 Power2</h1></div>
+    <div class="hbt-tinf hbfTinf">
+      <div class="hbt-tmg"><span class="newhbtb">LV7</span><span class="newPhonetype">荣耀Power2</span></div>
+      <div class="hbt-tmg"><span class="hbt-ptime">2026-10-11 17:15</span><span class="newPhonetype">广西</span></div>
+    </div>
+    <div class="wapFirstThread">正文</div>
+    <div class="hbt-pl" id="pid599801081">
+      <div class="hbt-tinf hbt-comm"><span class="hbt-fav">沙发</span></div>
+      <div class="hbt-binf"><span class="hbt-lz"><b>LV4</b></span><a class="hbt-fphone">荣耀Power2</a></div>
+      <div class="hbt-binf"><span class="hbt-pltime">10-11 20:23:39</span><span class="hbt-lz">广东</span></div>
+      <div class="viewContPl">同意</div>
+    </div>
+    """
+    fetched_at = datetime(2026, 10, 28, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+    records = parse_thread_page(
+        html,
+        thread_id="30449103",
+        thread_url="https://club.honor.com/cn/thread-30449103-1-1.html",
+        listing_data={},
+        fetched_at=fetched_at,
+    )
+
+    assert records[0].payload["raw_data"]["ip_location"] == "广西"
+    assert records[1].payload["raw_data"]["ip_location"] == "广东"
+    assert records[0].payload["raw_data"]["profile_region_parse_reason"] == ("profile_region_not_publicly_labeled")
+    assert "profile_region" not in records[0].payload["raw_data"]
+
+
+def test_relative_time_uses_page_fetch_time_and_preserves_raw_value() -> None:
+    html = """
+    <div class="hbtTbox"><h1>荣耀 Power2</h1></div>
+    <div class="hbt-tinf hbfTinf"><div class="hbt-tmg"><span class="hbt-ptime">昨天 11:04</span></div></div>
+    <div class="wapFirstThread">正文</div>
+    """
+    fetched_at = datetime(2026, 10, 28, 16, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+    record = parse_thread_page(
+        html,
+        thread_id="1",
+        thread_url="https://club.honor.com/cn/thread-1-1-1.html",
+        listing_data={},
+        fetched_at=fetched_at,
+    )[0]
+
+    assert record.payload["published_at"] == datetime(2026, 10, 27, 11, 4, tzinfo=ZoneInfo("Asia/Shanghai"))
+    assert record.payload["raw_data"]["published_at_raw"] == "昨天 11:04"
+    assert record.payload["raw_data"]["published_at_parse_status"] == "parsed"

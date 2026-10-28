@@ -12,6 +12,7 @@ from apps.reviews.serializers import (
     ReviewRecordSerializer,
 )
 from apps.reviews.services.governance_pipeline import apply_manual_override, clear_manual_override
+from apps.reviews.services.metadata_completeness import metadata_completeness as build_metadata_completeness
 from apps.reviews.services.thread_tree import (
     annotate_thread_metrics,
     build_reply_tree,
@@ -57,6 +58,11 @@ class ReviewRecordViewSet(ReadOnlyModelViewSet):
             .order_by("-rating")
         )
         return Response({"variants": variants, "regions": regions, "ratings": ratings})
+
+    @action(detail=False, methods=["get"], url_path="metadata-completeness")
+    def metadata_completeness(self, request: Request) -> Response:
+        del request
+        return Response(build_metadata_completeness(self.filter_queryset(self.get_queryset())))
 
 
 class ThreadTreeViewSet(ReadOnlyModelViewSet):

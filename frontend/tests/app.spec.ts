@@ -19,6 +19,25 @@ vi.mock('@/api', () => ({
   getProducts: vi.fn().mockResolvedValue({ count: 1, results: [] }),
   getSources: vi.fn().mockResolvedValue({ count: 2, results: [] }),
   getReviews: vi.fn().mockResolvedValue({ count: 0, results: [] }),
+  getReviewFacets: vi.fn().mockResolvedValue({ variants: [], regions: [], ratings: [] }),
+  getReviewMetadataCompleteness: vi.fn().mockResolvedValue({
+    summary: {
+      total: 100,
+      published_at_count: 98,
+      published_at_rate: 0.98,
+      ip_location_count: 75,
+      ip_location_rate: 0.75,
+      profile_region_count: 0,
+      profile_region_rate: 0,
+    },
+    by_product: [],
+    by_record_type: [],
+    failure_reasons: {
+      published_at: { source_time_missing: 2 },
+      ip_location: { source_ip_location_missing: 25 },
+      profile_region: { profile_region_not_publicly_labeled: 100 },
+    },
+  }),
   getThreadTrees: vi.fn().mockResolvedValue({
     count: 0,
     next: null,
@@ -216,4 +235,17 @@ describe('App', () => {
       app.unmount()
     },
   )
+
+  it('原始数据页面区分发布时间、IP 属地和用户填写地区完整率', async () => {
+    const { app, container } = await mountApp('/reviews')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+
+    expect(container.textContent).toContain('发布时间完整率')
+    expect(container.textContent).toContain('98.00%')
+    expect(container.textContent).toContain('公开 IP 属地完整率')
+    expect(container.textContent).toContain('用户填写地区完整率')
+
+    app.unmount()
+  })
 })
