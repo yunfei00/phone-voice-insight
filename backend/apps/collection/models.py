@@ -88,6 +88,7 @@ class CollectionTask(TimeStampedModel):
         default=CollectionStatus.PENDING,
     )
     requested_limit = models.PositiveIntegerField("计划采集条数", null=True, blank=True)
+    requested_pages = models.PositiveIntegerField("计划采集页数", null=True, blank=True)
     started_at = models.DateTimeField("开始时间", null=True, blank=True)
     finished_at = models.DateTimeField("结束时间", null=True, blank=True)
     last_checkpoint = models.JSONField("最近检查点", default=dict, blank=True)
