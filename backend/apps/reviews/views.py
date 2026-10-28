@@ -35,6 +35,15 @@ class ReviewRecordViewSet(ReadOnlyModelViewSet):
     search_fields = ("title", "content", "external_id")
     ordering_fields = ("published_at", "collected_at", "created_at", "rating")
 
+    @action(detail=False, methods=["get"])
+    def facets(self, request: Request) -> Response:
+        del request
+        variants = list(ReviewRecord.objects.filter(product_variant__isnull=False).values("product_variant_id", "product_variant__sku_name").annotate(count=Count("id")).order_by("product_variant_id"))
+        regions = list(ReviewRecord.objects.exclude(source_region="").values("source_region").annotate(count=Count("id")).order_by("source_region"))
+        ratings = list(ReviewRecord.objects.filter(rating__isnull=False).values("rating").annotate(count=Count("id")).order_by("-rating"))
+        return Response({"variants": variants, "regions": regions, "ratings": ratings})
+
+
 
 class ThreadTreeViewSet(ReadOnlyModelViewSet):
     """Paginated threads on list; a complete parent-linked reply tree on detail."""
