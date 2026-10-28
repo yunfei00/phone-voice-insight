@@ -154,16 +154,13 @@ function stopPolling(): void {
 
 async function startProductCollection(target: CollectionTargetState): Promise<void> {
   if (productBusy(target)) { ElMessage.warning('该产品已有采集任务'); return }
-  const mode = modeByProduct[target.product_id] || 'FULL'
+  const mode = modeByProduct[target.product_id] || 'PAGES'
   if (mode === 'INCREMENTAL' && !target.full_verified) {
     ElMessage.warning('请先完成全量完整性验证'); return
   }
-  if (mode === 'PAGES' && !target.full_verified) {
-    ElMessage.warning('指定页数采集属于增量模式，须先完成全量基线'); return
-  }
   try {
     await ElMessageBox.confirm(
-      mode === 'PAGES' ? `确认采集最多 ${pagesByProduct[target.product_id] || 5} 页？` :
+      mode === 'PAGES' ? `确认执行最多 ${pagesByProduct[target.product_id] || 2} 页的测试采集？这不会建立全量基线。` :
       mode === 'FULL' ? '确认开始完整全量采集？' : '确认开始增量采集？',
       '启动采集', { type: 'warning' },
     )
@@ -173,7 +170,7 @@ async function startProductCollection(target: CollectionTargetState): Promise<vo
     const task = await createCollectionTask({
       source_target: target.source_target,
       task_type: mode === 'FULL' ? 'FULL' : 'INCREMENTAL',
-      requested_pages: mode === 'PAGES' ? pagesByProduct[target.product_id] || 5 : undefined,
+      requested_pages: mode === 'PAGES' ? pagesByProduct[target.product_id] || 2 : undefined,
     })
     await runCollectionTask(task.id)
     ElMessage.success(`任务 #${task.id} 已启动`)
@@ -279,7 +276,7 @@ onUnmounted(stopPolling)
     <div class="page-header">
       <div>
         <h1 class="page-title">采集控制</h1>
-        <p class="page-description">每个采集入口只有一个控制中心：先验证完整基线，之后自动增量。</p>
+        <p class="page-description">可先按指定页数测试采集；全量基线验证通过后才能启用正式增量。</p>
       </div>
       <div>
         <span v-if="refreshedAt" class="refresh-time"
@@ -377,10 +374,10 @@ onUnmounted(stopPolling)
           <el-radio-group v-model="modeByProduct[target.product_id]" :disabled="productBusy(target)">
             <el-radio-button value="FULL">全量</el-radio-button>
             <el-radio-button value="INCREMENTAL">增量</el-radio-button>
-            <el-radio-button value="PAGES">指定页数</el-radio-button>
+            <el-radio-button value="PAGES">测试采集（指定页数）</el-radio-button>
           </el-radio-group>
           <el-input-number
-            v-if="modeByProduct[target.product_id] === 'PAGES'"
+            v-if="(modeByProduct[target.product_id] || 'PAGES') === 'PAGES'"
             v-model="pagesByProduct[target.product_id]"
             :min="1" :max="10" :disabled="productBusy(target)"
           />
