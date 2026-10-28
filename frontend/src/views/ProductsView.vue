@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
-import { createBrand, createProduct, createSourceTarget, getBrands, getProducts, getSources, updateProduct } from '@/api'
+import { createBrand, createProduct, createSourceTarget, updateSourceTarget, getBrands, getProducts, getSources, updateProduct } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import type { Product, DataSource } from '@/types/api'
 
@@ -14,6 +14,7 @@ const saving = ref(false)
 const dialog = ref(false)
 const brandDialog = ref(false)
 const targetDialog = ref(false)
+const targetId = ref<number|null>(null)
 const editingId = ref<number|null>(null)
 const form = reactive({ brand_id: undefined as number|undefined, name:'', is_active:true })
 const brandForm = reactive({ name:'', code:'' })
@@ -45,14 +46,27 @@ async function saveBrand() {
   catch { ElMessage.error('品牌创建失败，编码可能重复') }
   finally { saving.value=false }
 }
-function openTarget(p:Product) { Object.assign(targetForm,{product:p.id,source:sources.value.find(s=>s.code==='HONOR_CLUB')?.id ?? sources.value[0]?.id,name:p.name+' 荣耀俱乐部',target_url:'',external_id:''}); targetDialog.value=true }
+function openTarget(p:Product) {
+  const source = sources.value.find(s=>s.code==='HONOR_CLUB') ?? sources.value[0]
+  const existing = source?.targets?.find(t=>t.product===p.id)
+  targetId.value = existing?.id ?? null
+  Object.assign(targetForm,{
+    product:p.id,
+    source:source?.id,
+    name:existing?.name ?? p.name+' 荣耀俱乐部',
+    target_url:existing?.target_url ?? '',
+    external_id:existing?.external_id ?? '',
+  })
+  targetDialog.value=true
+}
 async function saveTarget() {
   if(!targetForm.product||!targetForm.source||!targetForm.target_url.trim()) { ElMessage.warning('请填写来源及入口网址'); return }
   saving.value=true
   try {
-    await createSourceTarget({source:targetForm.source,product:targetForm.product,name:targetForm.name,target_type:'COMMUNITY',target_url:targetForm.target_url,external_id:targetForm.external_id,is_active:true})
-    targetDialog.value=false; ElMessage.success('采集入口已创建，可前往采集控制启动'); await load()
-  } catch { ElMessage.error('采集入口创建失败，请检查名称及 URL') }
+    if(targetId.value) await updateSourceTarget(targetId.value,{target_url:targetForm.target_url,external_id:targetForm.external_id})
+    else await createSourceTarget({source:targetForm.source,product:targetForm.product,name:targetForm.name,target_type:'COMMUNITY',target_url:targetForm.target_url,external_id:targetForm.external_id,is_active:true})
+    targetDialog.value=false; ElMessage.success('采集入口已保存，可前往采集控制启动'); await load()
+  } catch { ElMessage.error('采集入口保存失败，请检查网址或是否存在重复配置') }
   finally { saving.value=false }
 }
 onMounted(load)
@@ -75,11 +89,11 @@ onMounted(load)
       <el-form-item v-if="editingId" label="启用"><el-switch v-model="form.is_active"/></el-form-item>
     </el-form><template #footer><el-button @click="dialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template></el-dialog>
     <el-dialog v-model="brandDialog" title="新增品牌" width="min(440px,94vw)"><el-form label-position="top"><el-form-item label="品牌名称"><el-input v-model="brandForm.name"/></el-form-item><el-form-item label="唯一编码"><el-input v-model="brandForm.code" placeholder="如 HONOR"/></el-form-item></el-form><template #footer><el-button @click="brandDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveBrand">保存</el-button></template></el-dialog>
-    <el-dialog v-model="targetDialog" title="配置采集入口" width="min(520px,94vw)"><el-form label-position="top">
-      <el-form-item label="数据来源"><el-select v-model="targetForm.source"><el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id"/></el-select></el-form-item>
-      <el-form-item label="入口名称"><el-input v-model="targetForm.name"/></el-form-item>
+    <el-dialog v-model="targetDialog"  :title="targetId ? '编辑采集入口' : '新增采集入口'" width="min(520px,94vw)"><el-form label-position="top">
+      <el-form-item label="数据来源"><el-select v-model="targetForm.source" :disabled="Boolean(targetId)"><el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id"/></el-select></el-form-item>
+
       <el-form-item label="采集网址"><el-input v-model="targetForm.target_url" placeholder="荣耀俱乐部话题或入口地址"/></el-form-item>
-      <el-form-item label="来源标识（可选）"><el-input v-model="targetForm.external_id"/></el-form-item>
+
       <el-alert title="采集入口需要与来源采集器的配置一致。新入口创建后自动初始化采集状态。" type="warning" :closable="false"/>
     </el-form><template #footer><el-button @click="targetDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="saveTarget">保存入口</el-button></template></el-dialog>
   </div>
