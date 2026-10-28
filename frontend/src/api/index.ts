@@ -350,3 +350,37 @@ export const retryStructuredBatch = async (id: number): Promise<{ batch: Structu
 
 export const processGovernanceBatch = async (payload: { product_id: number; limit: number; dry_run: boolean }): Promise<{ total: number; eligible: number; excluded: number; dry_run: boolean }> =>
   (await apiClient.post('/review-quality/process-batch/', payload)).data
+
+export interface GovernanceTaskInfo {
+  id: number
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'PARTIAL' | 'FAILED'
+  product_id: number
+  source_id: number | null
+  total: number
+  processed: number
+  eligible: number
+  excluded: number
+  reused: number
+  failed: number
+  failures: { review_id: number; error_type: string }[]
+  error_message: string
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export const startAsyncGovernance = async (payload: {
+  product_id: number
+  limit: number
+  dry_run: false
+}): Promise<{ task: GovernanceTaskInfo }> =>
+  (await apiClient.post('/review-quality/start-async/', payload)).data
+
+export const getGovernanceTaskHistory = async (): Promise<{ results: GovernanceTaskInfo[] }> =>
+  (await apiClient.get('/review-quality/task-history/')).data
+
+export const getGovernanceTaskStatus = async (taskId: number): Promise<GovernanceTaskInfo> =>
+  (await apiClient.get('/review-quality/async-status/', { params: { task_id: taskId } })).data
+
+export const retryGovernanceTask = async (taskId: number): Promise<{ task: GovernanceTaskInfo }> =>
+  (await apiClient.post('/review-quality/retry-failed/', { task_id: taskId })).data
