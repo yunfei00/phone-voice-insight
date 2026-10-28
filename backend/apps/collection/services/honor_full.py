@@ -205,6 +205,9 @@ def run_honor_full_chunk(
     collector: BaseCollector,
     target: CollectorTarget,
 ) -> FullChunkResult:
+    from apps.collection.services.collection_runner import check_collection_stop
+
+    check_collection_stop(task.id)
     checkpoint = dict(task.last_checkpoint or {})
     phase = str(checkpoint.get("phase", "discovery"))
     inserted = duplicates = failed = 0
@@ -219,6 +222,7 @@ def run_honor_full_chunk(
         scanned_pages = int(checkpoint.get("scanned_topic_pages", 0))
         fallback_limit = _config_int(config, "full_fallback_max_topic_pages", 1000, 10000)
         for page_number in range(next_page, next_page + page_chunk):
+            check_collection_stop(task.id)
             raw_page = collector.fetch_page(
                 CollectionRequest(
                     target=target,
@@ -324,6 +328,7 @@ def run_honor_full_chunk(
             ).order_by("attempts", "topic_page", "position")[:chunk_size]
         )
         for item in candidates:
+            check_collection_stop(task.id)
             checkpoint["current_thread_id"] = item.thread_id
             was_retry = item.status == DiscoveryStatus.FAILED
             try:
