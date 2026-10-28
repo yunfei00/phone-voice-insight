@@ -10,8 +10,6 @@ import {
   runCollectionTask,
   getCollectionTasks,
   saveCollectionSchedule,
-  startFullCollection,
-  startIncrementalCollection,
 } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import type { CollectionStatus, CollectionTargetState, CollectionTask } from '@/types/api'
@@ -22,13 +20,6 @@ const loading = ref(false)
 const error = ref('')
 const startingIds = ref(new Set<number>())
 const scheduleDialogVisible = ref(false)
-const newTaskVisible = ref(false)
-const newTaskSubmitting = ref(false)
-const newTaskForm = reactive({
-  source_target: undefined as number | undefined,
-  task_type: 'INCREMENTAL' as 'FULL' | 'INCREMENTAL',
-  requested_limit: 10,
-})
 const scheduleSubmitting = ref(false)
 const scheduleTarget = ref<CollectionTargetState | null>(null)
 const historyVisible = ref(false)
@@ -190,70 +181,6 @@ async function startProductCollection(target: CollectionTargetState): Promise<vo
   finally { startingIds.value.delete(target.id) }
 }
 
-async function startFull(target: CollectionTargetState): Promise<void> {
-  const action = target.full_verified ? '重新全量校验' : '执行完整性全量校验'
-  try {
-    await ElMessageBox.confirm(
-      '系统会重新扫描全部话题页并核对已有数据，不会删除反馈；已有记录会更新、缺失记录会补齐。',
-      action,
-      { confirmButtonText: action, cancelButtonText: '取消', type: 'warning' },
-    )
-  } catch {
-    return
-  }
-  startingIds.value.add(target.id)
-  try {
-    await startFullCollection(target.id)
-    ElMessage.success('全量任务已进入队列')
-    await loadTargets(true)
-    startPolling()
-  } catch {
-    error.value = '全量任务启动失败，可能已有采集正在执行。'
-  } finally {
-    startingIds.value.delete(target.id)
-  }
-}
-
-async function startIncremental(target: CollectionTargetState): Promise<void> {
-  startingIds.value.add(target.id)
-  try {
-    await startIncrementalCollection(target.id)
-    ElMessage.success('增量任务已进入队列')
-    await loadTargets(true)
-    startPolling()
-  } catch {
-    error.value = target.full_verified
-      ? '增量任务启动失败，可能已有采集正在执行。'
-      : '请先完成全量完整性校验。'
-  } finally {
-    startingIds.value.delete(target.id)
-  }
-}
-
-async function submitNewTask(): Promise<void> {
-  if (!newTaskForm.source_target) return
-  newTaskSubmitting.value = true
-  try {
-    const task = await createCollectionTask({
-      source_target: newTaskForm.source_target,
-      task_type: newTaskForm.task_type,
-      requested_limit:
-        newTaskForm.task_type === 'INCREMENTAL' ? newTaskForm.requested_limit : undefined,
-    })
-    // Creation and execution are separate API operations.
-    await runCollectionTask(task.id)
-    ElMessage.success(`采集任务 #${task.id} 已启动`)
-    newTaskVisible.value = false
-    await loadTargets(true)
-    startPolling()
-  } catch {
-    ElMessage.error('创建或启动失败，请检查运行中的任务、采集基线及 Worker 状态')
-    await loadTargets(true)
-  } finally {
-    newTaskSubmitting.value = false
-  }
-}
-
 async function stopActive(target: CollectionTargetState): Promise<void> {
   if (!target.active_task) return
   try {
@@ -355,8 +282,6 @@ onUnmounted(stopPolling)
       <div>
         <span v-if="refreshedAt" class="refresh-time"
           >最近刷新 {{ refreshedAt }} · 运行中每 5 秒自动更新</span
-        ><el-button type="primary" :disabled="!auth.canWrite" @click="newTaskVisible = true"
-          >新增采集</el-button
         ><el-button :loading="loading" @click="loadTargets()">刷新</el-button>
       </div>
     </div>
@@ -466,37 +391,6 @@ onUnmounted(stopPolling)
       <el-empty v-if="!loading && !targets.length" description="暂无可用采集入口" />
     </div>
 
-    <el-dialog v-model="newTaskVisible" title="新增采集任务" width="min(480px, 92vw)"
-      ><el-form label-position="top"
-        ><el-form-item label="采集入口"
-          ><el-select v-model="newTaskForm.source_target" placeholder="选择采集入口"
-            ><el-option
-              v-for="target in productTargets"
-              :key="target.source_target"
-              :label="`${target.product_name} / ${target.target_name}`"
-              :value="target.source_target"
-              :disabled="Boolean(target.active_task)" /></el-select></el-form-item
-        ><el-form-item label="任务类型"
-          ><el-radio-group v-model="newTaskForm.task_type"
-            ><el-radio value="INCREMENTAL">增量测试</el-radio
-            ><el-radio value="FULL">全量校验</el-radio></el-radio-group
-          ></el-form-item
-        ><el-form-item v-if="newTaskForm.task_type === 'INCREMENTAL'" label="最多扫描帖子数"
-          ><el-input-number
-            v-model="newTaskForm.requested_limit"
-            :min="1"
-            :max="100" /></el-form-item
-        ><el-alert
-          title="已有活动任务的入口不可重复创建。增量采集依赖已验证的全量基线；重新抓取旧帖应使用后续的定向复采功能。"
-          type="info"
-          :closable="false" /></el-form
-      ><template #footer
-        ><el-button @click="newTaskVisible = false">取消</el-button
-        ><el-button type="primary" :loading="newTaskSubmitting" @click="submitNewTask"
-          >创建并启动</el-button
-        ></template
-      ></el-dialog
-    >
     <el-dialog v-model="scheduleDialogVisible" title="定时增量设置" width="min(460px, 92vw)">
       <el-form label-position="top">
         <el-form-item label="采集入口">
