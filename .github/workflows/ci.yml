@@ -34,6 +34,8 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
         run: uv run python manage.py makemigrations --check --dry-run
+      - name: Structured analysis contract
+        run: uv run python manage.py check_structured_analysis_contract
       - name: Tests
         run: uv run pytest
 

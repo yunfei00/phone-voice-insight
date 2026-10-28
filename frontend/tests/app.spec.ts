@@ -91,7 +91,10 @@ const expectedNavigationLabels = [
   '帖子视图',
   '原始反馈',
   '数据质量',
-  'AI分析',
+  'AI结构化分析',
+  'AI质量中心',
+  'AI任务中心',
+  '历史AI分析',
   'AI配置',
   '系统状态',
 ]
@@ -133,7 +136,7 @@ describe('App', () => {
     setActivePinia(pinia)
   })
 
-  it('桌面默认展开且只显示一组七项菜单', async () => {
+  it('桌面默认展开且只显示一组菜单', async () => {
     const { app, container } = await mountApp()
 
     expect(container.textContent).toContain('Phone Voice Insight')
@@ -143,7 +146,7 @@ describe('App', () => {
       (item) => item.textContent?.trim(),
     )
     expect(navigationLabels).toEqual(expectedNavigationLabels)
-    expect(new Set(navigationLabels).size).toBe(9)
+    expect(new Set(navigationLabels).size).toBe(12)
     expect(container.querySelector('.el-menu--collapse')).toBeNull()
     expect(container.querySelector('.brand-copy')).not.toBeNull()
 
@@ -162,8 +165,8 @@ describe('App', () => {
     expect(container.querySelector('.sidebar')?.classList.contains('collapsed')).toBe(true)
     expect(container.querySelector('.nav-menu')?.classList.contains('el-menu--collapse')).toBe(true)
     expect(container.querySelector('.brand-copy')).toBeNull()
-    expect(container.querySelectorAll('.nav-menu .el-menu-item')).toHaveLength(9)
-    expect(container.querySelectorAll('.nav-menu .el-menu-item .el-icon')).toHaveLength(9)
+    expect(container.querySelectorAll('.nav-menu .el-menu-item')).toHaveLength(12)
+    expect(container.querySelectorAll('.nav-menu .el-menu-item .el-icon')).toHaveLength(12)
     expect(collapseButton?.getAttribute('aria-label')).toBe('展开菜单')
     expect(collapseButton?.textContent?.trim()).toBe('')
     expect(window.localStorage.getItem('pvi.sidebar.collapsed')).toBe('true')
@@ -187,14 +190,14 @@ describe('App', () => {
     app.unmount()
   })
 
-  it('分析路由刷新后只高亮 AI分析', async () => {
+  it('历史分析路由刷新后只高亮历史 AI 分析', async () => {
     const { app, container } = await mountApp('/analysis')
     await new Promise((resolve) => setTimeout(resolve, 0))
     await nextTick()
 
     const activeItems = Array.from(container.querySelectorAll('.nav-menu .el-menu-item.is-active'))
     expect(activeItems).toHaveLength(1)
-    expect(activeItems[0]?.textContent?.trim()).toBe('AI分析')
+    expect(activeItems[0]?.textContent?.trim()).toBe('历史AI分析')
 
     const navigationLabels = Array.from(container.querySelectorAll('.nav-menu .el-menu-item')).map(
       (item) => item.textContent?.trim(),

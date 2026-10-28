@@ -8,10 +8,18 @@ from ai.schemas.review_analysis import (
 )
 
 __all__ = (
+    "SCHEMA_VERSION",
     "AspectAnalysisItem",
     "EvidenceReference",
     "IssueClusterInput",
     "IssueClusterOutput",
+    "OpinionAspectPayload",
     "ReviewAnalysisInput",
     "ReviewAnalysisOutput",
+    "StructuredAnalysisPayload",
+)
+from ai.schemas.structured_analysis import (
+    SCHEMA_VERSION,
+    OpinionAspectPayload,
+    StructuredAnalysisPayload,
 )

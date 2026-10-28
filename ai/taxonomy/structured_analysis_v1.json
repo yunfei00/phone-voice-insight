@@ -1,0 +1,127 @@
+{
+  "taxonomy_version": "1.0.0",
+  "name": "手机用户声音标准标签体系 V1",
+  "domains": [
+    {
+      "tag_id": "BAT", "parent_id": null, "name": "续航充电", "description": "电池续航、功耗与充电体验。", "positive_examples": ["续航一天没问题"], "negative_examples": ["只描述手机很漂亮"], "confused_with": ["THERM"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "BAT.BATTERY_LIFE", "parent_id": "BAT", "name": "续航时长", "description": "日常或特定场景下的可用时长。", "positive_examples": ["重度用一天还有电"], "negative_examples": ["充电很快"], "confused_with": ["BAT.POWER_DRAIN"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "BAT.POWER_DRAIN", "parent_id": "BAT", "name": "异常耗电", "description": "待机或使用中异常掉电、耗电。", "positive_examples": ["晚上待机掉电很少"], "negative_examples": ["充电时手机发烫"], "confused_with": ["BAT.BATTERY_LIFE"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "BAT.CHARGING", "parent_id": "BAT", "name": "充电体验", "description": "充电速度、失败、协议与充电器兼容。", "positive_examples": ["半小时就充满"], "negative_examples": ["电池能用一天"], "confused_with": ["THERM.CHARGING_HEAT"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "PERF", "parent_id": null, "name": "性能流畅", "description": "运行性能、帧率和系统交互流畅度。", "positive_examples": ["应用切换很流畅"], "negative_examples": ["信号不好"], "confused_with": ["SYS"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "PERF.SYSTEM_FLUENCY", "parent_id": "PERF", "name": "系统流畅度", "description": "桌面动画、界面切换和应用启动响应。", "positive_examples": ["桌面滑动丝滑"], "negative_examples": ["游戏掉帧"], "confused_with": ["PERF.GAMING"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "PERF.GAMING", "parent_id": "PERF", "name": "游戏性能", "description": "游戏帧率、掉帧和性能稳定性。", "positive_examples": ["游戏满帧"], "negative_examples": ["系统通知延迟"], "confused_with": ["THERM.GAMING_HEAT"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "PERF.APP_PERFORMANCE", "parent_id": "PERF", "name": "应用性能", "description": "应用启动、多任务和处理速度。", "positive_examples": ["应用秒开"], "negative_examples": ["屏幕偏色"], "confused_with": ["PERF.SYSTEM_FLUENCY"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "THERM", "parent_id": null, "name": "发热温控", "description": "机身温度、热感与温控表现。", "positive_examples": ["游戏一小时只是温热"], "negative_examples": ["只反馈充电速度"], "confused_with": ["PERF", "BAT"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "THERM.DAILY_HEAT", "parent_id": "THERM", "name": "日常发热", "description": "日常使用和待机时的热感。", "positive_examples": ["刷视频不热"], "negative_examples": ["游戏掉帧"], "confused_with": ["THERM.GAMING_HEAT"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "THERM.GAMING_HEAT", "parent_id": "THERM", "name": "游戏发热", "description": "游戏负载下的温度反馈。", "positive_examples": ["游戏后盖烫手"], "negative_examples": ["拍照颜色好"], "confused_with": ["PERF.GAMING"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "THERM.CHARGING_HEAT", "parent_id": "THERM", "name": "充电发热", "description": "充电过程中的机身或充电器发热。", "positive_examples": ["快充时机身很热"], "negative_examples": ["充电速度慢"], "confused_with": ["BAT.CHARGING"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "DISP", "parent_id": null, "name": "屏幕显示", "description": "屏幕显示、触控和视觉体验。", "positive_examples": ["户外亮度足够"], "negative_examples": ["照片画质好"], "confused_with": ["CAM"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "DISP.DISPLAY_QUALITY", "parent_id": "DISP", "name": "显示质量", "description": "清晰度、亮度、色彩、护眼和刷新体验。", "positive_examples": ["阳光下看得清"], "negative_examples": ["相机夜景噪点"], "confused_with": ["CAM.IMAGE_QUALITY"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "DISP.TOUCH", "parent_id": "DISP", "name": "触控体验", "description": "触控响应、误触和断触。", "positive_examples": ["触控很跟手"], "negative_examples": ["系统动画卡"], "confused_with": ["PERF.SYSTEM_FLUENCY"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "DISP.DISPLAY_DEFECT", "parent_id": "DISP", "name": "显示异常", "description": "闪屏、绿线、坏点和显示故障。", "positive_examples": ["没有闪屏"], "negative_examples": ["外壳有划痕"], "confused_with": ["HW.BUILD_QUALITY"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "CAM", "parent_id": null, "name": "影像视频", "description": "照片、视频和相机功能体验。", "positive_examples": ["夜景很清楚"], "negative_examples": ["屏幕显示细腻"], "confused_with": ["DISP"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "CAM.IMAGE_QUALITY", "parent_id": "CAM", "name": "成像质量", "description": "清晰度、色彩、夜景和算法处理。", "positive_examples": ["夜景照片很干净"], "negative_examples": ["屏幕偏色"], "confused_with": ["DISP.DISPLAY_QUALITY"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "CAM.FOCUS", "parent_id": "CAM", "name": "对焦与拍摄", "description": "对焦速度、快门和镜头切换。", "positive_examples": ["抓拍对焦很快"], "negative_examples": ["录像时手机热"], "confused_with": ["THERM.DAILY_HEAT"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "CAM.VIDEO", "parent_id": "CAM", "name": "视频能力", "description": "录像画质、防抖、收音和视频功能。", "positive_examples": ["录像防抖稳"], "negative_examples": ["扬声器音量小"], "confused_with": ["HW.AUDIO"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "NET", "parent_id": null, "name": "通信连接", "description": "蜂窝、Wi-Fi、蓝牙、定位与通话连接。", "positive_examples": ["地下车库信号稳定"], "negative_examples": ["系统动画慢"], "confused_with": ["SYS"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "NET.CELLULAR", "parent_id": "NET", "name": "蜂窝信号", "description": "4G/5G 信号、断流和网络恢复。", "positive_examples": ["电梯里还有 5G"], "negative_examples": ["Wi-Fi 经常断"], "confused_with": ["NET.WIFI_BLUETOOTH"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "NET.WIFI_BLUETOOTH", "parent_id": "NET", "name": "Wi-Fi与蓝牙", "description": "无线局域网和蓝牙连接稳定性。", "positive_examples": ["蓝牙耳机连接稳"], "negative_examples": ["定位飘"], "confused_with": ["NET.LOCATION"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "NET.LOCATION", "parent_id": "NET", "name": "定位导航", "description": "GPS 定位、导航漂移和位置恢复。", "positive_examples": ["导航定位很准"], "negative_examples": ["相机对焦慢"], "confused_with": ["NET.CELLULAR"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "NET.CALL", "parent_id": "NET", "name": "通话连接", "description": "通话接通、掉话和网络侧通话体验。", "positive_examples": ["通话不断线"], "negative_examples": ["听筒声音小"], "confused_with": ["HW.AUDIO"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "SYS", "parent_id": null, "name": "系统软件", "description": "系统功能、升级、稳定性和应用兼容。", "positive_examples": ["升级后功能正常"], "negative_examples": ["游戏帧率低"], "confused_with": ["PERF"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "SYS.SYSTEM_BUG", "parent_id": "SYS", "name": "系统异常", "description": "闪退、重启、死机、通知和功能异常。", "positive_examples": ["更新后频繁重启"], "negative_examples": ["桌面滑动不够顺"], "confused_with": ["PERF.SYSTEM_FLUENCY"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "SYS.UPDATE", "parent_id": "SYS", "name": "系统升级", "description": "升级过程、版本变化和升级后异常。", "positive_examples": ["升级后续航变差"], "negative_examples": ["没说版本的耗电"], "confused_with": ["SYS.SYSTEM_BUG"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "SYS.APP_COMPATIBILITY", "parent_id": "SYS", "name": "应用兼容", "description": "第三方应用安装、运行和兼容问题。", "positive_examples": ["银行应用打不开"], "negative_examples": ["应用启动慢"], "confused_with": ["PERF.APP_PERFORMANCE"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "HW", "parent_id": null, "name": "硬件设计", "description": "机身、结构、音频、按键与耐用性。", "positive_examples": ["握持手感好"], "negative_examples": ["系统升级失败"], "confused_with": ["DISP"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "HW.DESIGN_FEEL", "parent_id": "HW", "name": "设计手感", "description": "重量、尺寸、厚度、握持和外观设计。", "positive_examples": ["机身轻薄好握"], "negative_examples": ["边框有缝隙"], "confused_with": ["HW.BUILD_QUALITY"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "HW.BUILD_QUALITY", "parent_id": "HW", "name": "做工结构", "description": "装配、缝隙、按键、材质和出厂瑕疵。", "positive_examples": ["按键松动"], "negative_examples": ["用了两年电池衰减"], "confused_with": ["HW.DURABILITY"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "HW.AUDIO", "parent_id": "HW", "name": "音频听筒", "description": "扬声器、听筒、麦克风、音质和音量。", "positive_examples": ["双扬声器很响"], "negative_examples": ["通话经常掉线"], "confused_with": ["NET.CALL"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "HW.DURABILITY", "parent_id": "HW", "name": "耐用可靠", "description": "抗摔、耐磨、防护、寿命和长期老化。", "positive_examples": ["用了两年依然可靠"], "negative_examples": ["新机边框有划痕"], "confused_with": ["HW.BUILD_QUALITY"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "AI", "parent_id": null, "name": "AI智能", "description": "端侧或云端 AI 功能体验。", "positive_examples": ["AI 消除很自然"], "negative_examples": ["普通相机对焦慢"], "confused_with": ["CAM", "SYS"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "AI.GENERATIVE", "parent_id": "AI", "name": "生成式AI", "description": "AI 写作、摘要、生成和对话功能。", "positive_examples": ["AI 摘要很准确"], "negative_examples": ["系统通知不及时"], "confused_with": ["SYS.SYSTEM_BUG"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "AI.IMAGE_AI", "parent_id": "AI", "name": "AI影像", "description": "AI 消除、修图和智能影像。", "positive_examples": ["AI 消除路人效果好"], "negative_examples": ["夜景噪点多"], "confused_with": ["CAM.IMAGE_QUALITY"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "AI.ASSISTANT", "parent_id": "AI", "name": "智能助手", "description": "语音、意图理解和智能操作助手。", "positive_examples": ["语音助手识别准确"], "negative_examples": ["麦克风音量小"], "confused_with": ["HW.AUDIO"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "SEC", "parent_id": null, "name": "安全隐私", "description": "隐私保护、权限和设备安全。", "positive_examples": ["权限提示很清楚"], "negative_examples": ["售后服务慢"], "confused_with": ["SYS"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "SEC.PRIVACY", "parent_id": "SEC", "name": "隐私权限", "description": "应用权限、数据隐私和追踪控制。", "positive_examples": ["可以单独关闭定位权限"], "negative_examples": ["定位不准确"], "confused_with": ["NET.LOCATION"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "SEC.BIOMETRIC", "parent_id": "SEC", "name": "生物识别", "description": "指纹、人脸识别和解锁安全。", "positive_examples": ["指纹解锁很快"], "negative_examples": ["触屏偶尔断触"], "confused_with": ["DISP.TOUCH"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "SEC.DEVICE_SECURITY", "parent_id": "SEC", "name": "设备安全", "description": "账户、支付、丢失保护和安全更新。", "positive_examples": ["安全补丁更新及时"], "negative_examples": ["系统普通功能更新"], "confused_with": ["SYS.UPDATE"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "ECO", "parent_id": null, "name": "生态互联", "description": "跨设备协同、配件和生态兼容。", "positive_examples": ["手机电脑协同方便"], "negative_examples": ["蓝牙偶尔断开"], "confused_with": ["NET"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "ECO.MULTI_DEVICE", "parent_id": "ECO", "name": "多设备协同", "description": "手机、平板、电脑和车机协同。", "positive_examples": ["电脑能直接接手机电话"], "negative_examples": ["Wi-Fi 速度慢"], "confused_with": ["NET.WIFI_BLUETOOTH"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "ECO.ACCESSORY", "parent_id": "ECO", "name": "配件生态", "description": "耳机、手表、充电器和第三方配件兼容。", "positive_examples": ["手表联动稳定"], "negative_examples": ["蓝牙耳机本身音质差"], "confused_with": ["NET.WIFI_BLUETOOTH"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "ECO.SHARING", "parent_id": "ECO", "name": "跨端分享", "description": "文件、剪贴板、投屏和内容流转。", "positive_examples": ["跨设备传文件很快"], "negative_examples": ["应用下载慢"], "confused_with": ["SYS.APP_COMPATIBILITY"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "VALUE", "parent_id": null, "name": "价格价值", "description": "价格、优惠和配置价值判断。", "positive_examples": ["这个价位很值"], "negative_examples": ["只说性能强"], "confused_with": ["PERF"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "VALUE.PRICE", "parent_id": "VALUE", "name": "价格优惠", "description": "售价、降价、补贴和促销价值。", "positive_examples": ["国补后价格合适"], "negative_examples": ["客服态度好"], "confused_with": ["SERVICE.SALES_SERVICE"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "VALUE.VALUE_FOR_MONEY", "parent_id": "VALUE", "name": "性价比", "description": "配置、体验与价格的综合价值表达。", "positive_examples": ["同价位配置最均衡"], "negative_examples": ["续航很好"], "confused_with": ["PERF.APP_PERFORMANCE"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "VALUE.PURCHASE_DECISION", "parent_id": "VALUE", "name": "购买决策", "description": "购买、观望、退订和推荐意愿。", "positive_examples": ["准备下单"], "negative_examples": ["希望增加红外功能"], "confused_with": ["NEED.FEATURE_REQUEST"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "SERVICE", "parent_id": null, "name": "服务售后", "description": "售前、物流、客服、维修与质保。", "positive_examples": ["维修处理很快"], "negative_examples": ["手机本身有故障但没提售后"], "confused_with": ["HW"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "SERVICE.SALES_SERVICE", "parent_id": "SERVICE", "name": "销售物流", "description": "购买咨询、发货、配送、包装和门店销售。", "positive_examples": ["当天就送到了"], "negative_examples": ["手机系统卡顿"], "confused_with": ["VALUE.PRICE"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "SERVICE.CUSTOMER_SERVICE", "parent_id": "SERVICE", "name": "客服体验", "description": "在线客服、热线和问题沟通。", "positive_examples": ["客服解释很耐心"], "negative_examples": ["维修换屏很快"], "confused_with": ["SERVICE.REPAIR"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "SERVICE.REPAIR", "parent_id": "SERVICE", "name": "维修质保", "description": "检测、维修、退换、质保和备件。", "positive_examples": ["门店免费换屏"], "negative_examples": ["产品出现绿线但未提处理"], "confused_with": ["DISP.DISPLAY_DEFECT"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "NEED", "parent_id": null, "name": "功能需求", "description": "用户明确提出的新增或改进诉求。", "positive_examples": ["希望增加通话录音"], "negative_examples": ["现有功能打不开"], "confused_with": ["SYS"], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "NEED.FEATURE_REQUEST", "parent_id": "NEED", "name": "新增功能", "description": "明确希望增加目前没有的功能。", "positive_examples": ["希望加入红外遥控"], "negative_examples": ["红外遥控打不开"], "confused_with": ["SYS.SYSTEM_BUG"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "NEED.IMPROVEMENT", "parent_id": "NEED", "name": "体验改进", "description": "对现有能力提出明确改进建议。", "positive_examples": ["建议把相机启动再快一点"], "negative_examples": ["相机启动很慢"], "confused_with": ["PERF.APP_PERFORMANCE"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "NEED.CUSTOMIZATION", "parent_id": "NEED", "name": "个性化需求", "description": "主题、布局、快捷操作等自定义诉求。", "positive_examples": ["希望能自定义锁屏按钮"], "negative_examples": ["锁屏按钮失效"], "confused_with": ["SYS.SYSTEM_BUG"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    },
+    {
+      "tag_id": "OTHER", "parent_id": null, "name": "其他", "description": "无法归入其他正式业务域但仍有业务价值。", "positive_examples": ["明确的其他产品体验"], "negative_examples": ["可以归入已定义标签的反馈"], "confused_with": [], "enabled": true, "taxonomy_version": "1.0.0",
+      "children": [
+        {"tag_id": "OTHER.GENERAL_EXPERIENCE", "parent_id": "OTHER", "name": "综合体验", "description": "只有明确整体体验、无法进一步拆分时使用。", "positive_examples": ["整体体验不错但没有具体描述"], "negative_examples": ["续航很好"], "confused_with": ["VALUE.VALUE_FOR_MONEY"], "enabled": true, "taxonomy_version": "1.0.0"},
+        {"tag_id": "OTHER.UNCATEGORIZED", "parent_id": "OTHER", "name": "待分类", "description": "有明确产品观点但现有标签无法表达。", "positive_examples": ["明确产品体验但标签未覆盖"], "negative_examples": ["无关灌水内容"], "confused_with": ["OTHER.GENERAL_EXPERIENCE"], "enabled": true, "taxonomy_version": "1.0.0"}
+      ]
+    }
+  ]
+}

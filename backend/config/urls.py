@@ -14,6 +14,12 @@ from apps.accounts.views import (
     logout,
     me,
 )
+from apps.analysis.structured_views import (
+    StructuredAnalysisViewSet,
+    StructuredBatchViewSet,
+    StructuredRunViewSet,
+    TaxonomyViewSet,
+)
 from apps.analysis.views import AnalysisBatchViewSet, AnalysisResultViewSet
 from apps.collection.views import CollectionScheduleViewSet, CollectionTargetStateViewSet, CollectionTaskViewSet
 from apps.common.views import health
@@ -33,6 +39,10 @@ router.register("thread-trees", ThreadTreeViewSet, basename="thread-tree")
 router.register("review-quality", ReviewQualityViewSet, basename="review-quality")
 router.register("analysis-results", AnalysisResultViewSet, basename="analysis-result")
 router.register("analysis-batches", AnalysisBatchViewSet, basename="analysis-batch")
+router.register("structured-runs", StructuredRunViewSet, basename="structured-run")
+router.register("structured-analyses", StructuredAnalysisViewSet, basename="structured-analysis")
+router.register("structured-batches", StructuredBatchViewSet, basename="structured-batch")
+router.register("taxonomies", TaxonomyViewSet, basename="taxonomy")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
