@@ -22,6 +22,7 @@ const metadata = ref<ReviewMetadataCompleteness | null>(null)
 const filters = reactive({
   page: 1,
   page_size: 20,
+  ordering: '-published_at',
   source: undefined as number | undefined,
   rating: undefined as number | undefined,
   search: '',
@@ -97,6 +98,19 @@ function summarizeReasons(reasons: Record<string, number>): string {
   const items = Object.entries(reasons)
   if (!items.length) return '无'
   return items.map(([reason, count]) => `${reasonLabels[reason] || reason} ${count}`).join('；')
+}
+
+function onSortChange(sort: { prop: string | null; order: 'ascending' | 'descending' | null }): void {
+  const fields: Record<string, string> = {
+    source_name: 'source__name', product_name: 'product__name', record_type: 'record_type',
+    content: 'content', author_role: 'author_role', ip_location: 'source_region',
+    published_at: 'published_at', collected_at: 'collected_at',
+  }
+  filters.ordering = sort.prop && sort.order && fields[sort.prop]
+    ? `${sort.order === 'descending' ? '-' : ''}${fields[sort.prop]}`
+    : '-published_at'
+  filters.page = 1
+  void loadReviews()
 }
 
 function applyFilters(): void {
@@ -197,23 +211,25 @@ onMounted(async () => {
         :data="reviews"
         empty-text="暂无反馈记录"
         @row-click="selected = $event"
+        @sort-change="onSortChange"
+        :default-sort="{ prop: 'published_at', order: 'descending' }"
       >
-        <el-table-column prop="source_name" label="来源" width="120" />
-        <el-table-column prop="product_name" label="产品" width="150" />
-        <el-table-column prop="record_type" label="类型" width="130" />
-        <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip />
-        <el-table-column label="角色" width="90">
+        <el-table-column prop="source_name" label="来源" sortable="custom" width="120" />
+        <el-table-column prop="product_name" label="产品" sortable="custom" width="150" />
+        <el-table-column prop="record_type" label="类型" sortable="custom" width="130" />
+        <el-table-column prop="content" label="内容" sortable="custom" min-width="300" show-overflow-tooltip />
+        <el-table-column prop="author_role" label="角色" width="90" sortable="custom">
           <template #default="{ row }: { row: ReviewRecord }">
             <el-tag :type="row.is_official ? 'warning' : 'info'">{{ row.author_role }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="ip_location" label="IP 属地" min-width="110" />
-        <el-table-column label="发布时间" min-width="170"
+        <el-table-column prop="ip_location" label="IP 属地" sortable="custom" min-width="110" />
+        <el-table-column prop="published_at" label="发布时间" sortable="custom" min-width="170"
           ><template #default="{ row }">{{
             formatPublishedAt(row.published_at)
           }}</template></el-table-column
         >
-        <el-table-column label="采集时间" min-width="170"><template #default="{ row }: { row: ReviewRecord }">{{ formatPublishedAt(row.collected_at) }}</template></el-table-column>
+        <el-table-column prop="collected_at" label="采集时间" sortable="custom" min-width="170"><template #default="{ row }: { row: ReviewRecord }">{{ formatPublishedAt(row.collected_at) }}</template></el-table-column>
       </el-table>
 
       <el-pagination
