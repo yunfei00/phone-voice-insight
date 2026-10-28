@@ -530,3 +530,97 @@ export interface AIConnectivityResult {
   model: string
   latency_ms: number
 }
+
+export interface TaxonomyTag {
+  tag_id: string
+  parent_id: string | null
+  name: string
+  description: string
+  positive_examples: string[]
+  negative_examples: string[]
+  confused_with: string[]
+  enabled: boolean
+  taxonomy_version: string
+  children: TaxonomyTag[]
+}
+
+export interface TaxonomyDefinition {
+  taxonomy_version: string
+  name: string
+  domains: TaxonomyTag[]
+}
+
+export interface StructuredOpinion {
+  id: number
+  business_domains: string[]
+  aspect_code: string
+  topic_code: string
+  sentiment: string
+  intent: string
+  issue_type: string
+  severity: string
+  scenario: string | null
+  trigger: string | null
+  phenomenon: string | null
+  target_product: string | null
+  compared_products: string[]
+  relation_type: string
+  evidence_text: string
+  evidence_start: number
+  evidence_end: number
+  confidence: string
+  review_required: boolean
+}
+
+export interface StructuredAnalysisV1 {
+  id: number
+  content: number
+  run: number
+  original_title: string
+  original_content: string
+  product_name: string
+  source_name: string
+  run_status: string
+  provider: string
+  model: string
+  prompt_version: string
+  taxonomy_version: string
+  schema_version: string
+  overall_sentiment: string
+  language: string
+  content_type: string
+  relevance: string
+  summary: string
+  model_mentions: string[]
+  schema_valid: boolean
+  review_required: boolean
+  aspects: StructuredOpinion[]
+  review_history: Array<{
+    id: number
+    reviewer_name: string
+    review_reason: string
+    reviewed_at: string
+  }>
+  created_at: string
+}
+
+export interface StructuredQuality {
+  total_runs: number
+  successful_runs: number
+  success_rate: number | null
+  schema_valid_rate: number | null
+  review_required: number
+  human_evaluation_status: 'NOT_EVALUATED'
+  accuracy_metrics: null
+}
+
+export interface StructuredBatch extends AnalysisBatch {
+  dry_run: boolean
+  max_concurrency: number
+  requests_per_minute: number
+  token_limit: number | null
+  cost_budget: string | null
+  estimated_cost: string
+  actual_cost: string
+  review_required_count: number
+}

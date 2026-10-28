@@ -26,6 +26,10 @@ import type {
   ReviewRecord,
   UserAccount,
   UserPayload,
+  StructuredAnalysisV1,
+  StructuredBatch,
+  StructuredQuality,
+  TaxonomyDefinition,
 } from '@/types/api'
 
 export const login = async (payload: LoginPayload): Promise<LoginResponse> =>
@@ -210,3 +214,54 @@ export const evaluateAnalysis = async (
 ): Promise<AnalysisEvaluation> =>
   (await apiClient.post<AnalysisEvaluation>(`/analysis-results/${analysisId}/evaluate/`, payload))
     .data
+
+export const getTaxonomy = async (): Promise<TaxonomyDefinition> =>
+  (await apiClient.get<TaxonomyDefinition>('/taxonomies/')).data
+
+export const getStructuredAnalyses = async (
+  params: PageParams = {},
+): Promise<PaginatedResponse<StructuredAnalysisV1>> =>
+  (
+    await apiClient.get<PaginatedResponse<StructuredAnalysisV1>>('/structured-analyses/', {
+      params,
+    })
+  ).data
+
+export const reviewStructuredAnalysis = async (
+  id: number,
+  correctedResult: Record<string, unknown>,
+  reviewReason: string,
+): Promise<StructuredAnalysisV1> =>
+  (
+    await apiClient.post<StructuredAnalysisV1>(`/structured-analyses/${id}/review/`, {
+      corrected_result: correctedResult,
+      review_reason: reviewReason,
+    })
+  ).data
+
+export const getStructuredQuality = async (): Promise<StructuredQuality> =>
+  (await apiClient.get<StructuredQuality>('/structured-analyses/quality/')).data
+
+export const getStructuredBatches = async (
+  params: PageParams = {},
+): Promise<PaginatedResponse<StructuredBatch>> =>
+  (await apiClient.get<PaginatedResponse<StructuredBatch>>('/structured-batches/', { params })).data
+
+export const createStructuredBatch = async (payload: {
+  product_id?: number
+  source_id?: number
+  content_ids?: number[]
+  max_items: number
+  dry_run: boolean
+  max_concurrency: number
+  requests_per_minute: number
+  token_limit?: number
+  cost_budget?: number
+}): Promise<{
+  batch: StructuredBatch
+  celery_task_id: string | null
+  matched_content_ids: number[]
+}> => (await apiClient.post('/structured-batches/', payload)).data
+
+export const cancelStructuredBatch = async (id: number): Promise<StructuredBatch> =>
+  (await apiClient.post<StructuredBatch>(`/structured-batches/${id}/cancel/`)).data

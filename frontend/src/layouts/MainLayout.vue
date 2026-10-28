@@ -49,7 +49,10 @@ const baseNavigationItems = [
   { path: '/threads', label: '帖子视图', icon: ChatLineSquare },
   { path: '/reviews', label: '原始反馈', icon: Document },
   { path: '/data-quality', label: '数据质量', icon: CircleCheck },
-  { path: '/analysis', label: 'AI分析', icon: DataAnalysis },
+  { path: '/structured-analysis', label: 'AI结构化分析', icon: DataAnalysis },
+  { path: '/ai-quality', label: 'AI质量中心', icon: CircleCheck },
+  { path: '/ai-tasks', label: 'AI任务中心', icon: List },
+  { path: '/analysis', label: '历史AI分析', icon: DataAnalysis },
   { path: '/ai-settings', label: 'AI配置', icon: Setting },
   { path: '/system', label: '系统状态', icon: Cpu },
 ]

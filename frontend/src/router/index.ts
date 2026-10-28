@@ -59,10 +59,28 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '数据质量' },
       },
       {
+        path: 'structured-analysis',
+        name: 'structured-analysis',
+        component: () => import('@/views/StructuredAnalysisView.vue'),
+        meta: { title: 'AI 结构化分析' },
+      },
+      {
+        path: 'ai-quality',
+        name: 'ai-quality',
+        component: () => import('@/views/AIQualityView.vue'),
+        meta: { title: 'AI 质量中心' },
+      },
+      {
+        path: 'ai-tasks',
+        name: 'ai-tasks',
+        component: () => import('@/views/AITasksView.vue'),
+        meta: { title: 'AI 任务中心' },
+      },
+      {
         path: 'analysis',
         name: 'analysis',
         component: () => import('@/views/AnalysisView.vue'),
-        meta: { title: 'AI 分析' },
+        meta: { title: '历史 AI 分析' },
       },
       {
         path: 'ai-settings',
