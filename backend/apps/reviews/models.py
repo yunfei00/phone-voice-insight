@@ -322,3 +322,34 @@ class GovernanceTask(TimeStampedModel):
 
     class Meta:
         ordering = ("-created_at", "-id")
+
+
+class GovernanceAIReview(TimeStampedModel):
+    """AI opinion is independent from rules and manual overrides."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "待复核"
+        SUCCEEDED = "SUCCEEDED", "复核完成"
+        REVIEW_REQUIRED = "REVIEW_REQUIRED", "需要人工确认"
+        FAILED = "FAILED", "调用失败"
+
+    quality = models.ForeignKey(ReviewQuality, on_delete=models.CASCADE, related_name="ai_reviews")
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.PENDING, db_index=True)
+    rule_eligible = models.BooleanField()
+    ai_eligible = models.BooleanField(null=True, blank=True)
+    confidence = models.FloatField(null=True, blank=True)
+    reason = models.TextField(blank=True)
+    evidence = models.TextField(blank=True)
+    provider = models.CharField(max_length=64, blank=True)
+    model_name = models.CharField(max_length=128, blank=True)
+    prompt_version = models.CharField(max_length=40, default="governance_review_v1")
+    input_hash = models.CharField(max_length=64, db_index=True)
+    raw_response = models.JSONField(default=dict)
+    error_code = models.CharField(max_length=80, blank=True)
+    prompt_tokens = models.PositiveIntegerField(null=True, blank=True)
+    completion_tokens = models.PositiveIntegerField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = [models.Index(fields=("quality", "input_hash"), name="gov_ai_quality_hash")]
