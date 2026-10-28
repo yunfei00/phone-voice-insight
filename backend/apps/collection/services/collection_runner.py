@@ -552,7 +552,7 @@ def run_collection(
             _finish_failed(task.id, run.id, message)
             raise
 
-    max_pages = _int_config(config, "max_topic_pages", 5, 10)
+    max_pages = min(_int_config(config, "max_topic_pages", 5, 10), task.requested_pages or 10)
     configured_threads = _int_config(config, "max_threads", 100, 200)
     requested_limit = limit_override or task.requested_limit or configured_threads
     max_threads = min(max(int(requested_limit), 1), configured_threads, 200)
