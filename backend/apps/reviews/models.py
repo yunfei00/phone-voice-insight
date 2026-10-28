@@ -94,6 +94,8 @@ class ReviewRecord(TimeStampedModel):
         validators=(MinValueValidator(0), MaxValueValidator(5)),
     )
     published_at = models.DateTimeField("发布时间", null=True, blank=True)
+    source_region = models.CharField("公开地域", max_length=120, blank=True, default="", db_index=True)
+    region_evidence = models.CharField("地域依据", max_length=40, blank=True, default="")
     software_version = models.CharField("软件版本", max_length=100, blank=True)
     author_role = models.CharField(
         "作者角色",
