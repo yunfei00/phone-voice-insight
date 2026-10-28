@@ -21,14 +21,28 @@ def valid_payload() -> dict[str, Any]:
         "relevance": "RELEVANT",
         "summary": "用户反馈地下车库信号不稳定",
         "model_mentions": ["荣耀 Power2"],
-        "aspects": [{
-            "business_domains": ["NET"], "aspect_code": "NET", "topic_code": "NET.CELLULAR",
-            "sentiment": "NEGATIVE", "intent": "COMPLAINT", "issue_type": "RELIABILITY",
-            "severity": "MEDIUM", "scenario": "地下车库", "trigger": None, "phenomenon": "信号不稳定",
-            "target_product": "荣耀 Power2", "compared_products": [], "relation_type": "SELF",
-            "evidence_text": "地下车库信号不稳定", "evidence_start": 0, "evidence_end": 10,
-            "confidence": 0.93, "review_required": False,
-        }],
+        "aspects": [
+            {
+                "business_domains": ["NET"],
+                "aspect_code": "NET",
+                "topic_code": "NET.CELLULAR",
+                "sentiment": "NEGATIVE",
+                "intent": "COMPLAINT",
+                "issue_type": "RELIABILITY",
+                "severity": "MEDIUM",
+                "scenario": "地下车库",
+                "trigger": None,
+                "phenomenon": "信号不稳定",
+                "target_product": "荣耀 Power2",
+                "compared_products": [],
+                "relation_type": "SELF",
+                "evidence_text": "地下车库信号不稳定",
+                "evidence_start": 0,
+                "evidence_end": 10,
+                "confidence": 0.93,
+                "review_required": False,
+            }
+        ],
     }
 
 
@@ -66,9 +80,7 @@ def test_taxonomy_is_versioned_and_has_fifteen_domains() -> None:
         (lambda p: p["aspects"][0].update(unknown=True), False),
     ],
 )
-def test_schema_positive_and_negative_cases(
-    mutation: Callable[[dict[str, Any]], object], valid: bool
-) -> None:
+def test_schema_positive_and_negative_cases(mutation: Callable[[dict[str, Any]], object], valid: bool) -> None:
     payload = copy.deepcopy(valid_payload())
     mutation(payload)
     if valid:
@@ -110,4 +122,3 @@ def test_json_schema_declares_draft_2020_12() -> None:
     schema = json.loads(path.read_text(encoding="utf-8"))
     assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
     assert schema["additionalProperties"] is False
-

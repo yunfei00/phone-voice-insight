@@ -77,12 +77,8 @@ class StructuredBatchCreateSerializer(serializers.Serializer):
     requests_per_minute = serializers.IntegerField(min_value=1, max_value=120, default=10)
     token_limit = serializers.IntegerField(min_value=1, required=False)
     cost_budget = serializers.DecimalField(max_digits=12, decimal_places=4, min_value=0, required=False)
-    input_cost_per_million = serializers.DecimalField(
-        max_digits=12, decimal_places=4, min_value=0, default=Decimal(0)
-    )
-    output_cost_per_million = serializers.DecimalField(
-        max_digits=12, decimal_places=4, min_value=0, default=Decimal(0)
-    )
+    input_cost_per_million = serializers.DecimalField(max_digits=12, decimal_places=4, min_value=0, default=Decimal(0))
+    output_cost_per_million = serializers.DecimalField(max_digits=12, decimal_places=4, min_value=0, default=Decimal(0))
     timeout_seconds = serializers.IntegerField(min_value=5, max_value=600, default=120)
     max_retries = serializers.IntegerField(min_value=0, max_value=3, default=1)
 

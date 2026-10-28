@@ -48,26 +48,53 @@ def payload(text: str) -> dict[str, Any]:
     evidence = "信号不稳定" if "信号不稳定" in text else text
     start = text.index(evidence)
     return {
-        "schema_version": "1.0.0", "taxonomy_version": "1.0.0", "overall_sentiment": "NEGATIVE",
-        "language": "zh-CN", "content_type": "COMMUNITY_REPLY", "relevance": "RELEVANT",
-        "summary": "用户反馈通信体验问题", "model_mentions": [],
-        "aspects": [{
-            "business_domains": ["NET"], "aspect_code": "NET", "topic_code": "NET.CELLULAR",
-            "sentiment": "NEGATIVE", "intent": "COMPLAINT", "issue_type": "RELIABILITY",
-            "severity": "MEDIUM", "scenario": None, "trigger": None, "phenomenon": "信号不稳定",
-            "target_product": None, "compared_products": [], "relation_type": "SELF",
-            "evidence_text": evidence, "evidence_start": start, "evidence_end": start + len(evidence),
-            "confidence": 0.9, "review_required": False,
-        }],
+        "schema_version": "1.0.0",
+        "taxonomy_version": "1.0.0",
+        "overall_sentiment": "NEGATIVE",
+        "language": "zh-CN",
+        "content_type": "COMMUNITY_REPLY",
+        "relevance": "RELEVANT",
+        "summary": "用户反馈通信体验问题",
+        "model_mentions": [],
+        "aspects": [
+            {
+                "business_domains": ["NET"],
+                "aspect_code": "NET",
+                "topic_code": "NET.CELLULAR",
+                "sentiment": "NEGATIVE",
+                "intent": "COMPLAINT",
+                "issue_type": "RELIABILITY",
+                "severity": "MEDIUM",
+                "scenario": None,
+                "trigger": None,
+                "phenomenon": "信号不稳定",
+                "target_product": None,
+                "compared_products": [],
+                "relation_type": "SELF",
+                "evidence_text": evidence,
+                "evidence_start": start,
+                "evidence_end": start + len(evidence),
+                "confidence": 0.9,
+                "review_required": False,
+            }
+        ],
     }
 
 
 @pytest.fixture
 def review(product, source, source_target):  # type: ignore[no-untyped-def]
     return ReviewRecord.objects.create(
-        product=product, source=source, source_target=source_target, external_id="reply-v1",
-        record_type=RecordType.REPLY, title="", content="地下车库信号不稳定", content_hash="a" * 64,
-        author_role=AuthorRole.USER, collected_at=timezone.now(), published_at=timezone.now(),
+        product=product,
+        source=source,
+        source_target=source_target,
+        external_id="reply-v1",
+        record_type=RecordType.REPLY,
+        title="",
+        content="地下车库信号不稳定",
+        content_hash="a" * 64,
+        author_role=AuthorRole.USER,
+        collected_at=timezone.now(),
+        published_at=timezone.now(),
     )
 
 
@@ -133,7 +160,8 @@ def test_review_correction_replaces_aspects_and_keeps_history(api_client, review
     corrected["overall_sentiment"] = "NEUTRAL"
     response = api_client.post(
         f"/api/v1/structured-analyses/{run.structured_analysis.id}/review/",
-        {"corrected_result": corrected, "review_reason": "人工确认无有效观点"}, format="json",
+        {"corrected_result": corrected, "review_reason": "人工确认无有效观点"},
+        format="json",
     )
     assert response.status_code == 200
     assert response.data["overall_sentiment"] == "NEUTRAL"
@@ -177,4 +205,3 @@ def test_invalid_taxonomy_fails_without_saving_analysis(review):  # type: ignore
     assert run.status == StructuredRunStatus.FAILED
     assert not StructuredAnalysis.objects.filter(run=run).exists()
     assert OpinionAspect.objects.count() == 0
-
