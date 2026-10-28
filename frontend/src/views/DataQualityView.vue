@@ -410,6 +410,7 @@ onUnmounted(() => { stopTaskPolling(); stopAIPolling() })
         <el-table-column prop="succeeded" label="通过" />
         <el-table-column prop="review_required" label="待人工确认" />
         <el-table-column prop="failed" label="失败" />
+        <el-table-column prop="error_code" label="任务错误代码" min-width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
             <el-button v-if="row.failed > 0 || row.status === 'FAILED'" size="small" :disabled="aiBusy" @click="retryAIReview(row.id)">重试失败</el-button>
@@ -432,6 +433,7 @@ onUnmounted(() => { stopTaskPolling(); stopAIPolling() })
         </el-table-column>
         <el-table-column prop="reason" label="AI 判断理由" min-width="220" show-overflow-tooltip />
         <el-table-column prop="evidence" label="引用证据" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="error_code" label="失败原因代码" min-width="160" show-overflow-tooltip />
         <el-table-column label="人工确认" min-width="185" fixed="right">
           <template #default="{ row }">
             <span v-if="row.human_reviewed_at">已确认：{{ row.human_decision ? '保留' : '排除' }}</span>
