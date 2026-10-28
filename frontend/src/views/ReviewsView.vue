@@ -207,12 +207,13 @@ onMounted(async () => {
             <el-tag :type="row.is_official ? 'warning' : 'info'">{{ row.author_role }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="ip_location" label="IP 属地" min-width="110" />
         <el-table-column label="发布时间" min-width="170"
           ><template #default="{ row }">{{
             formatPublishedAt(row.published_at)
           }}</template></el-table-column
         >
-        <el-table-column prop="collected_at" label="采集时间" min-width="170" />
+        <el-table-column label="采集时间" min-width="170"><template #default="{ row }: { row: ReviewRecord }">{{ formatPublishedAt(row.collected_at) }}</template></el-table-column>
       </el-table>
 
       <el-pagination
@@ -241,7 +242,8 @@ onMounted(async () => {
           <el-descriptions-item label="发布时间">{{
             formatPublishedAt(selected.published_at)
           }}</el-descriptions-item>
-          <el-descriptions-item label="采集时间">{{ selected.collected_at }}</el-descriptions-item>
+          <el-descriptions-item label="IP 属地">{{ selected.ip_location || '' }}</el-descriptions-item>
+          <el-descriptions-item label="采集时间">{{ formatPublishedAt(selected.collected_at) }}</el-descriptions-item>
           <el-descriptions-item label="软件版本">{{
             selected.software_version || '未提供'
           }}</el-descriptions-item>
