@@ -74,6 +74,8 @@ def persist_review(source_target: SourceTarget, review: NormalizedReview) -> Per
         "content": review.content,
         "rating": review.rating,
         "published_at": review.published_at,
+        "source_region": str(review.raw_data.get("public_region") or ""),
+        "region_evidence": "public_ip_region" if review.raw_data.get("public_region") else "",
         "author_role": review.author_role,
         "is_official": review.is_official,
         "is_append_review": review.is_append_review,
@@ -118,6 +120,9 @@ def persist_review(source_target: SourceTarget, review: NormalizedReview) -> Per
                     }
                     if review.record_type == "THREAD" and review.title:
                         mutable["title"] = review.title
+                    if not instance.source_region and defaults["source_region"]:
+                        mutable["source_region"] = defaults["source_region"]
+                        mutable["region_evidence"] = defaults["region_evidence"]
                     if instance.published_at is None and review.published_at is not None:
                         mutable["published_at"] = review.published_at
                     if not instance.content.strip() and review.content.strip():
