@@ -183,6 +183,27 @@ class CollectionTargetStateViewSet(ReadOnlyModelViewSet):
             status=status.HTTP_202_ACCEPTED,
         )
 
+    @action(detail=True, methods=("post",), url_path="start-smart")
+    def start_smart(self, request: Request, pk: str | None = None) -> Response:
+        del request, pk
+        state = self.get_object()
+        target = state.source_target
+        if not target.is_active or not target.source.is_active or not target.target_url:
+            return Response({"detail": "采集入口未启用或未配置网址"}, status=status.HTTP_400_BAD_REQUEST)
+        active = CollectionTask.objects.filter(
+            source_target=target,
+            status__in=(CollectionStatus.PENDING, CollectionStatus.RUNNING, CollectionStatus.PAUSED),
+        ).order_by("created_at").first()
+        if active:
+            return Response({"task_id": active.id, "status": active.status, "existing": True}, status=status.HTTP_200_OK)
+        task_type = CollectionTaskType.INCREMENTAL if state.full_verified else CollectionTaskType.FULL
+        try:
+            task = create_collection_task(source_target=target, task_type=task_type, trigger_type=CollectionTriggerType.MANUAL)
+        except CollectionAlreadyActive as exc:
+            return Response({"task_id": exc.task_id, "existing": True}, status=status.HTTP_200_OK)
+        async_result = run_collection_task.delay(task.id)
+        return Response({"task_id": task.id, "task_type": task_type, "status": task.status, "celery_task_id": async_result.id}, status=status.HTTP_202_ACCEPTED)
+
     @action(detail=True, methods=("post",), url_path="start-full")
     def start_full(self, request: Request, pk: str | None = None) -> Response:
         del pk
