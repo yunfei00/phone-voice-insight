@@ -1,10 +1,10 @@
-from rest_framework.viewsets import ReadOnlyModelViewSet
+from rest_framework.viewsets import ModelViewSet
 
 from apps.products.models import Product
 from apps.products.serializers import ProductSerializer
 
 
-class ProductViewSet(ReadOnlyModelViewSet):
+class ProductViewSet(ModelViewSet):
     queryset = Product.objects.select_related("brand").prefetch_related("aliases", "variants")
     serializer_class = ProductSerializer
     filterset_fields = ("brand", "series", "is_active")
