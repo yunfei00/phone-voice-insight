@@ -47,8 +47,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-phone_voice_insight}
       POSTGRES_USER: ${POSTGRES_USER:-pvi}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
-    ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -61,8 +59,6 @@ services:
   redis:
     image: redis:7.4-alpine
     command: redis-server --appendonly yes
-    ports:
-      - "${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -77,8 +73,6 @@ services:
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py runserver 0.0.0.0:8000"
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
     healthcheck:
       test:
         [
