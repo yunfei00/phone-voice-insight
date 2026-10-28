@@ -14,7 +14,7 @@ from ai.schemas.review_analysis import ReviewAnalysisInput
 from apps.reviews.models import GovernanceAIReview, ReviewQuality
 
 PROMPT_VERSION = "governance_review_v1"
-PROMPT_PATH = Path(__file__).resolve().parents[4] / "prompts" / f"{PROMPT_VERSION}.md"
+PROMPT_PATH = Path(__file__).resolve().parents[3] / "prompts" / f"{PROMPT_VERSION}.md"
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.I | re.S)
 
 
