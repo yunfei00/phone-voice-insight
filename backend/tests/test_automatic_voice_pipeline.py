@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from apps.accounts.models import AIProviderName, UserAIConfiguration, UserProfile, UserRole
 from apps.reviews.models import ContentPurpose, GovernanceAIReview, ReviewQuality, ReviewRecord
-from apps.reviews.services.automatic_pipeline import run_automatic_pipeline
+from apps.reviews.services.automatic_pipeline import _govern_new_records, run_automatic_pipeline
 
 
 def create_eligible_quality(product: Any, source: Any, source_target: Any) -> ReviewQuality:
@@ -122,3 +122,29 @@ def test_automatic_pipeline_stops_at_daily_budget(
     result = run_automatic_pipeline(product.id)
 
     assert result.status == "DAILY_BUDGET_EXCEEDED"
+
+
+@pytest.mark.django_db
+def test_automatic_governance_executes_with_celery_request_context(
+    product: Any,
+    source: Any,
+    source_target: Any,
+    django_user_model: Any,
+) -> None:
+    user = django_user_model.objects.create_superuser(username="governance-owner", password="test-pass")
+    review = ReviewRecord.objects.create(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id="new-automatic-review",
+        record_type="THREAD",
+        content="夜间待机八小时掉电百分之二十, 续航明显异常",
+        content_hash="new-automatic-review-hash",
+        collected_at=timezone.now(),
+    )
+
+    task = _govern_new_records(product, source.id, user.id)
+
+    assert task is not None
+    assert task.status == task.Status.SUCCESS
+    assert ReviewQuality.objects.filter(review=review).exists()

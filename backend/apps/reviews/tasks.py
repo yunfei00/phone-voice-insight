@@ -59,9 +59,11 @@ def process_governance_batch(self: Any, governance_task_id: int) -> dict[str, An
             task.processed += 1
             task.failures = failures
             task.save(update_fields=("eligible", "excluded", "reused", "failed", "processed", "failures", "updated_at"))
-            self.update_state(
-                state="PROGRESS", meta={"task_id": task.id, "processed": task.processed, "total": task.total}
-            )
+            if self.request.id and not self.request.is_eager:
+                self.update_state(
+                    state="PROGRESS",
+                    meta={"task_id": task.id, "processed": task.processed, "total": task.total},
+                )
     except Exception as exc:
         task.status = GovernanceTask.Status.FAILED
         task.error_message = type(exc).__name__

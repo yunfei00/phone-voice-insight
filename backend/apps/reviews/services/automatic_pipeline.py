@@ -92,7 +92,7 @@ def _govern_new_records(product: Product, source_id: int | None, owner_id: int) 
             review_ids=ids,
             total=len(ids),
         )
-    process_governance_batch.run(task.id)
+    process_governance_batch.apply(args=(task.id,), throw=True)
     task.refresh_from_db()
     return task
 
@@ -157,7 +157,11 @@ def run_automatic_pipeline(product_id: int, source_id: int | None = None) -> Aut
             quality_ids=quality_ids,
             total=len(quality_ids),
         )
-    process_governance_ai_batch.run(ai_batch.id, max_attempts=settings.AI_AUTOMATION_MAX_ATTEMPTS)
+    process_governance_ai_batch.apply(
+        args=(ai_batch.id,),
+        kwargs={"max_attempts": settings.AI_AUTOMATION_MAX_ATTEMPTS},
+        throw=True,
+    )
     ai_batch.refresh_from_db()
 
     accepted_content_ids: list[int] = []
