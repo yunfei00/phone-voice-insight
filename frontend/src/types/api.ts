@@ -154,6 +154,7 @@ export interface CollectionTask {
   trigger_type: 'MANUAL' | 'SCHEDULED' | 'RETRY' | 'RECOVERY'
   status: CollectionStatus
   requested_limit: number | null
+  requested_pages: number | null
   success_count: number
   skipped_count: number
   failure_count: number
