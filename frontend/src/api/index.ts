@@ -394,6 +394,7 @@ export interface GovernanceAIBatchInfo {
   succeeded: number
   review_required: number
   failed: number
+  error_code: string
 }
 
 export interface GovernanceAIResultInfo {
@@ -406,6 +407,7 @@ export interface GovernanceAIResultInfo {
   reason: string
   evidence: string
   model: string
+  error_code: string
   human_decision: boolean | null
   human_reviewed_at: string | null
 }
