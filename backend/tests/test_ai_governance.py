@@ -23,3 +23,10 @@ def test_valid_ai_governance_response():
 def test_invalid_ai_governance_response_is_rejected(response):
     with pytest.raises((ValueError, TypeError)):
         validate_ai_governance_response(response, "升级后耗电很快")
+
+
+def test_governance_prompt_exists():
+    from apps.reviews.services.ai_governance import PROMPT_PATH
+
+    assert PROMPT_PATH.is_file(), f"Governance AI prompt missing: {PROMPT_PATH}"
+    assert 'eligible' in PROMPT_PATH.read_text(encoding='utf-8')
