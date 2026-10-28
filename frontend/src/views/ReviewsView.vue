@@ -2,12 +2,13 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
-import { getReviewFacets, getReviewMetadataCompleteness, getReviews, getSources } from '@/api'
-import type { DataSource, ReviewMetadataCompleteness, ReviewRecord } from '@/types/api'
+import { getReviewFacets, getReviewMetadataCompleteness, getReviews, getSources, getProducts } from '@/api'
+import type { DataSource, ReviewMetadataCompleteness, ReviewRecord, Product } from '@/types/api'
 
 const reviews = ref<ReviewRecord[]>([])
 const route = useRoute()
 const sources = ref<DataSource[]>([])
+const products = ref<Product[]>([])
 const facets = ref<{
   variants: { product_variant_id: number; product_variant__sku_name: string; count: number }[]
   regions: { source_region: string; count: number }[]
@@ -96,8 +97,9 @@ function applyFilters(): void {
 
 onMounted(async () => {
   try {
-    const [sourcePage, facetPage, metadataPage] = await Promise.all([
+    const [sourcePage, productPage, facetPage, metadataPage] = await Promise.all([
       getSources({ page_size: 100 }),
+      getProducts({ page_size: 100 }),
       getReviewFacets(),
       getReviewMetadataCompleteness({
         product: filters.product,
@@ -105,6 +107,7 @@ onMounted(async () => {
       }),
     ])
     sources.value = sourcePage.results
+    products.value = productPage.results
     facets.value = facetPage
     metadata.value = metadataPage
   } finally {
@@ -127,26 +130,12 @@ onMounted(async () => {
         <strong>{{ formatRate(metadata.summary.published_at_rate) }}</strong>
         <small>{{ metadata.summary.published_at_count }} / {{ metadata.summary.total }}</small>
       </div>
-      <div class="metadata-card">
-        <span>公开 IP 属地完整率</span>
-        <strong>{{ formatRate(metadata.summary.ip_location_rate) }}</strong>
-        <small>{{ metadata.summary.ip_location_count }} / {{ metadata.summary.total }}</small>
-      </div>
-      <div class="metadata-card">
-        <span>用户填写地区完整率</span>
-        <strong>{{ formatRate(metadata.summary.profile_region_rate) }}</strong>
-        <small>{{ metadata.summary.profile_region_count }} / {{ metadata.summary.total }}</small>
-      </div>
     </div>
-    <el-alert
-      v-if="metadata"
-      type="info"
-      :closable="false"
-      class="notice"
-      :title="`缺失原因｜发布时间：${summarizeReasons(metadata.failure_reasons.published_at)}｜IP 属地：${summarizeReasons(metadata.failure_reasons.ip_location)}｜用户填写地区：${summarizeReasons(metadata.failure_reasons.profile_region)}`"
-    />
     <div class="panel">
       <div class="filters">
+        <el-select v-model="filters.product" clearable filterable placeholder="全部产品" @change="applyFilters">
+          <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" />
+        </el-select>
         <el-select v-model="filters.source" clearable placeholder="全部来源" @change="applyFilters">
           <el-option
             v-for="source in sources"
@@ -155,29 +144,6 @@ onMounted(async () => {
             :value="source.id"
           />
         </el-select>
-        <el-select
-          v-model="filters.source_region"
-          clearable
-          placeholder="来源地域"
-          @change="applyFilters"
-          ><el-option
-            v-for="region in facets.regions"
-            :key="region.source_region"
-            :label="`${region.source_region} (${region.count})`"
-            :value="region.source_region" /><el-option label="未知地域" value="__UNKNOWN__"
-        /></el-select>
-        <el-select
-          v-if="facets.ratings.length"
-          v-model="filters.rating"
-          clearable
-          placeholder="原始评分"
-          @change="applyFilters"
-          ><el-option
-            v-for="item in facets.ratings"
-            :key="item.rating"
-            :label="`${item.rating} 分 (${item.count})`"
-            :value="Number(item.rating)"
-        /></el-select>
         <el-select
           v-model="filters.record_type"
           clearable
@@ -225,23 +191,8 @@ onMounted(async () => {
       >
         <el-table-column prop="source_name" label="来源" width="120" />
         <el-table-column prop="product_name" label="产品" width="150" />
-        <el-table-column label="IP 属地" width="130"
-          ><template #default="{ row }">{{
-            row.ip_location || '未提供'
-          }}</template></el-table-column
-        >
-        <el-table-column label="用户填写地区" width="140"
-          ><template #default="{ row }">{{
-            row.profile_region || '未提供'
-          }}</template></el-table-column
-        >
         <el-table-column prop="record_type" label="类型" width="130" />
         <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip />
-        <el-table-column label="原始评分" width="100"
-          ><template #default="{ row }">{{
-            row.rating == null ? '未提供' : row.rating
-          }}</template></el-table-column
-        >
         <el-table-column label="角色" width="90">
           <template #default="{ row }: { row: ReviewRecord }">
             <el-tag :type="row.is_official ? 'warning' : 'info'">{{ row.author_role }}</el-tag>
@@ -274,20 +225,8 @@ onMounted(async () => {
       <template v-if="selected">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="来源">{{ selected.source_name }}</el-descriptions-item>
-          <el-descriptions-item label="公开 IP 属地">{{
-            selected.ip_location || '未提供'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="用户填写地区">{{
-            selected.profile_region || '未提供'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="地域依据">{{
-            selected.region_evidence || '未提供'
-          }}</el-descriptions-item>
           <el-descriptions-item label="产品">{{ selected.product_name }}</el-descriptions-item>
           <el-descriptions-item label="类型">{{ selected.record_type }}</el-descriptions-item>
-          <el-descriptions-item label="评分">{{
-            selected.rating ?? '未提供'
-          }}</el-descriptions-item>
           <el-descriptions-item label="标题">{{ selected.title || '—' }}</el-descriptions-item>
           <el-descriptions-item label="内容">{{ selected.content }}</el-descriptions-item>
           <el-descriptions-item label="发布时间">{{
@@ -331,7 +270,7 @@ onMounted(async () => {
 
 .metadata-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(1, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 12px;
 }
