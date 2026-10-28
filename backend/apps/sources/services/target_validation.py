@@ -15,6 +15,7 @@ from collectors.honor_club.client import HonorClubClient, validate_honor_url
 from collectors.honor_club.normalizer import normalize_match_text
 from collectors.honor_club.parser import extract_topic_identity, is_valid_topic_page, parse_topic_page
 from django.utils import timezone
+from django.conf import settings
 
 from apps.sources.models import SourceTarget, TargetValidationStatus
 
@@ -78,9 +79,16 @@ def _public_addresses(hostname: str) -> list[str]:
     diagnosis = diagnose_dns(hostname)
     if diagnosis["dns_status"] == "DNS_ERROR":
         raise CollectorError("采集入口 DNS 解析失败", code="DNS_ERROR", retryable=True)
-    if diagnosis["dns_status"] == "SSRF_BLOCKED":
-        raise CollectorError("采集入口解析到非公网地址; 已拒绝访问", code="SSRF_BLOCKED")
-    return list(diagnosis["resolved_addresses"])
+    addresses = list(diagnosis["resolved_addresses"])
+    blocked = list(diagnosis["blocked_addresses"])
+    if blocked:
+        allowed_hosts = {host.lower().rstrip(".") for host in settings.SSRF_ALLOWED_HOSTS}
+        pinned_ips = set(settings.SSRF_ALLOWED_PRIVATE_IPS)
+        # An exact host match is necessary but insufficient: private endpoints
+        # must be explicitly pinned to prevent arbitrary internal access.
+        if hostname.lower().rstrip(".") not in allowed_hosts or not pinned_ips or not set(blocked).issubset(pinned_ips):
+            raise CollectorError("采集入口解析到未授权的非公网地址; 已拒绝访问", code="SSRF_BLOCKED")
+    return addresses
 
 
 def _identity_matches(target: SourceTarget, identity: str) -> bool:
