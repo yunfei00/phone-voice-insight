@@ -384,3 +384,35 @@ export const getGovernanceTaskStatus = async (taskId: number): Promise<Governanc
 
 export const retryGovernanceTask = async (taskId: number): Promise<{ task: GovernanceTaskInfo }> =>
   (await apiClient.post('/review-quality/retry-failed/', { task_id: taskId })).data
+
+
+export interface GovernanceAIBatchInfo {
+  id: number
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'PARTIAL' | 'FAILED'
+  total: number
+  processed: number
+  succeeded: number
+  review_required: number
+  failed: number
+}
+
+export interface GovernanceAIResultInfo {
+  id: number
+  review_id: number
+  status: 'PENDING' | 'SUCCEEDED' | 'REVIEW_REQUIRED' | 'FAILED'
+  rule_eligible: boolean
+  ai_eligible: boolean | null
+  confidence: number | null
+  reason: string
+  evidence: string
+  model: string
+}
+
+export const startGovernanceAIReview = async (payload: { product_id: number; limit: number }): Promise<{ id: number; total: number }> =>
+  (await apiClient.post('/governance-ai/start/', payload)).data
+
+export const getGovernanceAIHistory = async (): Promise<{ results: GovernanceAIBatchInfo[] }> =>
+  (await apiClient.get('/governance-ai/history/')).data
+
+export const getGovernanceAIResults = async (productId: number): Promise<{ results: GovernanceAIResultInfo[] }> =>
+  (await apiClient.get('/governance-ai/results/', { params: { product_id: productId } })).data
