@@ -1,4 +1,5 @@
 from django.db.models import Count, F, Sum
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.request import Request
@@ -6,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from apps.accounts.permissions import IsAdministrator
+from apps.products.models import Product
 from apps.reviews.filters import ReviewQualityFilter, ReviewRecordFilter
 from apps.reviews.models import ExclusionReason, GovernanceTask, ReviewQuality, ReviewRecord
 from apps.reviews.serializers import (
@@ -213,17 +215,24 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
         values = params.validated_data
         if values["dry_run"]:
             return Response({"detail": "异步任务不支持预览，请使用 process-batch 接口"}, status=400)
-        ids = governance_selection(
-            product_id=values["product_id"],
-            source_id=values.get("source_id"),
-            limit=values["limit"],
-            reprocess=values["reprocess"],
-        )
-        task = GovernanceTask.objects.create(
-            product_id=values["product_id"], source_id=values.get("source_id"),
-            requested_by=request.user, review_ids=ids, total=len(ids),
-            reprocess=values["reprocess"],
-        )
+        # Serialize concurrent submissions for the same product to prevent overlapping reservations.
+        with transaction.atomic():
+            product = Product.objects.select_for_update().filter(pk=values["product_id"]).first()
+            if product is None:
+                return Response({"detail": "产品不存在"}, status=404)
+            ids = governance_selection(
+                product_id=values["product_id"],
+                source_id=values.get("source_id"),
+                limit=values["limit"],
+                reprocess=values["reprocess"],
+            )
+            if not ids:
+                return Response({"detail": "没有待治理的数据", "total": 0}, status=409)
+            task = GovernanceTask.objects.create(
+                product=product, source_id=values.get("source_id"),
+                requested_by=request.user, review_ids=ids, total=len(ids),
+                reprocess=values["reprocess"],
+            )
         try:
             queued = process_governance_batch.delay(task.id)
         except Exception as exc:
