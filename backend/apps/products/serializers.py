@@ -23,6 +23,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     brand = BrandSerializer(read_only=True)
+    brand_id = serializers.PrimaryKeyRelatedField(source='brand', queryset=Brand.objects.all(), write_only=True)
     aliases = ProductAliasSerializer(many=True, read_only=True)
     variants = ProductVariantSerializer(many=True, read_only=True)
 
@@ -31,6 +32,7 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "brand",
+            "brand_id",
             "name",
             "normalized_name",
             "series",
