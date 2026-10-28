@@ -111,6 +111,11 @@ const reasonLabels: Record<ExclusionReason, string> = {
   DUPLICATE: '重复',
   INVALID_ENCODING: '编码异常',
   PARSER_ARTIFACT: '解析残留',
+  NO_PRODUCT_EXPERIENCE_SIGNAL: '无产品体验信号',
+  SOCIAL_INTERACTION: '纯社交互动',
+  RESOURCE_SHARE: '资源分享',
+  PHOTO_SHARE: '图片作品分享',
+  METADATA_REPLY: '纯元数据回复',
   OTHER: '其他',
 }
 
@@ -301,6 +306,8 @@ onMounted(async () => {
   await loadData()
   if (auth.isAdmin) {
     await loadGovernanceTasks()
+    await loadAIReviews()
+    if (aiBatches.value.some(b => b.status === 'PENDING' || b.status === 'RUNNING')) startAIPolling()
     if (governanceTasks.value.some(task => task.status === 'RUNNING' || task.status === 'PENDING')) startTaskPolling()
     try {
       products.value = (await getProducts({ page_size: 100 })).results
