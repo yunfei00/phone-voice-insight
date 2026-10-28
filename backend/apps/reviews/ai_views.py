@@ -83,6 +83,41 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
             ])
         return Response({"id": record.id, "review_id": data["review_id"], "confirmed": True})
 
+    @action(detail=False, methods=["post"], url_path="retry-failed")
+    def retry_failed(self, request):
+        batch_id = request.data.get("batch_id")
+        try:
+            batch_id = int(batch_id)
+        except (TypeError, ValueError):
+            return Response({"detail": "无效任务编号"}, status=400)
+        with transaction.atomic():
+            old = GovernanceAIBatch.objects.select_for_update().filter(
+                pk=batch_id, requested_by=request.user
+            ).first()
+            if old is None:
+                return Response({"detail": "任务不存在"}, status=404)
+            if old.status not in ("FAILED", "PARTIAL"):
+                return Response({"detail": "任务当前不可重试"}, status=409)
+            ids = list(dict.fromkeys(old.failure_ids or (
+                old.quality_ids if old.processed == 0 else []
+            )))
+            if not ids:
+                return Response({"detail": "没有可重试的数据"}, status=409)
+            new = GovernanceAIBatch.objects.create(
+                product=old.product, requested_by=request.user,
+                quality_ids=ids, total=len(ids)
+            )
+        try:
+            job = process_governance_ai_batch.delay(new.id)
+            new.celery_task_id = job.id
+            new.save(update_fields=["celery_task_id", "updated_at"])
+        except Exception:
+            new.status = "FAILED"
+            new.error_code = "TASK_DISPATCH_FAILED"
+            new.save(update_fields=["status", "error_code", "updated_at"])
+            return Response({"detail": "重试任务投递失败"}, status=503)
+        return Response({"id": new.id, "total": new.total}, status=202)
+
     @action(detail=False, methods=["get"])
     def history(self, request):
         items = GovernanceAIBatch.objects.filter(requested_by=request.user)[:30]
