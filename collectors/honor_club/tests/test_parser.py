@@ -15,6 +15,7 @@ from collectors.honor_club import HonorClubCollector
 from collectors.honor_club.client import HonorClubClient
 from collectors.honor_club.date_parser import parse_honor_datetime
 from collectors.honor_club.parser import (
+    extract_topic_identity,
     extract_topic_page_count,
     parse_thread_page,
     parse_topic_page,
@@ -26,6 +27,10 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def test_topic_identity_falls_back_to_public_share_metadata() -> None:
+    assert extract_topic_identity("<script>wxtitle = '#荣耀Power2#';</script>") == "#荣耀Power2#"
 
 
 def test_topic_page_extracts_stable_threads_and_pagination() -> None:

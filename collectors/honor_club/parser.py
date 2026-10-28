@@ -146,6 +146,10 @@ def extract_topic_identity(html: str) -> str:
         value = _text(soup.select_one(selector))
         if value:
             return value
+    # The current public topic page exposes the topic name in its share
+    # metadata even when the visible header is rendered by JavaScript.
+    if match := re.search(r"\bwxtitle\s*=\s*['\"]([^'\"]+)['\"]", html):
+        return " ".join(match.group(1).split())
     return ""
 
 
