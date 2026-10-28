@@ -662,3 +662,35 @@ def test_manual_governance_batch_requires_admin_and_defaults_to_preview(
     assert repeated.status_code == 200
     assert ReviewQuality.objects.count() == 1
     assert AnalysisCorpusItem.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_governance_next_batch_skips_processed_and_active_reservations(
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+) -> None:
+    from django.contrib.auth import get_user_model
+    from apps.reviews.models import GovernanceTask
+    from apps.reviews.services.governance_selection import governance_selection
+
+    reviews = [
+        make_governance_review(
+            source=source, source_target=source_target, product=product,
+            external_id=f"honor_thread:next-batch-{i}",
+            content=f"荣耀Power2续航体验第{i}条",
+        )
+        for i in range(5)
+    ]
+    assert governance_selection(product_id=product.id, limit=2) == [reviews[0].id, reviews[1].id]
+    process_reviews(ReviewRecord.objects.filter(id__in=[reviews[0].id, reviews[1].id]))
+    assert governance_selection(product_id=product.id, limit=2) == [reviews[2].id, reviews[3].id]
+    user = get_user_model().objects.create_superuser(username="governance_next_admin", password="test-password-123")
+    GovernanceTask.objects.create(
+        product=product, requested_by=user, total=2,
+        review_ids=[reviews[2].id, reviews[3].id],
+    )
+    assert governance_selection(product_id=product.id, limit=2) == [reviews[4].id]
+    assert governance_selection(product_id=product.id, limit=2, reprocess=True) == [
+        reviews[0].id, reviews[1].id
+    ]
