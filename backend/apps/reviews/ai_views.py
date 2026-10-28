@@ -1,5 +1,9 @@
 """AI-assisted governance endpoints."""
-from rest_framework import viewsets
+from django.db import transaction
+from rest_framework import serializers, viewsets
+from apps.products.models import Product
+from apps.reviews.models import ReviewQuality
+from apps.reviews.tasks import process_governance_ai_batch
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from apps.accounts.permissions import IsAdministrator
@@ -8,6 +12,47 @@ from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview
 class GovernanceAIViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAdministrator]
     queryset = GovernanceAIBatch.objects.all()
+
+    @action(detail=False, methods=["post"])
+    def start(self, request):
+        class Parameters(serializers.Serializer):
+            product_id = serializers.IntegerField(min_value=1)
+            limit = serializers.IntegerField(min_value=1, max_value=100, default=20)
+
+        params = Parameters(data=request.data)
+        params.is_valid(raise_exception=True)
+        product_id = params.validated_data["product_id"]
+        limit = params.validated_data["limit"]
+        with transaction.atomic():
+            product = Product.objects.select_for_update().filter(pk=product_id).first()
+            if product is None:
+                return Response({"detail": "产品不存在"}, status=404)
+            reserved = set()
+            for ids in GovernanceAIBatch.objects.filter(
+                product=product, status__in=["PENDING", "RUNNING"]
+            ).values_list("quality_ids", flat=True):
+                reserved.update(ids)
+            reviewed_ids = GovernanceAIReview.objects.filter(
+                status__in=["SUCCEEDED", "REVIEW_REQUIRED"]
+            ).values_list("quality_id", flat=True)
+            ids = list(ReviewQuality.objects.filter(review__product=product)
+                       .exclude(id__in=reviewed_ids).exclude(id__in=reserved)
+                       .order_by("id").values_list("id", flat=True)[:limit])
+            if not ids:
+                return Response({"detail": "没有待 AI 复核的数据"}, status=409)
+            batch = GovernanceAIBatch.objects.create(
+                product=product, requested_by=request.user, quality_ids=ids, total=len(ids)
+            )
+        try:
+            job = process_governance_ai_batch.delay(batch.id)
+            batch.celery_task_id = job.id
+            batch.save(update_fields=["celery_task_id", "updated_at"])
+        except Exception:
+            batch.status = GovernanceAIBatch.Status.FAILED
+            batch.error_code = "TASK_DISPATCH_FAILED"
+            batch.save(update_fields=["status", "error_code", "updated_at"])
+            return Response({"detail": "AI 任务提交失败"}, status=503)
+        return Response({"id": batch.id, "total": batch.total}, status=202)
 
     @action(detail=False, methods=["get"])
     def history(self, request):
