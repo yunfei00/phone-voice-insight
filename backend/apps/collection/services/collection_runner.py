@@ -219,6 +219,8 @@ def _finish_success(
     finished_at = timezone.now()
     with transaction.atomic():
         task = CollectionTask.objects.select_for_update().get(pk=task_id)
+        if task.status == CollectionStatus.STOPPING:
+            raise CollectionStopRequested()
         task.transition_to(CollectionStatus.SUCCESS)
         task.finished_at = finished_at
         task.completion_verified = verified
@@ -257,6 +259,8 @@ def _finish_continuation(task_id: int, run_id: int) -> None:
     finished_at = timezone.now()
     with transaction.atomic():
         task = CollectionTask.objects.select_for_update().get(pk=task_id)
+        if task.status == CollectionStatus.STOPPING:
+            raise CollectionStopRequested()
         task.transition_to(CollectionStatus.SUCCESS)
         task.transition_to(CollectionStatus.PENDING)
         task.save(update_fields=("status", "updated_at"))
@@ -519,6 +523,7 @@ def run_collection(
             run.verification_report = chunk.report
             run.completion_verified = chunk.verified
             run.save()
+            check_collection_stop(task.id)
             if chunk.continuation_required:
                 _finish_continuation(task.id, run.id)
             elif chunk.verified:
