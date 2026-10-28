@@ -92,6 +92,7 @@ class CollectionTaskViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin
                 CollectionStatus.RUNNING,
                 CollectionStatus.PAUSED,
                 CollectionStatus.CANCELLED,
+                CollectionStatus.STOPPING,
             }:
                 return Response(
                     {"detail": f"当前状态 {task.status} 不允许执行"},
@@ -125,6 +126,27 @@ class CollectionTaskViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+    @action(detail=True, methods=("post",), url_path="stop", permission_classes=(IsAdministrator,))
+    def stop(self, request: Request, pk: str | None = None) -> Response:
+        """Request cooperative cancellation; RUNNING workers acknowledge at a safe boundary."""
+        del request, pk
+        with transaction.atomic():
+            task = CollectionTask.objects.select_for_update().get(pk=self.get_object().pk)
+            if task.status in (CollectionStatus.CANCELLED, CollectionStatus.STOPPING):
+                return Response({"task_id": task.id, "status": task.status})
+            if task.status == CollectionStatus.PENDING:
+                task.transition_to(CollectionStatus.CANCELLED)
+                task.finished_at = timezone.now()
+                task.save(update_fields=("status", "finished_at", "updated_at"))
+                release_source_lease(task.id)
+                release_target(task, success=False, error="用户主动取消待执行任务")
+            elif task.status in (CollectionStatus.RUNNING, CollectionStatus.PAUSED):
+                task.transition_to(CollectionStatus.STOPPING)
+                task.save(update_fields=("status", "updated_at"))
+            else:
+                return Response({"detail": "任务已结束，无法停止"}, status=status.HTTP_409_CONFLICT)
+        return Response({"task_id": task.id, "status": task.status}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=("post",), url_path="recover-stale")
     def recover_stale(self, request: Request, pk: str | None = None) -> Response:
