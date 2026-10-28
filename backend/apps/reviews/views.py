@@ -1,6 +1,4 @@
 from django.db.models import Count, F, Sum
-from celery.result import AsyncResult
-from django.core import signing
 from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.request import Request
@@ -9,7 +7,7 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from apps.accounts.permissions import IsAdministrator
 from apps.reviews.filters import ReviewQualityFilter, ReviewRecordFilter
-from apps.reviews.models import ExclusionReason, ReviewQuality, ReviewRecord
+from apps.reviews.models import ExclusionReason, GovernanceTask, ReviewQuality, ReviewRecord
 from apps.reviews.serializers import (
     ReviewQualityOverrideSerializer,
     ReviewQualitySerializer,
@@ -192,6 +190,19 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
             "processed_review_ids": ids,
         })
 
+    @staticmethod
+    def _task_data(task: GovernanceTask) -> dict:
+        return {
+            "id": task.id, "status": task.status, "product_id": task.product_id,
+            "source_id": task.source_id, "total": task.total,
+            "processed": task.processed, "eligible": task.eligible,
+            "excluded": task.excluded, "reused": task.reused,
+            "failed": task.failed, "failures": task.failures,
+            "error_message": task.error_message,
+            "created_at": task.created_at, "started_at": task.started_at,
+            "finished_at": task.finished_at,
+        }
+
     @action(detail=False, methods=("post",), url_path="start-async", permission_classes=[IsAdministrator])
     def start_async(self, request: Request) -> Response:
         params = GovernanceBatchRequestSerializer(data=request.data)
@@ -203,28 +214,68 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
         if "source_id" in values:
             queryset = queryset.filter(source_id=values["source_id"])
         ids = list(queryset.order_by("id").values_list("id", flat=True)[: values["limit"]])
-        task = process_governance_batch.delay(ids, reprocess=values["reprocess"])
-        token = signing.dumps({"task_id": task.id, "user_id": request.user.pk}, salt="governance-task")
-        return Response({"task_id": task.id, "task_token": token, "status": "PENDING", "total": len(ids)}, status=202)
+        task = GovernanceTask.objects.create(
+            product_id=values["product_id"], source_id=values.get("source_id"),
+            requested_by=request.user, review_ids=ids, total=len(ids),
+            reprocess=values["reprocess"],
+        )
+        try:
+            queued = process_governance_batch.delay(task.id)
+        except Exception as exc:
+            task.status = GovernanceTask.Status.FAILED
+            task.error_message = type(exc).__name__
+            task.save(update_fields=("status", "error_message", "updated_at"))
+            return Response({"detail": "任务投递失败", "task": self._task_data(task)}, status=503)
+        task.celery_task_id = queued.id
+        task.save(update_fields=("celery_task_id", "updated_at"))
+        return Response({"task": self._task_data(task)}, status=202)
 
     @action(detail=False, methods=("get",), url_path="async-status", permission_classes=[IsAdministrator])
     def async_status(self, request: Request) -> Response:
-        task_id = str(request.query_params.get("task_id", ""))
-        from uuid import UUID
         try:
-            UUID(task_id)
-        except (ValueError, AttributeError):
+            task_id = int(request.query_params.get("task_id", ""))
+        except (TypeError, ValueError):
             return Response({"detail": "无效任务标识"}, status=400)
+        task = GovernanceTask.objects.filter(pk=task_id, requested_by=request.user).first()
+        if task is None:
+            return Response({"detail": "任务不存在"}, status=404)
+        return Response(self._task_data(task))
+
+    @action(detail=False, methods=("get",), url_path="task-history", permission_classes=[IsAdministrator])
+    def task_history(self, request: Request) -> Response:
+        tasks = GovernanceTask.objects.filter(requested_by=request.user).order_by("-id")[:30]
+        return Response({"results": [self._task_data(task) for task in tasks]})
+
+    @action(detail=False, methods=("post",), url_path="retry-failed", permission_classes=[IsAdministrator])
+    def retry_failed(self, request: Request) -> Response:
         try:
-            claims = signing.loads(str(request.query_params.get("task_token", "")), salt="governance-task", max_age=604800)
-        except signing.BadSignature:
-            return Response({"detail": "任务凭证无效或已过期"}, status=404)
-        if claims.get("task_id") != task_id or claims.get("user_id") != request.user.pk:
-            return Response({"detail": "无权查看该任务"}, status=404)
-        result = AsyncResult(task_id)
-        state = result.state
-        details = result.info if state in {"PROGRESS", "SUCCESS"} and isinstance(result.info, dict) else {}
-        return Response({"task_id": task_id, "status": state, **details})
+            task_id = int(request.data.get("task_id", ""))
+        except (TypeError, ValueError):
+            return Response({"detail": "无效任务标识"}, status=400)
+        original = GovernanceTask.objects.filter(pk=task_id, requested_by=request.user).first()
+        if original is None:
+            return Response({"detail": "任务不存在"}, status=404)
+        if original.status not in {GovernanceTask.Status.PARTIAL, GovernanceTask.Status.FAILED}:
+            return Response({"detail": "任务未处于失败状态"}, status=400)
+        failed_ids = [item["review_id"] for item in original.failures]
+        if not failed_ids and original.status == GovernanceTask.Status.FAILED:
+            failed_ids = original.review_ids[original.processed:]
+        if not failed_ids:
+            return Response({"detail": "没有可重试的记录"}, status=400)
+        task = GovernanceTask.objects.create(
+            product=original.product, source=original.source, requested_by=request.user,
+            review_ids=failed_ids, total=len(failed_ids), reprocess=True,
+        )
+        try:
+            queued = process_governance_batch.delay(task.id)
+        except Exception as exc:
+            task.status = GovernanceTask.Status.FAILED
+            task.error_message = type(exc).__name__
+            task.save(update_fields=("status", "error_message", "updated_at"))
+            return Response({"detail": "重试任务投递失败", "task": self._task_data(task)}, status=503)
+        task.celery_task_id = queued.id
+        task.save(update_fields=("celery_task_id", "updated_at"))
+        return Response({"task": self._task_data(task)}, status=202)
 
     @action(detail=False, methods=("get",))
     def summary(self, request: Request) -> Response:
