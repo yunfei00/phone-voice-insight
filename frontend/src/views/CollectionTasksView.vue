@@ -4,16 +4,28 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import {
   getCollectionTargets,
+  getProducts,
+  getSources,
+  createSourceTarget,
+  recoverStaleCollectionTask,
+  stopCollectionTask,
+  createCollectionTask,
+  runCollectionTask,
   getCollectionTasks,
   saveCollectionSchedule,
-  startFullCollection,
-  startIncrementalCollection,
 } from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import type { CollectionStatus, CollectionTargetState, CollectionTask } from '@/types/api'
+import type { CollectionStatus, CollectionTargetState, CollectionTask, Product, DataSource } from '@/types/api'
 
 const auth = useAuthStore()
 const targets = ref<CollectionTargetState[]>([])
+const products = ref<Product[]>([])
+const sources = ref<DataSource[]>([])
+const createDialogVisible = ref(false)
+const createSubmitting = ref(false)
+const createForm = reactive({ product: undefined as number | undefined, source_target: undefined as number | undefined, pages: 2, target_url: '', target_name: '' })
+const availableEntries = computed(() => sources.value.flatMap(source => (source.targets || []).filter(target => target.is_active && target.product === createForm.product).map(target => ({ id: target.id, label: `${source.name} / ${target.name}`, status: target.validation_status }))))
+
 const loading = ref(false)
 const error = ref('')
 const startingIds = ref(new Set<number>())
@@ -23,12 +35,29 @@ const scheduleTarget = ref<CollectionTargetState | null>(null)
 const historyVisible = ref(false)
 const historyTarget = ref<CollectionTargetState | null>(null)
 const history = ref<CollectionTask[]>([])
+const activeTasks = ref<Record<number, CollectionTask>>({})
+const refreshedAt = ref('')
 const historyCount = ref(0)
 const historyPage = ref(1)
 const historyLoading = ref(false)
 const selectedTask = ref<CollectionTask | null>(null)
 const scheduleForm = reactive({ enabled: true, interval_hours: 6 })
 let pollTimer: ReturnType<typeof setInterval> | undefined
+
+const productTargets = computed(() => {
+  const seen = new Set<number>()
+  return [...targets.value]
+    .sort((a, b) => Number(Boolean(b.active_task)) - Number(Boolean(a.active_task)))
+    .filter((target) => {
+      if (seen.has(target.product_id)) return false
+      seen.add(target.product_id)
+      return true
+    })
+})
+const modeByProduct = reactive<Record<number, 'FULL' | 'INCREMENTAL' | 'PAGES'>>({})
+const pagesByProduct = reactive<Record<number, number>>({})
+const productBusy = (target: CollectionTargetState): boolean =>
+  targets.value.some((item) => item.product_id === target.product_id && Boolean(item.active_task))
 
 const hasActiveTarget = computed(() => targets.value.some((item) => Boolean(item.active_task)))
 const statusType: Record<CollectionStatus, 'info' | 'primary' | 'warning' | 'success' | 'danger'> =
@@ -39,6 +68,7 @@ const statusType: Record<CollectionStatus, 'info' | 'primary' | 'warning' | 'suc
     SUCCESS: 'success',
     FAILED: 'danger',
     CANCELLED: 'info',
+    STOPPING: 'warning',
   }
 const triggerLabels: Record<CollectionTask['trigger_type'], string> = {
   MANUAL: '手工',
@@ -65,8 +95,9 @@ function baselineText(target: CollectionTargetState): string {
 
 function currentStatus(target: CollectionTargetState): string {
   if (target.active_task_status === 'PENDING') return '等待执行'
-  if (target.active_task_status === 'RUNNING') return '采集中'
+  if (target.active_task_status === 'RUNNING') return staleTask(target) ? '采集可能卡住' : '采集中'
   if (target.active_task_status === 'PAUSED') return '已暂停'
+  if (target.active_task_status === 'STOPPING') return '正在停止'
   if (target.status === 'DEGRADED') return '最近运行异常'
   return '空闲'
 }
@@ -75,14 +106,52 @@ async function loadTargets(silent = false): Promise<void> {
   if (!silent) loading.value = true
   error.value = ''
   try {
-    const response = await getCollectionTargets({ page_size: 100 })
+    const [response, productResponse, sourceResponse] = await Promise.all([getCollectionTargets({ page_size: 100 }), getProducts({ page_size: 100 }), getSources({ page_size: 100 })])
+    products.value = productResponse.results
+    sources.value = sourceResponse.results
     targets.value = response.results
+    const activeIds = targets.value
+      .map((target) => target.active_task)
+      .filter((id): id is number => id !== null)
+    if (activeIds.length) {
+      const activePage = await getCollectionTasks({ page_size: 100, ordering: '-created_at' })
+      activeTasks.value = Object.fromEntries(
+        activePage.results
+          .filter((task) => activeIds.includes(task.id))
+          .map((task) => [task.id, task]),
+      )
+    } else activeTasks.value = {}
+    refreshedAt.value = new Date().toLocaleTimeString('zh-CN')
     if (silent && !targets.value.some((item) => Boolean(item.active_task))) stopPolling()
   } catch {
     error.value = '采集控制状态加载失败。'
   } finally {
     if (!silent) loading.value = false
   }
+}
+
+function activeTask(target: CollectionTargetState): CollectionTask | undefined {
+  return target.active_task ? activeTasks.value[target.active_task] : undefined
+}
+
+function staleTask(target: CollectionTargetState): boolean {
+  const task = activeTask(target)
+  return Boolean(task && Date.now() - new Date(task.updated_at).getTime() > 10 * 60_000)
+}
+
+function taskProgress(target: CollectionTargetState): string {
+  const task = activeTask(target)
+  if (!task) return target.active_task ? '正在读取任务进度…' : '无运行任务'
+  const checkpoint = task.last_checkpoint || {}
+  const location = Object.entries(checkpoint)
+    .filter(
+      ([key, value]) =>
+        /page|thread|cursor/i.test(key) && ['string', 'number'].includes(typeof value),
+    )
+    .slice(0, 3)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(' · ')
+  return `任务 #${task.id} · 新增 ${task.new_records} · 重复 ${task.duplicate_records} · 失败 ${task.failure_count}${location ? ' · ' + location : ''}`
 }
 
 function startPolling(): void {
@@ -95,44 +164,95 @@ function stopPolling(): void {
   pollTimer = undefined
 }
 
-async function startFull(target: CollectionTargetState): Promise<void> {
-  const action = target.full_verified ? '重新全量校验' : '执行完整性全量校验'
+async function startProductCollection(target: CollectionTargetState): Promise<void> {
+  if (productBusy(target)) { ElMessage.warning('该产品已有采集任务'); return }
+  const mode = modeByProduct[target.product_id] || 'PAGES'
+  if (mode === 'INCREMENTAL' && !target.full_verified) {
+    ElMessage.warning('请先完成全量完整性验证'); return
+  }
   try {
     await ElMessageBox.confirm(
-      '系统会重新扫描全部话题页并核对已有数据，不会删除反馈；已有记录会更新、缺失记录会补齐。',
-      action,
-      { confirmButtonText: action, cancelButtonText: '取消', type: 'warning' },
+      mode === 'PAGES' ? `确认执行最多 ${pagesByProduct[target.product_id] || 2} 页的测试采集？这不会建立全量基线。` :
+      mode === 'FULL' ? '确认开始完整全量采集？' : '确认开始增量采集？',
+      '启动采集', { type: 'warning' },
     )
-  } catch {
-    return
-  }
+  } catch { return }
   startingIds.value.add(target.id)
   try {
-    await startFullCollection(target.id)
-    ElMessage.success('全量任务已进入队列')
+    const task = await createCollectionTask({
+      source_target: target.source_target,
+      task_type: mode === 'FULL' ? 'FULL' : 'INCREMENTAL',
+      requested_pages: mode === 'PAGES' ? pagesByProduct[target.product_id] || 2 : undefined,
+    })
+    await runCollectionTask(task.id)
+    ElMessage.success(`任务 #${task.id} 已启动`)
     await loadTargets(true)
     startPolling()
+  } catch { ElMessage.error('启动失败，请检查是否存在运行中任务或采集入口状态') }
+  finally { startingIds.value.delete(target.id) }
+}
+
+async function stopActive(target: CollectionTargetState): Promise<void> {
+  if (!target.active_task) return
+  try {
+    await ElMessageBox.confirm('停止当前采集？已入库的数据将保留。', '停止采集', {
+      type: 'warning', confirmButtonText: '停止采集', cancelButtonText: '返回',
+    })
+  } catch { return }
+  try {
+    const result = await stopCollectionTask(target.active_task)
+    ElMessage.info(result.status === 'CANCELLED' ? '待执行任务已取消' : '已请求停止，等待当前采集步骤安全结束')
+    await loadTargets(true)
+    startPolling()
+  } catch { ElMessage.error('停止请求失败，请检查任务状态或管理员权限') }
+}
+
+async function recoverStale(target: CollectionTargetState): Promise<void> {
+  if (!target.active_task) return
+  try {
+    await ElMessageBox.confirm(
+      '仅当任务超过 15 分钟无更新且来源租约已过期时允许恢复。请先确认 Worker 没有仍在处理该任务。',
+      '恢复异常任务',
+      { type: 'warning' },
+    )
+    await recoverStaleCollectionTask(target.active_task)
+    ElMessage.success('异常任务已标记失败，可重新创建采集')
+    await loadTargets(true)
   } catch {
-    error.value = '全量任务启动失败，可能已有采集正在执行。'
-  } finally {
-    startingIds.value.delete(target.id)
+    await loadTargets(true)
   }
 }
 
-async function startIncremental(target: CollectionTargetState): Promise<void> {
-  startingIds.value.add(target.id)
+async function submitTestCollection(): Promise<void> {
+  if (!createForm.product) { ElMessage.warning('请选择手机产品'); return }
+  createSubmitting.value = true
   try {
-    await startIncrementalCollection(target.id)
-    ElMessage.success('增量任务已进入队列')
+    let targetId = createForm.source_target
+    if (!targetId) {
+      const source = sources.value.find(item => item.code === 'HONOR_CLUB')
+      if (!source || !createForm.target_url.trim()) {
+        ElMessage.warning('没有采集入口，请填写荣耀俱乐部入口 URL')
+        return
+      }
+      const created = await createSourceTarget({
+        source: source.id,
+        product: createForm.product,
+        name: createForm.target_name.trim() || '荣耀俱乐部测试入口',
+        target_type: 'COMMUNITY',
+        target_url: createForm.target_url.trim(),
+        external_id: '',
+        is_active: true,
+      })
+      targetId = created.id
+    }
+    const task = await createCollectionTask({ source_target: targetId, task_type: 'INCREMENTAL', requested_pages: createForm.pages })
+    await runCollectionTask(task.id)
+    createDialogVisible.value = false
+    ElMessage.success(`测试任务 #${task.id} 已启动，最多采集 ${createForm.pages} 页`)
     await loadTargets(true)
     startPolling()
-  } catch {
-    error.value = target.full_verified
-      ? '增量任务启动失败，可能已有采集正在执行。'
-      : '请先完成全量完整性校验。'
-  } finally {
-    startingIds.value.delete(target.id)
-  }
+  } catch { ElMessage.error('创建失败：请检查采集入口、任务占用或网络配置') }
+  finally { createSubmitting.value = false }
 }
 
 function openSchedule(target: CollectionTargetState): void {
@@ -200,9 +320,13 @@ onUnmounted(stopPolling)
     <div class="page-header">
       <div>
         <h1 class="page-title">采集控制</h1>
-        <p class="page-description">每个采集入口只有一个控制中心：先验证完整基线，之后自动增量。</p>
+        <p class="page-description">可先按指定页数测试采集；全量基线验证通过后才能启用正式增量。</p>
       </div>
-      <el-button :loading="loading" @click="loadTargets()">刷新</el-button>
+      <div>
+        <span v-if="refreshedAt" class="refresh-time"
+          >最近刷新 {{ refreshedAt }} · 运行中每 5 秒自动更新</span
+        ><el-button v-if="auth.canWrite" type="primary" @click="createDialogVisible = true">新建测试采集</el-button><el-button :loading="loading" @click="loadTargets()">刷新</el-button>
+      </div>
     </div>
 
     <el-alert
@@ -215,7 +339,7 @@ onUnmounted(stopPolling)
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
 
     <div v-loading="loading" class="target-grid">
-      <el-card v-for="target in targets" :key="target.id" class="target-card" shadow="hover">
+      <el-card v-for="target in productTargets" :key="target.product_id" class="target-card" shadow="hover">
         <div class="card-heading">
           <div>
             <h2>{{ target.product_name }}</h2>
@@ -230,6 +354,32 @@ onUnmounted(stopPolling)
           </el-tag>
         </div>
 
+        <div v-if="target.active_task" class="live-progress">
+          <strong>实时采集状态</strong>
+          <p>{{ taskProgress(target) }}</p>
+          <p>
+            状态：{{ activeTask(target)?.status || target.active_task_status }} · 最近心跳：{{
+              formatTime(activeTask(target)?.updated_at || null)
+            }}
+          </p>
+          <el-alert
+            v-if="staleTask(target)"
+            type="warning"
+            :closable="false"
+            title="任务超过 10 分钟未更新，可能卡住或 Worker 已停止；请检查任务详情与 Worker 日志，暂勿重复创建任务。"
+          /><el-button size="small" @click="openHistory(target)">查看任务详情</el-button
+          ><el-button
+            v-if="auth.canWrite && ['PENDING', 'RUNNING', 'PAUSED'].includes(activeTask(target)?.status || target.active_task_status || '')"
+            size="small" type="danger" plain @click="stopActive(target)"
+            >停止采集</el-button
+          ><el-button
+            v-if="staleTask(target) && auth.canWrite"
+            size="small"
+            type="warning"
+            @click="recoverStale(target)"
+            >安全恢复</el-button
+          >
+        </div>
         <div class="state-block" :class="{ verified: target.full_verified }">
           <span class="state-label">数据基线</span>
           <strong>{{ baselineText(target) }}</strong>
@@ -265,33 +415,38 @@ onUnmounted(stopPolling)
         />
 
         <div class="card-actions">
-          <el-button
-            type="primary"
-            :disabled="!auth.canWrite || Boolean(target.active_task) || !target.full_verified"
-            :loading="startingIds.has(target.id)"
-            @click="startIncremental(target)"
-          >
-            立即增量
-          </el-button>
-          <el-button
-            :disabled="!auth.canWrite || Boolean(target.active_task)"
-            :loading="startingIds.has(target.id)"
-            @click="startFull(target)"
-          >
-            {{
-              target.full_verified
-                ? '重新全量校验'
-                : target.has_historical_data
-                  ? '执行完整性校验'
-                  : '开始全量初始化'
-            }}
-          </el-button>
+          <el-radio-group v-model="modeByProduct[target.product_id]" :disabled="productBusy(target)">
+            <el-radio-button value="FULL">全量</el-radio-button>
+            <el-radio-button value="INCREMENTAL">增量</el-radio-button>
+            <el-radio-button value="PAGES">测试采集（指定页数）</el-radio-button>
+          </el-radio-group>
+          <el-input-number
+            v-if="(modeByProduct[target.product_id] || 'PAGES') === 'PAGES'"
+            v-model="pagesByProduct[target.product_id]"
+            :min="1" :max="10" :disabled="productBusy(target)"
+          />
+          <el-button type="primary" :disabled="!auth.canWrite || productBusy(target)"
+            :loading="startingIds.has(target.id)" @click="startProductCollection(target)">开始采集</el-button>
           <el-button :disabled="!auth.canWrite" @click="openSchedule(target)">定时设置</el-button>
           <el-button @click="openHistory(target)">运行历史</el-button>
         </div>
       </el-card>
       <el-empty v-if="!loading && !targets.length" description="暂无可用采集入口" />
     </div>
+
+    <el-dialog v-model="createDialogVisible" title="新建测试采集任务" width="min(520px, 94vw)">
+      <el-form label-position="top">
+        <el-form-item label="手机产品"><el-select v-model="createForm.product" filterable placeholder="选择产品" style="width:100%" @change="createForm.source_target = undefined"><el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" /></el-select></el-form-item>
+        <el-form-item label="已有采集入口"><el-select v-model="createForm.source_target" clearable placeholder="没有入口时可在下方新建" style="width:100%"><el-option v-for="entry in availableEntries" :key="entry.id" :label="entry.label" :value="entry.id" /></el-select></el-form-item>
+        <template v-if="!createForm.source_target">
+          <el-form-item label="荣耀俱乐部入口 URL"><el-input v-model="createForm.target_url" placeholder="https://club.honor.com/cn/threadtopic-..." /></el-form-item>
+          <el-form-item label="入口名称"><el-input v-model="createForm.target_name" placeholder="荣耀俱乐部测试入口" /></el-form-item>
+        </template>
+        <el-form-item label="最多采集页数"><el-input-number v-model="createForm.pages" :min="1" :max="10" /></el-form-item>
+        <el-alert type="info" :closable="false" title="测试采集无需全量基线；只保存本次采集结果，不标记全量完成。新入口需符合来源 URL 校验规则。" />
+      </el-form>
+      <template #footer><el-button @click="createDialogVisible = false">取消</el-button><el-button type="primary" :loading="createSubmitting" @click="submitTestCollection">创建并启动</el-button></template>
+    </el-dialog>
 
     <el-dialog v-model="scheduleDialogVisible" title="定时增量设置" width="min(460px, 92vw)">
       <el-form label-position="top">
@@ -400,6 +555,22 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
+.live-progress {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+.live-progress p {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.refresh-time {
+  margin-right: 12px;
+  color: #667085;
+  font-size: 12px;
+}
 .notice {
   margin-bottom: 16px;
 }

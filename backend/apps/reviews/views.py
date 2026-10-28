@@ -1,17 +1,24 @@
 from django.db.models import Count, F, Sum
+from django.db import transaction
+from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from apps.accounts.permissions import IsAdministrator
+from apps.products.models import Product
 from apps.reviews.filters import ReviewQualityFilter, ReviewRecordFilter
-from apps.reviews.models import ExclusionReason, ReviewQuality, ReviewRecord
+from apps.reviews.models import ExclusionReason, GovernanceTask, ReviewQuality, ReviewRecord
 from apps.reviews.serializers import (
     ReviewQualityOverrideSerializer,
     ReviewQualitySerializer,
     ReviewRecordSerializer,
 )
-from apps.reviews.services.governance_pipeline import apply_manual_override, clear_manual_override
+from apps.reviews.services.governance_pipeline import apply_manual_override, clear_manual_override, process_reviews
+from apps.reviews.services.governance_selection import governance_selection
+from apps.reviews.tasks import process_governance_batch
+from apps.reviews.services.metadata_completeness import metadata_completeness as build_metadata_completeness
 from apps.reviews.services.thread_tree import (
     annotate_thread_metrics,
     build_reply_tree,
@@ -33,16 +40,35 @@ class ReviewRecordViewSet(ReadOnlyModelViewSet):
     serializer_class = ReviewRecordSerializer
     filterset_class = ReviewRecordFilter
     search_fields = ("title", "content", "external_id")
-    ordering_fields = ("published_at", "collected_at", "created_at", "rating")
+    ordering_fields = ("published_at", "collected_at", "created_at", "rating", "source__name", "product__name", "record_type", "content", "author_role", "source_region")
 
     @action(detail=False, methods=["get"])
     def facets(self, request: Request) -> Response:
         del request
-        variants = list(ReviewRecord.objects.filter(product_variant__isnull=False).values("product_variant_id", "product_variant__sku_name").annotate(count=Count("id")).order_by("product_variant_id"))
-        regions = list(ReviewRecord.objects.exclude(source_region="").values("source_region").annotate(count=Count("id")).order_by("source_region"))
-        ratings = list(ReviewRecord.objects.filter(rating__isnull=False).values("rating").annotate(count=Count("id")).order_by("-rating"))
+        variants = list(
+            ReviewRecord.objects.filter(product_variant__isnull=False)
+            .values("product_variant_id", "product_variant__sku_name")
+            .annotate(count=Count("id"))
+            .order_by("product_variant_id")
+        )
+        regions = list(
+            ReviewRecord.objects.exclude(source_region="")
+            .values("source_region")
+            .annotate(count=Count("id"))
+            .order_by("source_region")
+        )
+        ratings = list(
+            ReviewRecord.objects.filter(rating__isnull=False)
+            .values("rating")
+            .annotate(count=Count("id"))
+            .order_by("-rating")
+        )
         return Response({"variants": variants, "regions": regions, "ratings": ratings})
 
+    @action(detail=False, methods=["get"], url_path="metadata-completeness")
+    def metadata_completeness(self, request: Request) -> Response:
+        del request
+        return Response(build_metadata_completeness(self.filter_queryset(self.get_queryset())))
 
 
 class ThreadTreeViewSet(ReadOnlyModelViewSet):
@@ -122,6 +148,14 @@ class ThreadTreeViewSet(ReadOnlyModelViewSet):
         return get_object_or_404(queryset, pk=pk)
 
 
+class GovernanceBatchRequestSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField(min_value=1)
+    source_id = serializers.IntegerField(min_value=1, required=False)
+    limit = serializers.IntegerField(min_value=1, max_value=100, default=20)
+    dry_run = serializers.BooleanField(default=True)
+    reprocess = serializers.BooleanField(default=False)
+
+
 class ReviewQualityViewSet(ReadOnlyModelViewSet):
     queryset = ReviewQuality.objects.select_related(
         "review__source",
@@ -133,6 +167,129 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
     filterset_class = ReviewQualityFilter
     search_fields = ("review__title", "review__content", "review__external_id", "normalized_text")
     ordering_fields = ("quality_score", "processed_at", "review__published_at", "review_id")
+
+    @action(detail=False, methods=("post",), url_path="process-batch", permission_classes=[IsAdministrator])
+    def process_batch(self, request: Request) -> Response:
+        """Run a bounded manual batch; dry-run by default."""
+        params = GovernanceBatchRequestSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        values = params.validated_data
+        ids = governance_selection(
+            product_id=values["product_id"],
+            source_id=values.get("source_id"),
+            limit=values["limit"],
+            reprocess=values["reprocess"],
+        )
+        result = process_reviews(
+            ReviewRecord.objects.filter(id__in=ids),
+            persist=not values["dry_run"],
+            reprocess=values["reprocess"],
+        )
+        return Response({
+            **result.as_dict(),
+            "product_id": values["product_id"],
+            "source_id": values.get("source_id"),
+            "limit": values["limit"],
+            "dry_run": values["dry_run"],
+            "reprocess": values["reprocess"],
+            "processed_review_ids": ids,
+        })
+
+    @staticmethod
+    def _task_data(task: GovernanceTask) -> dict:
+        return {
+            "id": task.id, "status": task.status, "product_id": task.product_id,
+            "source_id": task.source_id, "total": task.total,
+            "processed": task.processed, "eligible": task.eligible,
+            "excluded": task.excluded, "reused": task.reused,
+            "failed": task.failed, "failures": task.failures,
+            "error_message": task.error_message,
+            "created_at": task.created_at, "started_at": task.started_at,
+            "finished_at": task.finished_at,
+        }
+
+    @action(detail=False, methods=("post",), url_path="start-async", permission_classes=[IsAdministrator])
+    def start_async(self, request: Request) -> Response:
+        params = GovernanceBatchRequestSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        values = params.validated_data
+        if values["dry_run"]:
+            return Response({"detail": "异步任务不支持预览，请使用 process-batch 接口"}, status=400)
+        # Serialize concurrent submissions for the same product to prevent overlapping reservations.
+        with transaction.atomic():
+            product = Product.objects.select_for_update().filter(pk=values["product_id"]).first()
+            if product is None:
+                return Response({"detail": "产品不存在"}, status=404)
+            ids = governance_selection(
+                product_id=values["product_id"],
+                source_id=values.get("source_id"),
+                limit=values["limit"],
+                reprocess=values["reprocess"],
+            )
+            if not ids:
+                return Response({"detail": "没有待治理的数据", "total": 0}, status=409)
+            task = GovernanceTask.objects.create(
+                product=product, source_id=values.get("source_id"),
+                requested_by=request.user, review_ids=ids, total=len(ids),
+                reprocess=values["reprocess"],
+            )
+        try:
+            queued = process_governance_batch.delay(task.id)
+        except Exception as exc:
+            task.status = GovernanceTask.Status.FAILED
+            task.error_message = type(exc).__name__
+            task.save(update_fields=("status", "error_message", "updated_at"))
+            return Response({"detail": "任务投递失败", "task": self._task_data(task)}, status=503)
+        task.celery_task_id = queued.id
+        task.save(update_fields=("celery_task_id", "updated_at"))
+        return Response({"task": self._task_data(task)}, status=202)
+
+    @action(detail=False, methods=("get",), url_path="async-status", permission_classes=[IsAdministrator])
+    def async_status(self, request: Request) -> Response:
+        try:
+            task_id = int(request.query_params.get("task_id", ""))
+        except (TypeError, ValueError):
+            return Response({"detail": "无效任务标识"}, status=400)
+        task = GovernanceTask.objects.filter(pk=task_id, requested_by=request.user).first()
+        if task is None:
+            return Response({"detail": "任务不存在"}, status=404)
+        return Response(self._task_data(task))
+
+    @action(detail=False, methods=("get",), url_path="task-history", permission_classes=[IsAdministrator])
+    def task_history(self, request: Request) -> Response:
+        tasks = GovernanceTask.objects.filter(requested_by=request.user).order_by("-id")[:30]
+        return Response({"results": [self._task_data(task) for task in tasks]})
+
+    @action(detail=False, methods=("post",), url_path="retry-failed", permission_classes=[IsAdministrator])
+    def retry_failed(self, request: Request) -> Response:
+        try:
+            task_id = int(request.data.get("task_id", ""))
+        except (TypeError, ValueError):
+            return Response({"detail": "无效任务标识"}, status=400)
+        original = GovernanceTask.objects.filter(pk=task_id, requested_by=request.user).first()
+        if original is None:
+            return Response({"detail": "任务不存在"}, status=404)
+        if original.status not in {GovernanceTask.Status.PARTIAL, GovernanceTask.Status.FAILED}:
+            return Response({"detail": "任务未处于失败状态"}, status=400)
+        failed_ids = [item["review_id"] for item in original.failures]
+        if not failed_ids and original.status == GovernanceTask.Status.FAILED:
+            failed_ids = original.review_ids[original.processed:]
+        if not failed_ids:
+            return Response({"detail": "没有可重试的记录"}, status=400)
+        task = GovernanceTask.objects.create(
+            product=original.product, source=original.source, requested_by=request.user,
+            review_ids=failed_ids, total=len(failed_ids), reprocess=True,
+        )
+        try:
+            queued = process_governance_batch.delay(task.id)
+        except Exception as exc:
+            task.status = GovernanceTask.Status.FAILED
+            task.error_message = type(exc).__name__
+            task.save(update_fields=("status", "error_message", "updated_at"))
+            return Response({"detail": "重试任务投递失败", "task": self._task_data(task)}, status=503)
+        task.celery_task_id = queued.id
+        task.save(update_fields=("celery_task_id", "updated_at"))
+        return Response({"task": self._task_data(task)}, status=202)
 
     @action(detail=False, methods=("get",))
     def summary(self, request: Request) -> Response:

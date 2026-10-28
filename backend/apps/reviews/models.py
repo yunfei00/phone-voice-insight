@@ -290,3 +290,99 @@ class AnalysisCorpusItem(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"语料 #{self.review_id} / {self.corpus_version}"
+
+
+class GovernanceTask(TimeStampedModel):
+    """Persistent audit record for an explicitly initiated governance batch."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "等待执行"
+        RUNNING = "RUNNING", "正在执行"
+        SUCCESS = "SUCCESS", "已完成"
+        PARTIAL = "PARTIAL", "部分失败"
+        FAILED = "FAILED", "失败"
+
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="governance_tasks")
+    source = models.ForeignKey(DataSource, on_delete=models.PROTECT, null=True, blank=True)
+    requested_by = models.ForeignKey("auth.User", on_delete=models.PROTECT)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    celery_task_id = models.CharField(max_length=100, blank=True, db_index=True)
+    review_ids = models.JSONField(default=list)
+    reprocess = models.BooleanField(default=False)
+    total = models.PositiveIntegerField(default=0)
+    processed = models.PositiveIntegerField(default=0)
+    eligible = models.PositiveIntegerField(default=0)
+    excluded = models.PositiveIntegerField(default=0)
+    reused = models.PositiveIntegerField(default=0)
+    failed = models.PositiveIntegerField(default=0)
+    failures = models.JSONField(default=list)
+    error_message = models.TextField(blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+
+
+class GovernanceAIReview(TimeStampedModel):
+    """AI opinion is independent from rules and manual overrides."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "待复核"
+        SUCCEEDED = "SUCCEEDED", "复核完成"
+        REVIEW_REQUIRED = "REVIEW_REQUIRED", "需要人工确认"
+        FAILED = "FAILED", "调用失败"
+
+    quality = models.ForeignKey(ReviewQuality, on_delete=models.CASCADE, related_name="ai_reviews")
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.PENDING, db_index=True)
+    rule_eligible = models.BooleanField()
+    ai_eligible = models.BooleanField(null=True, blank=True)
+    confidence = models.FloatField(null=True, blank=True)
+    reason = models.TextField(blank=True)
+    evidence = models.TextField(blank=True)
+    provider = models.CharField(max_length=64, blank=True)
+    model_name = models.CharField(max_length=128, blank=True)
+    prompt_version = models.CharField(max_length=40, default="governance_review_v1")
+    input_hash = models.CharField(max_length=64, db_index=True)
+    raw_response = models.JSONField(default=dict)
+    error_code = models.CharField(max_length=80, blank=True)
+    prompt_tokens = models.PositiveIntegerField(null=True, blank=True)
+    completion_tokens = models.PositiveIntegerField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    human_decision = models.BooleanField(null=True, blank=True)
+    human_reason = models.TextField(blank=True)
+    human_reviewer = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.PROTECT)
+    human_reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = [models.Index(fields=("quality", "input_hash"), name="gov_ai_quality_hash")]
+
+
+class GovernanceAIBatch(TimeStampedModel):
+    """Bounded manual AI-review batch with durable progress and ownership."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "等待执行"
+        RUNNING = "RUNNING", "执行中"
+        SUCCESS = "SUCCESS", "完成"
+        PARTIAL = "PARTIAL", "部分失败"
+        FAILED = "FAILED", "失败"
+
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="governance_ai_batches")
+    requested_by = models.ForeignKey("auth.User", on_delete=models.PROTECT)
+    quality_ids = models.JSONField(default=list)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    celery_task_id = models.CharField(max_length=100, blank=True)
+    total = models.PositiveIntegerField(default=0)
+    processed = models.PositiveIntegerField(default=0)
+    succeeded = models.PositiveIntegerField(default=0)
+    review_required = models.PositiveIntegerField(default=0)
+    failed = models.PositiveIntegerField(default=0)
+    failure_ids = models.JSONField(default=list)
+    error_code = models.CharField(max_length=80, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")

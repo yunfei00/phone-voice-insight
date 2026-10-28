@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from collectors.base import BaseCollector, CollectionCheckpoint, CollectionRequest, CollectorError, CollectorTarget
-from collectors.honor_club.normalizer import is_power2_related
+from collectors.honor_club.normalizer import is_product_related
 from collectors.honor_club.parser import (
     extract_thread_page_count,
     extract_topic_page_count,
@@ -92,6 +92,7 @@ def _collect_one_thread(
     page_budget = _config_int(target.config, "full_chunk_reply_pages", 20, 100)
     end_page = min(pages, start_page + page_budget - 1)
     aliases = [str(value) for value in target.config.get("product_aliases", [])]
+    excluded_aliases = [str(value) for value in target.config.get("excluded_product_aliases", [])]
     product_match = True
     for page_number in range(start_page, end_page + 1):
         raw_page = (
@@ -113,11 +114,12 @@ def _collect_one_thread(
             thread_payload = records[0].payload
             raw_data = thread_payload.get("raw_data", {})
             topic_tags = raw_data.get("topic_tags", []) if isinstance(raw_data, dict) else []
-            product_match = is_power2_related(
+            product_match = is_product_related(
                 title=str(thread_payload.get("title", "")),
                 content=str(thread_payload.get("content", "")),
                 topic_tags=[str(value) for value in topic_tags] if isinstance(topic_tags, list) else [],
                 aliases=aliases,
+                excluded_aliases=excluded_aliases,
             )
             if not product_match:
                 return 0, 0, page_number, False, True
@@ -203,6 +205,9 @@ def run_honor_full_chunk(
     collector: BaseCollector,
     target: CollectorTarget,
 ) -> FullChunkResult:
+    from apps.collection.services.collection_runner import check_collection_stop
+
+    check_collection_stop(task.id)
     checkpoint = dict(task.last_checkpoint or {})
     phase = str(checkpoint.get("phase", "discovery"))
     inserted = duplicates = failed = 0
@@ -217,6 +222,7 @@ def run_honor_full_chunk(
         scanned_pages = int(checkpoint.get("scanned_topic_pages", 0))
         fallback_limit = _config_int(config, "full_fallback_max_topic_pages", 1000, 10000)
         for page_number in range(next_page, next_page + page_chunk):
+            check_collection_stop(task.id)
             raw_page = collector.fetch_page(
                 CollectionRequest(
                     target=target,
@@ -322,6 +328,7 @@ def run_honor_full_chunk(
             ).order_by("attempts", "topic_page", "position")[:chunk_size]
         )
         for item in candidates:
+            check_collection_stop(task.id)
             checkpoint["current_thread_id"] = item.thread_id
             was_retry = item.status == DiscoveryStatus.FAILED
             try:

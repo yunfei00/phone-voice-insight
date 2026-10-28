@@ -23,13 +23,16 @@ from apps.analysis.structured_views import (
 from apps.analysis.views import AnalysisBatchViewSet, AnalysisResultViewSet
 from apps.collection.views import CollectionScheduleViewSet, CollectionTargetStateViewSet, CollectionTaskViewSet
 from apps.common.views import health
-from apps.products.views import ProductViewSet
+from apps.products.views import BrandViewSet, ProductViewSet
 from apps.reviews.views import ReviewQualityViewSet, ReviewRecordViewSet, ThreadTreeViewSet
-from apps.sources.views import DataSourceViewSet
+from apps.reviews.ai_views import GovernanceAIViewSet
+from apps.sources.views import DataSourceViewSet, SourceTargetViewSet
 
 router = DefaultRouter()
 router.register("users", UserViewSet, basename="user")
 router.register("products", ProductViewSet, basename="product")
+router.register("brands", BrandViewSet, basename="brand")
+router.register("source-targets", SourceTargetViewSet, basename="source-target")
 router.register("sources", DataSourceViewSet, basename="source")
 router.register("collection-tasks", CollectionTaskViewSet, basename="collection-task")
 router.register("collection-schedules", CollectionScheduleViewSet, basename="collection-schedule")
@@ -37,6 +40,7 @@ router.register("collection-targets", CollectionTargetStateViewSet, basename="co
 router.register("reviews", ReviewRecordViewSet, basename="review")
 router.register("thread-trees", ThreadTreeViewSet, basename="thread-tree")
 router.register("review-quality", ReviewQualityViewSet, basename="review-quality")
+router.register("governance-ai", GovernanceAIViewSet, basename="governance-ai")
 router.register("analysis-results", AnalysisResultViewSet, basename="analysis-result")
 router.register("analysis-batches", AnalysisBatchViewSet, basename="analysis-batch")
 router.register("structured-runs", StructuredRunViewSet, basename="structured-run")

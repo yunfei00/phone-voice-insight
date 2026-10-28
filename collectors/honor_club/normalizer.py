@@ -17,11 +17,39 @@ def normalize_match_text(value: str) -> str:
     return _WHITESPACE_PATTERN.sub("", value).casefold()
 
 
+def is_product_related(
+    *,
+    title: str,
+    content: str,
+    topic_tags: list[str],
+    aliases: list[str],
+    excluded_aliases: list[str] | None = None,
+) -> bool:
+    """Match the configured product while rejecting a more specific sibling name.
+
+    A plain substring check makes ``荣耀 Power`` match ``荣耀 Power 2``.  Comparing
+    the longest matching target and sibling aliases keeps both products isolated
+    without hard-coding either model name.
+    """
+
+    haystack = normalize_match_text("\n".join((*topic_tags, title, content)))
+    target_lengths = {
+        len(normalized) for alias in aliases if (normalized := normalize_match_text(alias)) and normalized in haystack
+    }
+    if not target_lengths:
+        return False
+    excluded_lengths = {
+        len(normalized)
+        for alias in (excluded_aliases or [])
+        if (normalized := normalize_match_text(alias)) and normalized in haystack
+    }
+    return not excluded_lengths or max(target_lengths) >= max(excluded_lengths)
+
+
 def is_power2_related(*, title: str, content: str, topic_tags: list[str], aliases: list[str]) -> bool:
-    if any("荣耀power2" in normalize_match_text(tag) for tag in topic_tags):
-        return True
-    haystack = normalize_match_text(f"{title}\n{content}")
-    return any(normalize_match_text(alias) in haystack for alias in aliases if alias.strip())
+    """Backward-compatible wrapper retained for existing integrations/tests."""
+
+    return is_product_related(title=title, content=content, topic_tags=topic_tags, aliases=aliases)
 
 
 def build_fallback_external_id(
@@ -31,7 +59,14 @@ def build_fallback_external_id(
     published_at_raw: str,
     content: str,
 ) -> str:
-    material = "\x1f".join((thread_id, floor, published_at_raw, _WHITESPACE_PATTERN.sub(" ", content).strip()))
+    material = "\x1f".join(
+        (
+            thread_id,
+            floor,
+            published_at_raw,
+            _WHITESPACE_PATTERN.sub(" ", content).strip(),
+        )
+    )
     return f"honor_fallback:{hashlib.sha256(material.encode('utf-8')).hexdigest()[:32]}"
 
 
@@ -68,5 +103,12 @@ def normalize_honor_record(raw_record: RawRecord) -> NormalizedReview:
 def safe_raw_data(**values: Any) -> dict[str, Any]:
     """删除空值并确保采集器不会持久化用户昵称或位置。"""
 
-    blocked_keys = {"author_name", "author_nickname", "nickname", "location", "ip", "avatar"}
+    blocked_keys = {
+        "author_name",
+        "author_nickname",
+        "nickname",
+        "location",
+        "ip",
+        "avatar",
+    }
     return {key: value for key, value in values.items() if key not in blocked_keys and value not in (None, "", [], {})}

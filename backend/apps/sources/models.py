@@ -1,5 +1,6 @@
 """数据来源平台与采集入口。"""
 
+from django.conf import settings
 from django.db import models
 
 from apps.common.models import TimeStampedModel
@@ -31,6 +32,12 @@ class TargetType(models.TextChoices):
     COMMUNITY = "COMMUNITY", "社区入口"
 
 
+class TargetValidationStatus(models.TextChoices):
+    UNVERIFIED = "UNVERIFIED", "待验证"
+    VALID = "VALID", "验证通过"
+    INVALID = "INVALID", "验证失败"
+
+
 class SourceTarget(TimeStampedModel):
     source = models.ForeignKey(DataSource, on_delete=models.PROTECT, related_name="targets", verbose_name="来源")
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="source_targets", verbose_name="产品")
@@ -40,6 +47,17 @@ class SourceTarget(TimeStampedModel):
     external_id = models.CharField("外部标识", max_length=200, blank=True)
     config_json = models.JSONField("入口配置", default=dict, blank=True)
     is_active = models.BooleanField("启用", default=True)
+    validation_status = models.CharField(
+        "验证状态",
+        max_length=20,
+        choices=TargetValidationStatus.choices,
+        default=TargetValidationStatus.UNVERIFIED,
+    )
+    validated_at = models.DateTimeField("验证时间", null=True, blank=True)
+    validated_url_hash = models.CharField("已验证网址摘要", max_length=64, blank=True)
+    validation_error_code = models.CharField("验证错误编码", max_length=80, blank=True)
+    validation_error_message = models.TextField("验证错误", blank=True)
+    validation_report = models.JSONField("验证报告", default=dict, blank=True)
 
     class Meta:
         ordering = ("source", "name")
@@ -92,3 +110,33 @@ class SourceProductVariant(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.source.code}:{self.external_id} → {self.product_variant.sku_name}"
+
+
+class SourceTargetCleanupAudit(models.Model):
+    operator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="source_target_cleanup_audits",
+        verbose_name="操作人",
+    )
+    source_target = models.ForeignKey(
+        SourceTarget,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="cleanup_audits",
+        verbose_name="采集入口",
+    )
+    source_target_id_snapshot = models.PositiveBigIntegerField("入口 ID 快照")
+    product_id_snapshot = models.PositiveBigIntegerField("手机 ID 快照")
+    product_name = models.CharField("手机名称", max_length=150)
+    source_name = models.CharField("来源名称", max_length=100)
+    target_url = models.URLField("入口网址", max_length=1000, blank=True)
+    result = models.CharField("执行结果", max_length=20)
+    deleted_counts = models.JSONField("清理数量", default=dict, blank=True)
+    error_message = models.TextField("错误信息", blank=True)
+    created_at = models.DateTimeField("操作时间", auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = "采集入口清理审计"
+        verbose_name_plural = verbose_name

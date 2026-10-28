@@ -1,14 +1,27 @@
+import gzip
 import os
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 
-from collectors.base import CollectionCheckpoint, CollectionRequest, CollectorError, CollectorTarget
+from collectors.base import (
+    CollectionCheckpoint,
+    CollectionRequest,
+    CollectorError,
+    CollectorTarget,
+)
 from collectors.honor_club import HonorClubCollector
 from collectors.honor_club.client import HonorClubClient
 from collectors.honor_club.date_parser import parse_honor_datetime
-from collectors.honor_club.parser import extract_topic_page_count, parse_thread_page, parse_topic_page
+from collectors.honor_club.parser import (
+    extract_topic_identity,
+    extract_topic_page_count,
+    parse_thread_page,
+    parse_topic_page,
+)
 from collectors.honor_club.role_mapper import map_author_role
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -16,6 +29,10 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def test_topic_identity_falls_back_to_public_share_metadata() -> None:
+    assert extract_topic_identity("<script>wxtitle = '#荣耀Power2#';</script>") == "#荣耀Power2#"
 
 
 def test_topic_page_extracts_stable_threads_and_pagination() -> None:
@@ -152,7 +169,12 @@ def test_known_mobile_redirect_is_followed_and_canonicalized() -> None:
                 headers={"location": "cn/thread-30295048-1-1.html?mobile=2"},
                 request=request,
             )
-        return httpx.Response(200, headers={"content-type": "text/html"}, text="<html>ok</html>", request=request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text="<html>ok</html>",
+            request=request,
+        )
 
     client = HonorClubClient(transport=httpx.MockTransport(handler))
     response = client.get_html(
@@ -181,6 +203,24 @@ def test_external_redirect_is_rejected_before_following() -> None:
             request_interval_seconds=3,
         )
     assert requested_urls == ["https://club.honor.com/cn/thread-30295048-1-1.html"]
+
+
+def test_compressed_response_is_decoded_once() -> None:
+    html = "<html><body>荣耀 Power2</body></html>"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html; charset=utf-8", "content-encoding": "gzip"},
+            content=gzip.compress(html.encode()),
+            request=request,
+        )
+
+    response = HonorClubClient(transport=httpx.MockTransport(handler)).get_html(
+        "https://club.honor.com/cn/threadtopic-595-1.html",
+        request_interval_seconds=3,
+    )
+    assert response.text == html
 
 
 @pytest.mark.skipif(os.getenv("RUN_HONOR_LIVE_TESTS") != "1", reason="live Honor test disabled")
@@ -213,8 +253,106 @@ def test_live_smoke_one_topic_and_one_thread() -> None:
         CollectionRequest(
             target=thread_target,
             checkpoint=CollectionCheckpoint(
-                metadata={"page_kind": "thread", "thread_id": link.payload["thread_id"], "listing_data": link.payload}
+                metadata={
+                    "page_kind": "thread",
+                    "thread_id": link.payload["thread_id"],
+                    "listing_data": link.payload,
+                }
             ),
         )
     )
     assert collector.parse_records(thread_page)
+
+
+def test_public_region_and_datetime_attribute_extraction() -> None:
+    html = """
+    <div class="hbtTbox"><h1>荣耀Power2 体验</h1></div>
+    <div class="hbt-tinf hbfTinf"><div class="hbt-tmg">
+      <time datetime="2026-10-01 09:15">发表于</time>
+      <span class="ip-region">IP属地&#65306;陕西</span>
+    </div></div>
+    <div class="wapFirstThread">测试正文</div>
+    """
+    records = parse_thread_page(
+        html,
+        thread_id="98765",
+        thread_url="https://club.honor.com/cn/thread-98765-1-1.html",
+        listing_data={},
+    )
+    assert records[0].payload["published_at"].year == 2026
+    raw_data = records[0].payload["raw_data"]
+    assert raw_data["ip_location"] == "陕西"
+    assert raw_data["region_evidence"] == "public_ip_region"
+    assert "IP属地" not in raw_data["ip_location"]
+    assert raw_data["published_at_raw"] == "2026-10-01 09:15"
+    assert raw_data["published_at_normalized"] == "2026-10-01T09:15:00+08:00"
+    assert raw_data["published_at_timezone"] == "Asia/Shanghai"
+
+
+def test_current_honor_metadata_rows_extract_ip_location_without_guessing_profile_region() -> None:
+    html = """
+    <div class="hbtTbox"><h1>荣耀 Power2</h1></div>
+    <div class="hbt-tinf hbfTinf">
+      <div class="hbt-tmg"><span class="newhbtb">LV7</span><span class="newPhonetype">荣耀Power2</span></div>
+      <div class="hbt-tmg"><span class="hbt-ptime">2026-10-11 17:15</span><span class="newPhonetype">广西</span></div>
+    </div>
+    <div class="wapFirstThread">正文</div>
+    <div class="hbt-pl" id="pid599801081">
+      <div class="hbt-tinf hbt-comm"><span class="hbt-fav">沙发</span></div>
+      <div class="hbt-binf"><span class="hbt-lz"><b>LV4</b></span><a class="hbt-fphone">荣耀Power2</a></div>
+      <div class="hbt-binf"><span class="hbt-pltime">10-11 20:23:39</span><span class="hbt-lz">广东</span></div>
+      <div class="viewContPl">同意</div>
+    </div>
+    """
+    fetched_at = datetime(2026, 10, 28, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+    records = parse_thread_page(
+        html,
+        thread_id="30449103",
+        thread_url="https://club.honor.com/cn/thread-30449103-1-1.html",
+        listing_data={},
+        fetched_at=fetched_at,
+    )
+
+    assert records[0].payload["raw_data"]["ip_location"] == "广西"
+    assert records[1].payload["raw_data"]["ip_location"] == "广东"
+    assert records[0].payload["raw_data"]["profile_region_parse_reason"] == ("profile_region_not_publicly_labeled")
+    assert "profile_region" not in records[0].payload["raw_data"]
+
+
+def test_relative_time_uses_page_fetch_time_and_preserves_raw_value() -> None:
+    html = """
+    <div class="hbtTbox"><h1>荣耀 Power2</h1></div>
+    <div class="hbt-tinf hbfTinf"><div class="hbt-tmg"><span class="hbt-ptime">昨天 11:04</span></div></div>
+    <div class="wapFirstThread">正文</div>
+    """
+    fetched_at = datetime(2026, 10, 28, 16, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+    record = parse_thread_page(
+        html,
+        thread_id="1",
+        thread_url="https://club.honor.com/cn/thread-1-1-1.html",
+        listing_data={},
+        fetched_at=fetched_at,
+    )[0]
+
+    assert record.payload["published_at"] == datetime(2026, 10, 27, 11, 4, tzinfo=ZoneInfo("Asia/Shanghai"))
+    assert record.payload["raw_data"]["published_at_raw"] == "昨天 11:04"
+    assert record.payload["raw_data"]["published_at_parse_status"] == "parsed"
+
+
+def test_day_relative_time_without_clock_stays_null_with_reason() -> None:
+    html = """
+    <div class="hbtTbox"><h1>荣耀 Power2</h1></div>
+    <div class="hbt-tinf hbfTinf"><div class="hbt-tmg"><span class="hbt-ptime">6 天前</span></div></div>
+    <div class="wapFirstThread">正文</div>
+    """
+    record = parse_thread_page(
+        html,
+        thread_id="2",
+        thread_url="https://club.honor.com/cn/thread-2-1-1.html",
+        listing_data={},
+        fetched_at=datetime(2026, 10, 28, 16, 30, tzinfo=ZoneInfo("Asia/Shanghai")),
+    )[0]
+
+    assert record.payload["published_at"] is None
+    assert record.payload["raw_data"]["published_at_raw"] == "6 天前"
+    assert record.payload["raw_data"]["published_at_parse_reason"] == ("relative_day_without_time_precision")

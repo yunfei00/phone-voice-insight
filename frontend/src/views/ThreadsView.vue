@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChatDotRound, Clock, Link, Search, Star, View } from '@element-plus/icons-vue'
+import { ChatDotRound, Clock, Link, Location, Search, Star, View } from '@element-plus/icons-vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 
 import HighlightText from '@/components/HighlightText.vue'
@@ -46,15 +46,12 @@ const resultSummary = computed(() => {
 })
 
 function formatDate(value: string | null): string {
-  if (!value) return '暂无'
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date(value))
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(date)
+  const part = (type: string) => parts.find(item => item.type === type)?.value || ''
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
 }
 
 function formatCount(value: number | null): string {
@@ -251,6 +248,9 @@ onMounted(async () => {
             ><el-icon><Clock /></el-icon>发布时间 {{ formatDate(thread.published_at) }}</span
           >
           <span>最新回复 {{ formatDate(thread.latest_reply_at) }}</span>
+          <span
+            ><el-icon><Location /></el-icon>IP 属地 {{ thread.ip_location || '未提供' }}</span
+          >
         </div>
         <div class="card-footer">
           <div class="metrics">
@@ -321,6 +321,7 @@ onMounted(async () => {
             </p>
             <div class="drawer-stats">
               <span>发布 {{ formatDate(detail.thread.published_at) }}</span>
+              <span>IP 属地 {{ detail.thread.ip_location || '未提供' }}</span>
               <span>回复 {{ formatCount(detail.thread.reply_count) }}</span>
               <span>已采集 {{ detail.thread.collected_reply_count }}</span>
               <span>浏览 {{ formatCount(detail.thread.view_count) }}</span>

@@ -86,7 +86,7 @@ class OpenAICompatibleProvider(AIProvider):
                 },
                 {"role": "user", "content": 'Return {"status":"ok"} now.'},
             ],
-            max_tokens=32,
+            max_tokens=256,
             temperature=0,
         )
         try:

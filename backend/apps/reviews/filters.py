@@ -1,4 +1,5 @@
 import django_filters
+from django.db.models import QuerySet
 
 from apps.reviews.models import ReviewQuality, ReviewRecord
 
@@ -7,17 +8,19 @@ class ReviewRecordFilter(django_filters.FilterSet):
     source = django_filters.CharFilter(method="filter_source")
     rating = django_filters.NumberFilter(field_name="rating")
     source_region = django_filters.CharFilter(method="filter_region")
+    source_target = django_filters.NumberFilter(field_name="source_target_id")
 
-    def filter_region(self, queryset, name, value):
+    def filter_region(self, queryset: QuerySet[ReviewRecord], name: str, value: str) -> QuerySet[ReviewRecord]:
         del name
         if value == "__UNKNOWN__":
             return queryset.filter(source_region="")
         return queryset.filter(source_region=value)
+
     product_variant = django_filters.NumberFilter(field_name="product_variant")
     published_at_after = django_filters.IsoDateTimeFilter(field_name="published_at", lookup_expr="gte")
     published_at_before = django_filters.IsoDateTimeFilter(field_name="published_at", lookup_expr="lte")
 
-    def filter_source(self, queryset, name: str, value: str):  # type: ignore[no-untyped-def]
+    def filter_source(self, queryset: QuerySet[ReviewRecord], name: str, value: str) -> QuerySet[ReviewRecord]:
         del name
         if value.isdigit():
             return queryset.filter(source_id=int(value))
@@ -27,6 +30,7 @@ class ReviewRecordFilter(django_filters.FilterSet):
         model = ReviewRecord
         fields = (
             "source",
+            "source_target",
             "product",
             "product_variant",
             "rating",
@@ -46,7 +50,7 @@ class ReviewQualityFilter(django_filters.FilterSet):
     quality_score_min = django_filters.NumberFilter(field_name="quality_score", lookup_expr="gte")
     quality_score_max = django_filters.NumberFilter(field_name="quality_score", lookup_expr="lte")
 
-    def filter_source(self, queryset, name: str, value: str):  # type: ignore[no-untyped-def]
+    def filter_source(self, queryset: QuerySet[ReviewQuality], name: str, value: str) -> QuerySet[ReviewQuality]:
         del name
         if value.isdigit():
             return queryset.filter(review__source_id=int(value))

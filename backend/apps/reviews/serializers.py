@@ -7,6 +7,16 @@ class ReviewRecordSerializer(serializers.ModelSerializer):
     source_name = serializers.CharField(source="source.name", read_only=True)
     product_name = serializers.CharField(source="product.name", read_only=True)
     variant_name = serializers.CharField(source="product_variant.sku_name", read_only=True, default=None)
+    ip_location = serializers.SerializerMethodField()
+    profile_region = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_ip_location(obj: ReviewRecord) -> str:
+        return obj.source_region if obj.region_evidence == "public_ip_region" else ""
+
+    @staticmethod
+    def get_profile_region(obj: ReviewRecord) -> str:
+        return obj.source_region if obj.region_evidence == "public_profile_region" else ""
 
     class Meta:
         model = ReviewRecord
@@ -28,6 +38,8 @@ class ReviewRecordSerializer(serializers.ModelSerializer):
             "published_at",
             "source_region",
             "region_evidence",
+            "ip_location",
+            "profile_region",
             "software_version",
             "author_role",
             "is_official",

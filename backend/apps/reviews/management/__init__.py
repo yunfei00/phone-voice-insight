@@ -1,1 +1,1 @@
-"""Review management package."""
+"""反馈管理命令。"""

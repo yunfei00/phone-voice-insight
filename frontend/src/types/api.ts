@@ -84,6 +84,11 @@ export interface SourceTarget {
   target_url: string
   external_id: string
   is_active: boolean
+  validation_status: 'UNVERIFIED' | 'VALID' | 'INVALID'
+  validated_at: string | null
+  validation_error_code: string
+  validation_error_message: string
+  validation_report: Record<string, unknown>
 }
 
 export interface DataSource {
@@ -95,7 +100,29 @@ export interface DataSource {
   targets: SourceTarget[]
 }
 
-export type CollectionStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUCCESS' | 'FAILED' | 'CANCELLED'
+export interface SourceTargetCleanupPreview {
+  source_target_id: number
+  product_id: number
+  product_name: string
+  source_name: string
+  target_name: string
+  target_url: string
+  thread_count: number
+  reply_count: number
+  other_record_count: number
+  review_quality_count: number
+  review_quality_run_count: number
+  corpus_item_count: number
+  analysis_result_count: number
+  analysis_run_count: number
+  structured_analysis_count: number
+  collection_task_count: number
+  collection_run_count: number
+  active_collection_count: number
+  active_analysis_count: number
+}
+
+export type CollectionStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'STOPPING'
 
 export interface CollectionRun {
   id: number
@@ -127,6 +154,7 @@ export interface CollectionTask {
   trigger_type: 'MANUAL' | 'SCHEDULED' | 'RETRY' | 'RECOVERY'
   status: CollectionStatus
   requested_limit: number | null
+  requested_pages: number | null
   success_count: number
   skipped_count: number
   failure_count: number
@@ -172,6 +200,15 @@ export interface CollectionTargetState {
   schedule_enabled: boolean
   schedule_interval_hours: number | null
   has_historical_data: boolean
+  validation_status: 'UNVERIFIED' | 'VALID' | 'INVALID'
+  validated_at: string | null
+  validation_error_message: string
+  last_task_type: 'FULL' | 'INCREMENTAL' | null
+  last_task_status: CollectionStatus | null
+  last_new_threads: number
+  last_new_replies: number
+  last_failure_count: number
+  progress_stage: string
 }
 
 export interface CollectionTaskRunResponse {
@@ -207,6 +244,8 @@ export interface ReviewRecord {
   published_at: string | null
   source_region: string
   region_evidence: string
+  ip_location: string
+  profile_region: string
   software_version: string
   author_role: string
   is_official: boolean
@@ -216,6 +255,27 @@ export interface ReviewRecord {
   raw_data: Record<string, unknown>
   collected_at: string
   status: string
+}
+
+export interface ReviewMetadataCounts {
+  total: number
+  published_at_count: number
+  published_at_rate: number
+  ip_location_count: number
+  ip_location_rate: number
+  profile_region_count: number
+  profile_region_rate: number
+}
+
+export interface ReviewMetadataCompleteness {
+  summary: ReviewMetadataCounts
+  by_product: (ReviewMetadataCounts & { product: number; product_name: string })[]
+  by_record_type: (ReviewMetadataCounts & { record_type: string })[]
+  failure_reasons: {
+    published_at: Record<string, number>
+    ip_location: Record<string, number>
+    profile_region: Record<string, number>
+  }
 }
 
 export interface ThreadSummary {
@@ -228,6 +288,8 @@ export interface ThreadSummary {
   title: string
   content: string
   published_at: string | null
+  ip_location: string
+  profile_region: string
   latest_reply_at: string | null
   activity_at: string | null
   reply_count: number | null
@@ -246,6 +308,8 @@ export interface ThreadReply {
   record_type: 'REPLY' | 'OFFICIAL_REPLY'
   content: string
   published_at: string | null
+  ip_location: string
+  profile_region: string
   author_role: string
   is_official: boolean
   source_url: string

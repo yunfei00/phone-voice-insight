@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
-import { getDataQualitySummary, getReviewQualities } from '@/api'
-import type { DataQualitySummary, ExclusionReason, ReviewQuality } from '@/types/api'
+import { getDataQualitySummary, getReviewQualities, getProducts, processGovernanceBatch, startAsyncGovernance, getGovernanceTaskHistory, getGovernanceTaskStatus, retryGovernanceTask, startGovernanceAIReview, getGovernanceAIHistory, getGovernanceAIResults, confirmGovernanceAIReview, retryGovernanceAIBatch } from '@/api'
+import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+import type { Product, DataQualitySummary, ExclusionReason, ReviewQuality } from '@/types/api'
+import type { GovernanceTaskInfo, GovernanceAIBatchInfo, GovernanceAIResultInfo } from '@/api'
 
 const emptySummary = (): DataQualitySummary => ({
   total: 0,
@@ -33,6 +36,21 @@ const emptySummary = (): DataQualitySummary => ({
   },
 })
 
+const auth = useAuthStore()
+const products = ref<Product[]>([])
+const governanceProduct = ref<number | undefined>(undefined)
+const governanceLimit = ref(20)
+const governanceBusy = ref(false)
+const governanceTasks = ref<GovernanceTaskInfo[]>([])
+const taskLoading = ref(false)
+const aiBusy = ref(false)
+const aiConfirming = ref<number | null>(null)
+const aiBatches = ref<GovernanceAIBatchInfo[]>([])
+const aiResults = ref<GovernanceAIResultInfo[]>([])
+let aiPollTimer: ReturnType<typeof setInterval> | undefined
+let taskPollTimer: ReturnType<typeof setInterval> | undefined
+let taskPollInFlight = false
+const preview = ref<{ total: number; eligible: number; excluded: number } | null>(null)
 const rows = ref<ReviewQuality[]>([])
 const summary = ref<DataQualitySummary>(emptySummary())
 const loading = ref(false)
@@ -49,6 +67,40 @@ const filters = reactive({
   quality_score_max: undefined as number | undefined,
 })
 
+const recordTypeLabels: Record<string, string> = {
+  REVIEW: '评价',
+  APPEND_REVIEW: '追评',
+  THREAD: '帖子',
+  REPLY: '回复',
+  OFFICIAL_REPLY: '官方回复',
+}
+
+const authorRoleLabels: Record<string, string> = {
+  USER: '普通用户',
+  OFFICIAL: '官方',
+  MODERATOR: '版主',
+  EXPERT: '达人',
+  UNKNOWN: '未知',
+}
+
+function formatPublishedAt(value: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const part = (type: string) => parts.find(item => item.type === type)?.value || ''
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
+}
+
 const reasonLabels: Record<ExclusionReason, string> = {
   NONE: '不排除',
   EMPTY_CONTENT: '空文本',
@@ -60,6 +112,11 @@ const reasonLabels: Record<ExclusionReason, string> = {
   DUPLICATE: '重复',
   INVALID_ENCODING: '编码异常',
   PARSER_ARTIFACT: '解析残留',
+  NO_PRODUCT_EXPERIENCE_SIGNAL: '无产品体验信号',
+  SOCIAL_INTERACTION: '纯社交互动',
+  RESOURCE_SHARE: '资源分享',
+  PHOTO_SHARE: '图片作品分享',
+  METADATA_REPLY: '纯元数据回复',
   OTHER: '其他',
 }
 
@@ -117,7 +174,194 @@ function ratio(value: number): string {
   return summary.value.total ? `${((value / summary.value.total) * 100).toFixed(1)}%` : '0.0%'
 }
 
-onMounted(loadData)
+async function runGovernance(dryRun: boolean): Promise<void> {
+  if (!governanceProduct.value) return
+  governanceBusy.value = true
+  try {
+    const result = await processGovernanceBatch({
+      product_id: governanceProduct.value,
+      limit: governanceLimit.value,
+      dry_run: dryRun,
+    })
+    preview.value = result
+    ElMessage.success(result.total === 0 ? '该产品没有待治理的数据' : (dryRun ? '预览完成，未写入治理结果' : '批量治理完成'))
+    if (!dryRun) await loadData()
+  } catch {
+    ElMessage.error('治理执行失败，请检查管理员权限或后端日志')
+  } finally {
+    governanceBusy.value = false
+  }
+}
+
+async function loadGovernanceTasks(): Promise<void> {
+  if (!auth.isAdmin) return
+  taskLoading.value = true
+  try {
+    const history = await getGovernanceTaskHistory()
+    governanceTasks.value = await Promise.all(history.results.map(async (task) => {
+      if (task.status !== 'RUNNING' && task.status !== 'PENDING') return task
+      try { return await getGovernanceTaskStatus(task.id) } catch { return task }
+    }))
+    if (!governanceTasks.value.some(task => task.status === 'RUNNING' || task.status === 'PENDING')) stopTaskPolling()
+  } catch {
+    ElMessage.error('治理任务列表加载失败')
+  } finally {
+    taskLoading.value = false
+  }
+}
+
+function aiBatchStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    PENDING: '等待执行',
+    RUNNING: '正在执行',
+    SUCCESS: '已完成',
+    PARTIAL: '部分失败',
+    FAILED: '失败',
+  }
+  return labels[status] || status
+}
+
+async function loadAIReviews(): Promise<void> {
+  if (!auth.isAdmin) return
+  try {
+    const history = await getGovernanceAIHistory()
+    aiBatches.value = history.results
+    if (governanceProduct.value) {
+      const results = await getGovernanceAIResults(governanceProduct.value)
+      aiResults.value = results.results
+    }
+    if (!aiBatches.value.some(b => b.status === 'PENDING' || b.status === 'RUNNING')) stopAIPolling()
+  } catch {
+    ElMessage.error('AI 复核状态加载失败')
+  }
+}
+
+async function confirmAIReview(row: GovernanceAIResultInfo, eligible: boolean): Promise<void> {
+  const reason = window.prompt(`请填写人工确认原因（至少 2 字）：${eligible ? '保留' : '排除'}记录 #${row.review_id}`)
+  if (reason === null) return
+  if (reason.trim().length < 2) {
+    ElMessage.warning('请填写至少 2 个字的确认原因')
+    return
+  }
+  aiConfirming.value = row.id
+  try {
+    await confirmGovernanceAIReview({ review_id: row.review_id, eligible, reason: reason.trim() })
+    ElMessage.success('人工确认已保存')
+    await Promise.all([loadAIReviews(), loadData()])
+  } catch {
+    ElMessage.error('人工确认失败，请稍后重试')
+  } finally {
+    aiConfirming.value = null
+  }
+}
+
+function stopAIPolling(): void {
+  if (aiPollTimer !== undefined) clearInterval(aiPollTimer)
+  aiPollTimer = undefined
+}
+
+function startAIPolling(): void {
+  if (aiPollTimer !== undefined) return
+  aiPollTimer = setInterval(() => { void loadAIReviews() }, 3000)
+}
+
+async function retryAIReview(batchId: number): Promise<void> {
+  aiBusy.value = true
+  try {
+    await retryGovernanceAIBatch(batchId)
+    ElMessage.success('失败数据已重新提交')
+    await loadAIReviews()
+    startAIPolling()
+  } catch {
+    ElMessage.error('重试失败，请检查后台任务状态')
+  } finally {
+    aiBusy.value = false
+  }
+}
+
+async function startAIReview(): Promise<void> {
+  if (!governanceProduct.value) return
+  aiBusy.value = true
+  try {
+    const batch = await startGovernanceAIReview({
+      product_id: governanceProduct.value, limit: governanceLimit.value,
+    })
+    ElMessage.success(`已提交 ${batch.total} 条 AI 复核数据`)
+    await loadAIReviews()
+    startAIPolling()
+  } catch {
+    ElMessage.error('AI 复核任务提交失败，请检查模型配置及后台服务')
+  } finally {
+    aiBusy.value = false
+  }
+}
+
+function stopTaskPolling(): void {
+  if (taskPollTimer !== undefined) {
+    clearInterval(taskPollTimer)
+    taskPollTimer = undefined
+  }
+}
+
+function startTaskPolling(): void {
+  if (taskPollTimer !== undefined) return
+  taskPollTimer = setInterval(async () => {
+    if (taskPollInFlight) return
+    taskPollInFlight = true
+    try {
+      await loadGovernanceTasks()
+      await loadData()
+    } finally {
+      taskPollInFlight = false
+    }
+  }, 3000)
+}
+
+async function startBackgroundGovernance(): Promise<void> {
+  if (!governanceProduct.value) return
+  governanceBusy.value = true
+  try {
+    await startAsyncGovernance({
+      product_id: governanceProduct.value,
+      limit: governanceLimit.value,
+      dry_run: false,
+    })
+    ElMessage.success('下一批未治理数据已提交后台处理')
+    await loadGovernanceTasks()
+    startTaskPolling()
+  } catch {
+    ElMessage.error('后台任务提交失败')
+  } finally {
+    governanceBusy.value = false
+  }
+}
+
+async function retryBackgroundGovernance(taskId: number): Promise<void> {
+  try {
+    await retryGovernanceTask(taskId)
+    ElMessage.success('失败记录重试任务已提交')
+    await loadGovernanceTasks()
+    startTaskPolling()
+  } catch {
+    ElMessage.error('重试失败')
+  }
+}
+
+onMounted(async () => {
+  await loadData()
+  if (auth.isAdmin) {
+    await loadGovernanceTasks()
+    await loadAIReviews()
+    if (aiBatches.value.some(b => b.status === 'PENDING' || b.status === 'RUNNING')) startAIPolling()
+    if (governanceTasks.value.some(task => task.status === 'RUNNING' || task.status === 'PENDING')) startTaskPolling()
+    try {
+      products.value = (await getProducts({ page_size: 100 })).results
+    } catch {
+      ElMessage.warning('产品列表加载失败')
+    }
+  }
+})
+onUnmounted(() => { stopTaskPolling(); stopAIPolling() })
 </script>
 
 <template>
@@ -146,6 +390,105 @@ onMounted(loadData)
         <span>可用率</span><strong>{{ (summary.eligibility_rate * 100).toFixed(1) }}%</strong>
       </div>
     </div>
+
+    <section v-if="auth.isAdmin" class="panel governance-actions">
+      <h3>AI 辅助复核（P2）</h3>
+      <p>对已完成规则治理的数据进行 AI 复核；AI 不会覆盖规则结果，冲突及低置信度数据进入待人工确认。</p>
+      <div class="filters">
+        <el-button type="primary" :loading="aiBusy" :disabled="!governanceProduct" @click="startAIReview">开始 AI 复核</el-button>
+        <el-button @click="loadAIReviews">查看复核结果</el-button>
+        <span v-if="aiBatches.some(b => b.status === 'RUNNING' || b.status === 'PENDING')">每 3 秒自动更新</span>
+      </div>
+      <el-table :data="aiBatches" size="small" style="margin-bottom: 12px">
+        <el-table-column prop="id" label="任务编号" width="95" />
+        <el-table-column label="状态" width="120">
+          <template #default="{ row }">{{ aiBatchStatusLabel(row.status) }}</template>
+        </el-table-column>
+        <el-table-column label="进度">
+          <template #default="{ row }">{{ row.processed }} / {{ row.total }}</template>
+        </el-table-column>
+        <el-table-column prop="succeeded" label="通过" />
+        <el-table-column prop="review_required" label="待人工确认" />
+        <el-table-column prop="failed" label="失败" />
+        <el-table-column prop="error_code" label="任务错误代码" min-width="160" show-overflow-tooltip />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-button v-if="row.failed > 0 || row.status === 'FAILED'" size="small" :disabled="aiBusy" @click="retryAIReview(row.id)">重试失败</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-table :data="aiResults" size="small">
+        <el-table-column prop="review_id" label="记录 ID" width="95" />
+        <el-table-column label="规则结论" width="105">
+          <template #default="{ row }">{{ row.rule_eligible ? '保留' : '排除' }}</template>
+        </el-table-column>
+        <el-table-column label="AI 结论" width="105">
+          <template #default="{ row }">{{ row.ai_eligible === null ? '未知' : row.ai_eligible ? '保留' : '排除' }}</template>
+        </el-table-column>
+        <el-table-column label="复核状态" width="120">
+          <template #default="{ row }">{{ row.status === 'REVIEW_REQUIRED' ? '待人工确认' : row.status === 'SUCCEEDED' ? '已复核' : row.status === 'FAILED' ? '失败' : '等待执行' }}</template>
+        </el-table-column>
+        <el-table-column label="置信度" width="100">
+          <template #default="{ row }">{{ row.confidence === null ? '—' : (row.confidence * 100).toFixed(0) + '%' }}</template>
+        </el-table-column>
+        <el-table-column prop="reason" label="AI 判断理由" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="evidence" label="引用证据" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="error_code" label="失败原因代码" min-width="160" show-overflow-tooltip />
+        <el-table-column label="人工确认" min-width="185" fixed="right">
+          <template #default="{ row }">
+            <span v-if="row.human_reviewed_at">已确认：{{ row.human_decision ? '保留' : '排除' }}</span>
+            <template v-else-if="row.status === 'REVIEW_REQUIRED'">
+              <el-button size="small" type="success" :loading="aiConfirming === row.id" @click="confirmAIReview(row, true)">保留</el-button>
+              <el-button size="small" type="warning" :disabled="aiConfirming !== null" @click="confirmAIReview(row, false)">排除</el-button>
+            </template>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+
+    <section v-if="auth.isAdmin" class="panel governance-actions">
+      <h3>手动数据治理</h3>
+      <p>填写的是本批最大处理条数，不是必须处理的数量。系统自动跳过已治理或正在处理的记录；点击「开始治理」后在后台运行并自动刷新进度。</p>
+      <div class="filters">
+        <el-select v-model="governanceProduct" placeholder="选择手机产品" style="width: 230px">
+          <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" />
+        </el-select>
+        <el-input-number v-model="governanceLimit" :min="1" :max="100" />
+        <el-button :disabled="!governanceProduct" :loading="governanceBusy" @click="runGovernance(true)">预览治理</el-button>
+        <el-popconfirm title="确认将下一批未治理数据提交后台处理？原始记录不会修改。" @confirm="startBackgroundGovernance">
+          <template #reference>
+            <el-button type="primary" :disabled="!governanceProduct || governanceBusy" :loading="governanceBusy">开始治理</el-button>
+          </template>
+        </el-popconfirm>
+      </div>
+      <p v-if="preview">本次请求上限 {{ governanceLimit }} 条，实际选中 {{ preview.total }} 条（其余已治理、正在处理或不符合筛选条件）；预计可用 {{ preview.eligible }} 条，排除 {{ preview.excluded }} 条。预览不写入结果。</p>
+    </section>
+
+    <section v-if="auth.isAdmin" class="panel table-panel">
+      <div class="page-header">
+        <h3>后台治理任务</h3>
+        <span v-if="governanceTasks.some(task => task.status === 'RUNNING' || task.status === 'PENDING')">每 3 秒自动刷新</span>
+        <el-button :loading="taskLoading" @click="loadGovernanceTasks">立即刷新</el-button>
+      </div>
+      <el-table :data="governanceTasks" empty-text="暂无后台治理任务">
+        <el-table-column prop="id" label="任务 ID" width="100" />
+        <el-table-column prop="status" label="状态" width="120" />
+        <el-table-column label="进度" min-width="200">
+          <template #default="{ row }: { row: GovernanceTaskInfo }">
+            <el-progress :percentage="row.total ? Math.round(row.processed / row.total * 100) : 100" />
+            <small>{{ row.processed }} / {{ row.total }}</small>
+          </template>
+        </el-table-column>
+        <el-table-column prop="eligible" label="有效" width="85" />
+        <el-table-column prop="failed" label="失败" width="85" />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }: { row: GovernanceTaskInfo }">
+            <el-button v-if="row.status === 'FAILED' || row.status === 'PARTIAL'" link type="primary" @click="retryBackgroundGovernance(row.id)">重试</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
 
     <section class="panel breakdown">
       <div v-for="item in breakdown" :key="item[0]">
@@ -204,14 +547,18 @@ onMounted(loadData)
         @row-click="selected = $event"
       >
         <el-table-column prop="review_id" label="ID" width="80" />
-        <el-table-column prop="record_type" label="类型" width="120" />
+        <el-table-column label="类型" width="120">
+          <template #default="{ row }: { row: ReviewQuality }">{{ recordTypeLabels[row.record_type] || '未知类型' }}</template>
+        </el-table-column>
         <el-table-column
           prop="normalized_text"
           label="正文摘要"
           min-width="300"
           show-overflow-tooltip
         />
-        <el-table-column prop="author_role" label="角色" width="110" />
+        <el-table-column label="角色" width="110">
+          <template #default="{ row }: { row: ReviewQuality }">{{ authorRoleLabels[row.author_role] || '未知' }}</template>
+        </el-table-column>
         <el-table-column label="AI 可用" width="100">
           <template #default="{ row }: { row: ReviewQuality }">
             <el-tag :type="row.eligible_for_ai ? 'success' : 'info'">{{
@@ -225,7 +572,9 @@ onMounted(loadData)
           }}</template>
         </el-table-column>
         <el-table-column prop="quality_score" label="质量分" width="90" />
-        <el-table-column prop="published_at" label="发布时间" min-width="180" />
+        <el-table-column label="发布时间" min-width="180">
+          <template #default="{ row }: { row: ReviewQuality }">{{ formatPublishedAt(row.published_at) }}</template>
+        </el-table-column>
       </el-table>
       <el-pagination
         v-model:current-page="page"
@@ -265,6 +614,7 @@ onMounted(loadData)
 
 <style scoped>
 .notice,
+.governance-actions,
 .breakdown,
 .filters,
 .table-panel {

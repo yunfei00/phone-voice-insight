@@ -22,6 +22,10 @@ def env_bool(name: str, default: bool = False) -> bool:
 SECRET_KEY = env("SECRET_KEY", "unsafe-development-only-key")
 DEBUG = env_bool("DEBUG", False)
 ALLOWED_HOSTS = [item.strip() for item in env("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if item.strip()]
+# SSRF exception for an administrator-approved split-horizon DNS mapping.
+# A hostname alone never grants access to arbitrary private IP addresses.
+SSRF_ALLOWED_HOSTS = [item.strip().lower() for item in env("SSRF_ALLOWED_HOSTS", "club.honor.com").split(",") if item.strip()]
+SSRF_ALLOWED_PRIVATE_IPS = [item.strip() for item in env("SSRF_ALLOWED_PRIVATE_IPS", "").split(",") if item.strip()]
 
 INSTALLED_APPS = [
     "django.contrib.admin",

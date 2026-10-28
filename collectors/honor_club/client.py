@@ -18,6 +18,7 @@ DEFAULT_USER_AGENT = "PhoneVoiceInsightPoC/0.2 (public-page low-frequency collec
 _ALLOWED_PATH_PATTERN = re.compile(r"^/cn/(?:threadtopic-\d+-\d+|thread-\d+-\d+-\d+)\.html$")
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 _MAX_REDIRECTS = 3
+_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _CHALLENGE_MARKERS = (
     "请输入验证码",
     "安全验证",
@@ -104,6 +105,32 @@ class HonorClubClient:
         self._transport = transport
         self._last_request_started: float | None = None
 
+    @staticmethod
+    def _bounded_get(client: httpx.Client, url: str) -> httpx.Response:
+        with client.stream("GET", url) as streamed:
+            if streamed.status_code in _REDIRECT_STATUSES:
+                return httpx.Response(
+                    status_code=streamed.status_code,
+                    headers=streamed.headers,
+                    request=streamed.request,
+                )
+            content = bytearray()
+            for chunk in streamed.iter_bytes():
+                content.extend(chunk)
+                if len(content) > _MAX_RESPONSE_BYTES:
+                    raise CollectorError("荣耀俱乐部响应过大; 已停止读取", code="RESPONSE_TOO_LARGE")
+            decoded_headers = {
+                key: value
+                for key, value in streamed.headers.items()
+                if key.casefold() not in {"content-encoding", "content-length"}
+            }
+            return httpx.Response(
+                status_code=streamed.status_code,
+                headers=decoded_headers,
+                content=bytes(content),
+                request=streamed.request,
+            )
+
     def get_html(self, url: str, *, request_interval_seconds: float) -> HonorHttpResponse:
         is_valid, error = validate_honor_url(url)
         if not is_valid:
@@ -122,6 +149,7 @@ class HonorClubClient:
             with httpx.Client(
                 timeout=httpx.Timeout(self.timeout_seconds),
                 follow_redirects=False,
+                trust_env=False,
                 transport=self._transport,
                 headers={
                     "User-Agent": self.user_agent,
@@ -132,7 +160,7 @@ class HonorClubClient:
                 request_url = url
                 canonical_url = url
                 for _ in range(_MAX_REDIRECTS + 1):
-                    response = client.get(request_url)
+                    response = self._bounded_get(client, request_url)
                     if response.status_code not in _REDIRECT_STATUSES:
                         break
                     location = response.headers.get("location", "")
@@ -140,7 +168,10 @@ class HonorClubClient:
                         raise CollectorError("荣耀俱乐部跳转缺少地址", code="UNEXPECTED_REDIRECT")
                     request_url, canonical_url = _safe_redirect_url(urljoin(str(response.url), location))
                     if canonical_url != url:
-                        raise CollectorError("荣耀俱乐部跳转到其他页面, 已停止采集", code="UNEXPECTED_REDIRECT")
+                        raise CollectorError(
+                            "荣耀俱乐部跳转到其他页面, 已停止采集",
+                            code="UNEXPECTED_REDIRECT",
+                        )
                 else:
                     raise CollectorError("荣耀俱乐部跳转次数过多", code="UNEXPECTED_REDIRECT")
         except httpx.HTTPError as exc:
