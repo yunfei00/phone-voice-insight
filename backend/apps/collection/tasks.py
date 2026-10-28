@@ -19,6 +19,7 @@ from apps.collection.services.orchestration import (
     CollectionSourceBusy,
     create_collection_task,
 )
+from apps.sources.models import TargetValidationStatus
 
 
 @shared_task(name="system_ping")
@@ -55,6 +56,16 @@ def run_scheduled_collection(schedule_id: int) -> dict[str, Any]:
     schedule = CollectionSchedule.objects.select_related("source_target").get(pk=schedule_id)
     if not schedule.enabled or not schedule.source_target.is_active:
         return {"status": "skipped", "reason": "schedule_disabled"}
+    if (
+        schedule.source_target.source.code == "HONOR_CLUB"
+        and schedule.source_target.validation_status != TargetValidationStatus.VALID
+    ):
+        CollectionScheduleEvent.objects.create(
+            schedule=schedule,
+            status="SKIPPED_TARGET_INVALID",
+            reason="target_not_validated",
+        )
+        return {"status": "skipped", "reason": "target_not_validated"}
 
     state, _ = CollectionTargetState.objects.get_or_create(source_target=schedule.source_target)
     if not state.full_verified:

@@ -38,11 +38,25 @@ class ReviewRecordViewSet(ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def facets(self, request: Request) -> Response:
         del request
-        variants = list(ReviewRecord.objects.filter(product_variant__isnull=False).values("product_variant_id", "product_variant__sku_name").annotate(count=Count("id")).order_by("product_variant_id"))
-        regions = list(ReviewRecord.objects.exclude(source_region="").values("source_region").annotate(count=Count("id")).order_by("source_region"))
-        ratings = list(ReviewRecord.objects.filter(rating__isnull=False).values("rating").annotate(count=Count("id")).order_by("-rating"))
+        variants = list(
+            ReviewRecord.objects.filter(product_variant__isnull=False)
+            .values("product_variant_id", "product_variant__sku_name")
+            .annotate(count=Count("id"))
+            .order_by("product_variant_id")
+        )
+        regions = list(
+            ReviewRecord.objects.exclude(source_region="")
+            .values("source_region")
+            .annotate(count=Count("id"))
+            .order_by("source_region")
+        )
+        ratings = list(
+            ReviewRecord.objects.filter(rating__isnull=False)
+            .values("rating")
+            .annotate(count=Count("id"))
+            .order_by("-rating")
+        )
         return Response({"variants": variants, "regions": regions, "ratings": ratings})
-
 
 
 class ThreadTreeViewSet(ReadOnlyModelViewSet):

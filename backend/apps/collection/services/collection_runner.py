@@ -15,7 +15,7 @@ from collectors.base import (
     CollectorTarget,
     NormalizedReview,
 )
-from collectors.honor_club.normalizer import is_power2_related
+from collectors.honor_club.normalizer import is_product_related
 from collectors.honor_club.parser import extract_thread_page_count, is_valid_thread_page
 from django.db import transaction
 from django.db.models import Max
@@ -72,6 +72,14 @@ def _build_collector_target(source_target: SourceTarget, *, target_url: str | No
         aliases.append(source_target.product.name)
     config = dict(source_target.config_json)
     config["product_aliases"] = aliases
+    sibling_products = source_target.product.brand.products.exclude(pk=source_target.product_id).prefetch_related(
+        "aliases"
+    )
+    excluded_aliases: list[str] = []
+    for product in sibling_products:
+        excluded_aliases.append(product.name)
+        excluded_aliases.extend(alias.alias for alias in product.aliases.all())
+    config["excluded_product_aliases"] = excluded_aliases
     return CollectorTarget(
         source_code=source_target.source.code,
         product_code=source_target.product.normalized_name,
@@ -620,11 +628,12 @@ def run_collection(
                 raw_data = thread_payload.get("raw_data", {})
                 topic_tags = raw_data.get("topic_tags", []) if isinstance(raw_data, dict) else []
                 aliases = target.config.get("product_aliases", [])
-                if not is_power2_related(
+                if not is_product_related(
                     title=str(thread_payload.get("title", "")),
                     content=str(thread_payload.get("content", "")),
                     topic_tags=[str(value) for value in topic_tags] if isinstance(topic_tags, list) else [],
                     aliases=[str(value) for value in aliases] if isinstance(aliases, list) else [],
+                    excluded_aliases=[str(value) for value in target.config.get("excluded_product_aliases", [])],
                 ):
                     skipped += 1
                     checkpoint = {

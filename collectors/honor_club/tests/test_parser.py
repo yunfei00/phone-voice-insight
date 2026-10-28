@@ -4,11 +4,20 @@ from pathlib import Path
 import httpx
 import pytest
 
-from collectors.base import CollectionCheckpoint, CollectionRequest, CollectorError, CollectorTarget
+from collectors.base import (
+    CollectionCheckpoint,
+    CollectionRequest,
+    CollectorError,
+    CollectorTarget,
+)
 from collectors.honor_club import HonorClubCollector
 from collectors.honor_club.client import HonorClubClient
 from collectors.honor_club.date_parser import parse_honor_datetime
-from collectors.honor_club.parser import extract_topic_page_count, parse_thread_page, parse_topic_page
+from collectors.honor_club.parser import (
+    extract_topic_page_count,
+    parse_thread_page,
+    parse_topic_page,
+)
 from collectors.honor_club.role_mapper import map_author_role
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -152,7 +161,12 @@ def test_known_mobile_redirect_is_followed_and_canonicalized() -> None:
                 headers={"location": "cn/thread-30295048-1-1.html?mobile=2"},
                 request=request,
             )
-        return httpx.Response(200, headers={"content-type": "text/html"}, text="<html>ok</html>", request=request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text="<html>ok</html>",
+            request=request,
+        )
 
     client = HonorClubClient(transport=httpx.MockTransport(handler))
     response = client.get_html(
@@ -213,7 +227,11 @@ def test_live_smoke_one_topic_and_one_thread() -> None:
         CollectionRequest(
             target=thread_target,
             checkpoint=CollectionCheckpoint(
-                metadata={"page_kind": "thread", "thread_id": link.payload["thread_id"], "listing_data": link.payload}
+                metadata={
+                    "page_kind": "thread",
+                    "thread_id": link.payload["thread_id"],
+                    "listing_data": link.payload,
+                }
             ),
         )
     )
@@ -225,12 +243,13 @@ def test_public_region_and_datetime_attribute_extraction() -> None:
     <div class="hbtTbox"><h1>荣耀Power2 体验</h1></div>
     <div class="hbt-tinf hbfTinf"><div class="hbt-tmg">
       <time datetime="2026-10-01 09:15">发表于</time>
-      <span class="ip-region">IP属地：陕西</span>
+      <span class="ip-region">IP属地&#65306;陕西</span>
     </div></div>
     <div class="wapFirstThread">测试正文</div>
     """
     records = parse_thread_page(
-        html, thread_id="98765",
+        html,
+        thread_id="98765",
         thread_url="https://club.honor.com/cn/thread-98765-1-1.html",
         listing_data={},
     )

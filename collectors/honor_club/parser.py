@@ -138,6 +138,17 @@ def is_valid_topic_page(html: str) -> bool:
     return bool(soup.select_one("#threadlist, .threadlist, [data-topic-id]"))
 
 
+def extract_topic_identity(html: str) -> str:
+    """Return the public topic name used to verify product/entry ownership."""
+
+    soup = BeautifulSoup(html, "html.parser")
+    for selector in (".section-name", ".section-top-infomation", ".topic-name", "h1"):
+        value = _text(soup.select_one(selector))
+        if value:
+            return value
+    return ""
+
+
 def extract_thread_page_count(html: str, *, thread_id: str) -> int:
     """Read the public thread pager whose canonical path is thread-{id}-{page}-1.html."""
 
@@ -164,9 +175,9 @@ def _public_region(node: Tag | None) -> str:
         return ""
     for candidate in node.select(".ip-location, .ip-region, .ip属地, [data-ip-location], [data-ip-region]"):
         value = str(candidate.get("data-ip-location") or candidate.get("data-ip-region") or _text(candidate)).strip()
-        match = re.search(r"(?:IP属地|IP归属地|属地)\\s*[:：]?\\s*([\\u4e00-\\u9fff]{2,12})", value)
+        match = re.search(r"(?:IP属地|IP归属地|属地)\s*[:\uFF1A]?\s*([\u4e00-\u9fff]{2,12})", value)
         region = match.group(1) if match else value
-        if re.fullmatch(r"[\\u4e00-\\u9fff]{2,12}", region):
+        if re.fullmatch(r"[\u4e00-\u9fff]{2,12}", region):
             return region
     return ""
 
@@ -388,7 +399,9 @@ def parse_thread_page(
         if not reply_content:
             continue
         role_text = _text(container.select_one(".hbt-binf b, .author-role"))
-        published_at_raw = _time_from_node(container.select_one(".hbt-pltime, .published-at, time, [data-published-at]"))
+        published_at_raw = _time_from_node(
+            container.select_one(".hbt-pltime, .published-at, time, [data-published-at]")
+        )
         if not published_at_raw:
             published_at_raw = _time_from_node(container.select_one(".authi, .post-meta"))
         reply_published_at = parse_honor_datetime(published_at_raw, reference=published_at)

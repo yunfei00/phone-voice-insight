@@ -154,6 +154,15 @@ class CollectionTargetStateSerializer(serializers.ModelSerializer):
     schedule_enabled = serializers.SerializerMethodField()
     schedule_interval_hours = serializers.SerializerMethodField()
     has_historical_data = serializers.BooleanField(read_only=True)
+    validation_status = serializers.CharField(source="source_target.validation_status", read_only=True)
+    validated_at = serializers.DateTimeField(source="source_target.validated_at", read_only=True)
+    validation_error_message = serializers.CharField(source="source_target.validation_error_message", read_only=True)
+    last_task_type = serializers.SerializerMethodField()
+    last_task_status = serializers.SerializerMethodField()
+    last_new_threads = serializers.SerializerMethodField()
+    last_new_replies = serializers.SerializerMethodField()
+    last_failure_count = serializers.SerializerMethodField()
+    progress_stage = serializers.SerializerMethodField()
 
     class Meta:
         model = CollectionTargetState
@@ -183,7 +192,47 @@ class CollectionTargetStateSerializer(serializers.ModelSerializer):
             "schedule_enabled",
             "schedule_interval_hours",
             "has_historical_data",
+            "validation_status",
+            "validated_at",
+            "validation_error_message",
+            "last_task_type",
+            "last_task_status",
+            "last_new_threads",
+            "last_new_replies",
+            "last_failure_count",
+            "progress_stage",
         )
+
+    def _last_task(self, instance: CollectionTargetState) -> CollectionTask | None:
+        tasks = [
+            task for task in (instance.active_task, instance.last_full_task, instance.last_incremental_task) if task
+        ]
+        return max(tasks, key=lambda task: task.created_at) if tasks else None
+
+    def get_last_task_type(self, instance: CollectionTargetState) -> str | None:
+        task = self._last_task(instance)
+        return task.task_type if task else None
+
+    def get_last_task_status(self, instance: CollectionTargetState) -> str | None:
+        task = self._last_task(instance)
+        return task.status if task else None
+
+    def get_last_new_threads(self, instance: CollectionTargetState) -> int:
+        task = self._last_task(instance)
+        return task.new_threads if task else 0
+
+    def get_last_new_replies(self, instance: CollectionTargetState) -> int:
+        task = self._last_task(instance)
+        return max(task.new_records - task.new_threads, 0) if task else 0
+
+    def get_last_failure_count(self, instance: CollectionTargetState) -> int:
+        task = self._last_task(instance)
+        return task.failure_count if task else 0
+
+    def get_progress_stage(self, instance: CollectionTargetState) -> str:
+        if not instance.active_task:
+            return ""
+        return str(instance.active_task.last_checkpoint.get("phase", "pending"))
 
     def _schedule(self, instance: CollectionTargetState) -> CollectionSchedule | None:
         try:
