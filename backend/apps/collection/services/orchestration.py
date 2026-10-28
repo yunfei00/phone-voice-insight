@@ -53,9 +53,6 @@ def create_collection_task(
         .first()
     )
     if active is not None:
-        if state.active_task_id != active.id:
-            state.active_task = active
-            state.save(update_fields=("active_task", "updated_at"))
         raise CollectionAlreadyActive(active.id)
     task = CollectionTask.objects.create(
         source_target=source_target,
