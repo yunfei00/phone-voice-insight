@@ -11,7 +11,7 @@ from apps.collection.models import CollectionTargetState
 from apps.sources.models import DataSource, SourceTarget
 from apps.sources.serializers import DataSourceSerializer, SourceTargetSerializer
 from apps.sources.services.cleanup import CleanupBlocked, cleanup_preview, execute_cleanup
-from apps.sources.services.target_validation import validate_source_target
+from apps.sources.services.target_validation import diagnose_dns, validate_source_target
 
 
 class DataSourceViewSet(ReadOnlyModelViewSet):
@@ -36,6 +36,14 @@ class SourceTargetViewSet(ModelViewSet):
     def perform_update(self, serializer: BaseSerializer[SourceTarget]) -> None:
         target = serializer.save()
         CollectionTargetState.objects.get_or_create(source_target=target)
+
+    @action(detail=True, methods=("get",), url_path="network-diagnostics", permission_classes=(IsAdministrator,))
+    def network_diagnostics(self, request: Request, pk: str | None = None) -> Response:
+        del request, pk
+        target = self.get_object()
+        if target.source.code != "HONOR_CLUB":
+            return Response({"detail": "仅支持荣耀俱乐部入口"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(diagnose_dns("club.honor.com"))
 
     @action(detail=True, methods=("post",), url_path="validate")
     def validate_target(self, request: Request, pk: str | None = None) -> Response:
