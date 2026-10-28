@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
-import { getDataQualitySummary, getReviewQualities, getProducts, processGovernanceBatch, startAsyncGovernance, getGovernanceTaskHistory, getGovernanceTaskStatus, retryGovernanceTask, startGovernanceAIReview, getGovernanceAIHistory, getGovernanceAIResults } from '@/api'
+import { getDataQualitySummary, getReviewQualities, getProducts, processGovernanceBatch, startAsyncGovernance, getGovernanceTaskHistory, getGovernanceTaskStatus, retryGovernanceTask, startGovernanceAIReview, getGovernanceAIHistory, getGovernanceAIResults, confirmGovernanceAIReview } from '@/api'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import type { Product, DataQualitySummary, ExclusionReason, ReviewQuality } from '@/types/api'
@@ -44,6 +44,7 @@ const governanceBusy = ref(false)
 const governanceTasks = ref<GovernanceTaskInfo[]>([])
 const taskLoading = ref(false)
 const aiBusy = ref(false)
+const aiConfirming = ref<number | null>(null)
 const aiBatches = ref<GovernanceAIBatchInfo[]>([])
 const aiResults = ref<GovernanceAIResultInfo[]>([])
 let aiPollTimer: ReturnType<typeof setInterval> | undefined
@@ -224,6 +225,25 @@ async function loadAIReviews(): Promise<void> {
   }
 }
 
+async function confirmAIReview(row: GovernanceAIResultInfo, eligible: boolean): Promise<void> {
+  const reason = window.prompt(`请填写人工确认原因（至少 2 字）：${eligible ? '保留' : '排除'}记录 #${row.review_id}`)
+  if (reason === null) return
+  if (reason.trim().length < 2) {
+    ElMessage.warning('请填写至少 2 个字的确认原因')
+    return
+  }
+  aiConfirming.value = row.id
+  try {
+    await confirmGovernanceAIReview({ review_id: row.review_id, eligible, reason: reason.trim() })
+    ElMessage.success('人工确认已保存')
+    await Promise.all([loadAIReviews(), loadData()])
+  } catch {
+    ElMessage.error('人工确认失败，请稍后重试')
+  } finally {
+    aiConfirming.value = null
+  }
+}
+
 function stopAIPolling(): void {
   if (aiPollTimer !== undefined) clearInterval(aiPollTimer)
   aiPollTimer = undefined
@@ -382,6 +402,16 @@ onUnmounted(() => { stopTaskPolling(); stopAIPolling() })
         </el-table-column>
         <el-table-column prop="reason" label="AI 判断理由" min-width="220" show-overflow-tooltip />
         <el-table-column prop="evidence" label="引用证据" min-width="180" show-overflow-tooltip />
+        <el-table-column label="人工确认" min-width="185" fixed="right">
+          <template #default="{ row }">
+            <span v-if="row.human_reviewed_at">已确认：{{ row.human_decision ? '保留' : '排除' }}</span>
+            <template v-else-if="row.status === 'REVIEW_REQUIRED'">
+              <el-button size="small" type="success" :loading="aiConfirming === row.id" @click="confirmAIReview(row, true)">保留</el-button>
+              <el-button size="small" type="warning" :disabled="aiConfirming !== null" @click="confirmAIReview(row, false)">排除</el-button>
+            </template>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
       </el-table>
     </section>
 
