@@ -83,19 +83,6 @@ function formatRate(value: number): string {
   return `${(value * 100).toFixed(2)}%`
 }
 
-const reasonLabels: Record<string, string> = {
-  source_time_missing: '页面未提供发布时间',
-  source_time_missing_or_legacy_not_captured: '页面未提供或历史版本未保存时间',
-  legacy_relative_time_not_normalized: '历史相对时间未标准化',
-  legacy_time_parse_failed: '历史时间格式无法解析',
-  relative_day_without_time_precision: '页面仅显示“几天前”，缺少具体时分',
-  unsupported_time_format: '时间格式不受支持',
-  legacy_ip_location_not_captured: '历史版本未采集 IP 属地',
-  source_ip_location_missing: '页面未提供 IP 属地',
-  source_ip_location_unknown: '页面显示属地未知',
-  profile_region_not_publicly_labeled: '页面未公开标注用户填写地区',
-}
-
 function onSortChange(sort: { prop: string | null; order: 'ascending' | 'descending' | null }): void {
   const fields: Record<string, string> = {
     source_name: 'source__name', product_name: 'product__name', record_type: 'record_type',
