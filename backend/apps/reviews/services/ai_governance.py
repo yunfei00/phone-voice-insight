@@ -20,7 +20,8 @@ _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.I | re.S)
 
 def validate_ai_governance_response(raw: str, original_content: str) -> dict:
     match = _FENCE.fullmatch(raw)
-    payload = json.loads(match.group(1) if match else raw.strip())
+    cleaned = match.group(1) if match else raw.strip()
+    payload = json.loads(cleaned)
     if not isinstance(payload, dict) or set(payload) != {"eligible", "confidence", "reason", "evidence"}:
         raise ValueError("INVALID_FIELDS")
     if type(payload["eligible"]) is not bool:
