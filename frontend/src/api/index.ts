@@ -78,6 +78,21 @@ export const getHealth = async (): Promise<HealthStatus> =>
 export const getProducts = async (params: PageParams = {}): Promise<PaginatedResponse<Product>> =>
   (await apiClient.get<PaginatedResponse<Product>>('/products/', { params })).data
 
+export const getBrands = async (): Promise<PaginatedResponse<{ id: number; name: string; code: string }>> =>
+  (await apiClient.get('/brands/', { params: { page_size: 100 } })).data
+
+export const createBrand = async (payload: { name: string; code: string }) =>
+  (await apiClient.post('/brands/', payload)).data
+
+export const createProduct = async (payload: { brand_id: number; name: string; normalized_name: string; series: string; model_code: string }) =>
+  (await apiClient.post<Product>('/products/', payload)).data
+
+export const updateProduct = async (id: number, payload: { name: string; series: string; model_code: string; is_active: boolean }) =>
+  (await apiClient.patch<Product>(`/products/${id}/`, payload)).data
+
+export const createSourceTarget = async (payload: { source: number; product: number; name: string; target_type: 'COMMUNITY'; target_url: string; external_id: string; is_active: boolean }) =>
+  (await apiClient.post('/source-targets/', payload)).data
+
 export const getSources = async (params: PageParams = {}): Promise<PaginatedResponse<DataSource>> =>
   (await apiClient.get<PaginatedResponse<DataSource>>('/sources/', { params })).data
 
