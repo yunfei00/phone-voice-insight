@@ -11,6 +11,7 @@ class SourceTargetSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "product",
+            "source",
             "product_name",
             "name",
             "target_type",
