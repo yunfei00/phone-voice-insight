@@ -26,7 +26,7 @@ class TaxonomyTag(StrictModel):
     confused_with: list[str]
     enabled: bool
     taxonomy_version: str
-    children: list["TaxonomyTag"] = Field(default_factory=list)
+    children: list[TaxonomyTag] = Field(default_factory=list)
 
 
 class TaxonomyDefinition(StrictModel):
@@ -35,7 +35,7 @@ class TaxonomyDefinition(StrictModel):
     domains: list[TaxonomyTag] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_tree(self) -> "TaxonomyDefinition":
+    def validate_tree(self) -> TaxonomyDefinition:
         if self.taxonomy_version != TAXONOMY_VERSION:
             raise ValueError("unsupported taxonomy_version")
         seen: set[str] = set()

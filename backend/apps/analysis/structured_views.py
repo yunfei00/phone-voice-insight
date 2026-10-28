@@ -1,0 +1,317 @@
+from __future__ import annotations
+
+from collections import Counter
+from datetime import timedelta
+from typing import Any, cast
+
+from ai.taxonomy import load_taxonomy
+from ai.validation import validate_structured_payload
+from django.contrib.auth.models import User
+from django.db import transaction
+from django.db.models import Count
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.decorators import action
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.viewsets import ReadOnlyModelViewSet, ViewSet
+
+from apps.analysis.models import (
+    AnalysisBatch,
+    AnalysisBatchStatus,
+    AnalysisReviewRecord,
+    AnalysisRun,
+    OpinionAspect,
+    StructuredAnalysis,
+    StructuredRunStatus,
+)
+from apps.analysis.structured_serializers import (
+    AnalysisRunSerializer,
+    OpinionAspectSerializer,
+    ReviewCorrectionSerializer,
+    StructuredAnalysisSerializer,
+    StructuredBatchCreateSerializer,
+    StructuredBatchSerializer,
+)
+from apps.analysis.tasks import run_structured_analysis_batch_task
+from apps.products.models import Product
+from apps.reviews.models import ReviewRecord
+from apps.sources.models import DataSource
+
+
+class TaxonomyViewSet(ViewSet):
+    def list(self, _request: Request) -> Response:
+        taxonomy = load_taxonomy()
+        return Response(taxonomy.model_dump())
+
+
+class StructuredRunViewSet(ReadOnlyModelViewSet):
+    serializer_class = AnalysisRunSerializer
+    filterset_fields = ("status", "provider", "model", "content", "batch", "is_current")
+    ordering_fields = ("created_at", "completed_at", "latency_ms", "estimated_cost")
+
+    def get_queryset(self):  # type: ignore[no-untyped-def]
+        return AnalysisRun.objects.select_related("content", "structured_analysis")
+
+
+class StructuredBatchViewSet(ViewSet):
+    def list(self, request: Request) -> Response:
+        queryset = AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1").select_related(
+            "product", "source"
+        )
+        page = max(int(request.query_params.get("page", 1)), 1)
+        page_size = min(max(int(request.query_params.get("page_size", 20)), 1), 100)
+        start = (page - 1) * page_size
+        return Response(
+            {
+                "count": queryset.count(),
+                "next": None,
+                "previous": None,
+                "results": StructuredBatchSerializer(queryset[start : start + page_size], many=True).data,
+            }
+        )
+
+    def retrieve(self, _request: Request, pk: str | None = None) -> Response:
+        assert pk is not None
+        batch = AnalysisBatch.objects.select_related("product", "source").get(pk=pk)
+        return Response(StructuredBatchSerializer(batch).data)
+
+    def create(self, request: Request) -> Response:
+        serializer = StructuredBatchCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        queryset = ReviewRecord.objects.select_related("product", "source").order_by("id")
+        if ids := values.get("content_ids"):
+            queryset = queryset.filter(id__in=ids)
+        if product_id := values.get("product_id"):
+            queryset = queryset.filter(product_id=product_id)
+        if source_id := values.get("source_id"):
+            queryset = queryset.filter(source_id=source_id)
+        if after := values.get("published_at_after"):
+            queryset = queryset.filter(published_at__gte=after)
+        if before := values.get("published_at_before"):
+            queryset = queryset.filter(published_at__lte=before)
+        content_ids = list(queryset.values_list("id", flat=True)[: values["max_items"]])
+        first = queryset.first()
+        if first is None:
+            return Response({"error_code": "NO_CONTENT_MATCHED"}, status=status.HTTP_400_BAD_REQUEST)
+        product = Product.objects.get(pk=first.product_id)
+        source = DataSource.objects.get(pk=first.source_id)
+        estimated_characters = sum(
+            len(text) for text in queryset.filter(id__in=content_ids).values_list("content", flat=True)
+        )
+        estimated_tokens = max((estimated_characters + 3) // 4, len(content_ids) * 100)
+        estimated_cost = estimated_tokens * values["input_cost_per_million"] / 1_000_000
+        batch = AnalysisBatch.objects.create(
+            created_by=cast(User, request.user),
+            product=product,
+            source=source,
+            corpus_version="structured-v1",
+            provider="DRY_RUN" if values["dry_run"] else "USER_CONFIG",
+            model_name="NOT_CALLED" if values["dry_run"] else "USER_CONFIG",
+            prompt_version="structured_analysis_v1",
+            requested_count=len(content_ids),
+            dry_run=values["dry_run"],
+            max_concurrency=values["max_concurrency"],
+            requests_per_minute=values["requests_per_minute"],
+            token_limit=values.get("token_limit"),
+            cost_budget=values.get("cost_budget"),
+            estimated_cost=estimated_cost,
+            input_cost_per_million=values["input_cost_per_million"],
+            output_cost_per_million=values["output_cost_per_million"],
+            total_tokens=estimated_tokens,
+            status=AnalysisBatchStatus.SUCCESS if values["dry_run"] else AnalysisBatchStatus.PENDING,
+            finished_at=timezone.now() if values["dry_run"] else None,
+        )
+        celery_task_id = None
+        if not values["dry_run"]:
+            result = run_structured_analysis_batch_task.delay(batch.id, content_ids, max_retries=values["max_retries"])
+            celery_task_id = result.id
+        return Response(
+            {
+                "batch": StructuredBatchSerializer(batch).data,
+                "celery_task_id": celery_task_id,
+                "dry_run": values["dry_run"],
+                "matched_content_ids": content_ids,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=("post",))
+    def cancel(self, _request: Request, pk: str | None = None) -> Response:
+        assert pk is not None
+        batch = AnalysisBatch.objects.get(pk=pk)
+        if batch.status in (AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING, AnalysisBatchStatus.PAUSED):
+            batch.status = AnalysisBatchStatus.CANCELLED
+            batch.cancelled_at = timezone.now()
+            batch.save()
+        return Response(StructuredBatchSerializer(batch).data)
+
+    @action(detail=True, methods=("post",))
+    def pause(self, _request: Request, pk: str | None = None) -> Response:
+        assert pk is not None
+        batch = AnalysisBatch.objects.get(pk=pk)
+        if batch.status in (AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING):
+            batch.status = AnalysisBatchStatus.PAUSED
+            batch.save()
+        return Response(StructuredBatchSerializer(batch).data)
+
+
+class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
+    serializer_class = StructuredAnalysisSerializer
+    search_fields = ("summary", "content__title", "content__content", "aspects__evidence_text")
+    ordering_fields = ("created_at", "updated_at")
+
+    def get_queryset(self):  # type: ignore[no-untyped-def]
+        queryset = StructuredAnalysis.objects.select_related(
+            "run", "content", "content__product", "content__source"
+        ).prefetch_related("aspects", "review_history__reviewer")
+        params = self.request.query_params
+        if value := params.get("product"):
+            queryset = queryset.filter(content__product_id=int(value))
+        if value := params.get("source"):
+            queryset = queryset.filter(content__source_id=int(value))
+        if value := params.get("aspect_code"):
+            queryset = queryset.filter(aspects__aspect_code=value)
+        if value := params.get("topic_code"):
+            queryset = queryset.filter(aspects__topic_code=value)
+        if value := params.get("sentiment"):
+            queryset = queryset.filter(aspects__sentiment=value)
+        if value := params.get("review_required"):
+            queryset = queryset.filter(review_required=value.lower() == "true")
+        return queryset.distinct()
+
+    @action(detail=True, methods=("post",), url_path="review")
+    def review(self, request: Request, pk: str | None = None) -> Response:
+        del pk
+        analysis = self.get_object()
+        serializer = ReviewCorrectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = validate_structured_payload(serializer.validated_data["corrected_result"], analysis.content.content)
+        if not result.valid or result.payload is None:
+            return Response({"errors": result.errors}, status=status.HTTP_400_BAD_REQUEST)
+        payload = result.payload
+        original = _analysis_payload(analysis)
+        with transaction.atomic():
+            AnalysisReviewRecord.objects.create(
+                analysis=analysis,
+                original_result=original,
+                corrected_result=payload.model_dump(),
+                reviewer=cast(User, request.user),
+                review_reason=serializer.validated_data.get("review_reason", ""),
+                reviewed_at=timezone.now(),
+            )
+            for field in ("overall_sentiment", "language", "content_type", "relevance", "summary", "model_mentions"):
+                setattr(analysis, field, getattr(payload, field))
+            analysis.review_required = False
+            analysis.schema_valid = True
+            analysis.save()
+            analysis.aspects.all().delete()
+            OpinionAspect.objects.bulk_create(
+                [OpinionAspect(analysis=analysis, **item.model_dump()) for item in payload.aspects]
+            )
+            analysis.run.status = StructuredRunStatus.SUCCEEDED
+            analysis.run.save(update_fields=("status", "updated_at"))
+        return Response(StructuredAnalysisSerializer(self.get_object()).data)
+
+    @action(detail=False, methods=("get",), url_path="quality")
+    def quality(self, _request: Request) -> Response:
+        runs = AnalysisRun.objects.filter(is_current=True)
+        total = runs.count()
+        successful = runs.filter(
+            status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED)
+        ).count()
+        schema_valid = StructuredAnalysis.objects.filter(run__is_current=True, schema_valid=True).count()
+        return Response(
+            {
+                "total_runs": total,
+                "successful_runs": successful,
+                "success_rate": successful / total if total else None,
+                "schema_valid_rate": schema_valid / successful if successful else None,
+                "review_required": StructuredAnalysis.objects.filter(
+                    run__is_current=True, review_required=True
+                ).count(),
+                "human_evaluation_status": "NOT_EVALUATED",
+                "accuracy_metrics": None,
+            }
+        )
+
+    @action(detail=False, methods=("get",), url_path="aggregates")
+    def aggregates(self, request: Request) -> Response:
+        del request
+        analyses = self.get_queryset().filter(run__is_current=True)
+        aspects = OpinionAspect.objects.filter(analysis__in=analyses)
+        by_domain = list(aspects.values("aspect_code").annotate(count=Count("id")).order_by("-count"))
+        by_topic = list(aspects.values("topic_code").annotate(count=Count("id")).order_by("-count"))
+        by_sentiment = list(aspects.values("sentiment").annotate(count=Count("id")).order_by("-count"))
+        by_severity = list(aspects.values("severity").annotate(count=Count("id")).order_by("-count"))
+        needs = list(
+            aspects.filter(intent="SUGGESTION").values("topic_code").annotate(count=Count("id")).order_by("-count")[:20]
+        )
+        competitors = Counter(
+            product
+            for products in aspects.exclude(compared_products=[]).values_list("compared_products", flat=True)
+            for product in products
+        )
+        return Response(
+            {
+                "disclaimer": "论坛反馈占比不等于真实设备故障率",
+                "content_count": analyses.values("content_id").distinct().count(),
+                "opinion_count": aspects.count(),
+                "domain_distribution": by_domain,
+                "topic_distribution": by_topic,
+                "sentiment_distribution": by_sentiment,
+                "severity_distribution": by_severity,
+                "requirement_ranking": needs,
+                "competitor_mentions": [{"product": key, "count": value} for key, value in competitors.most_common()],
+                "anomaly_candidates": _anomalies(aspects),
+            }
+        )
+
+
+def _analysis_payload(analysis: StructuredAnalysis) -> dict[str, Any]:
+    return {
+        "schema_version": analysis.run.schema_version,
+        "taxonomy_version": analysis.run.taxonomy_version,
+        "overall_sentiment": analysis.overall_sentiment,
+        "language": analysis.language,
+        "content_type": analysis.content_type,
+        "relevance": analysis.relevance,
+        "summary": analysis.summary,
+        "model_mentions": analysis.model_mentions,
+        "aspects": [
+            {
+                key: value
+                for key, value in dict(OpinionAspectSerializer(item).data).items()
+                if key not in {"id", "analysis"}
+            }
+            for item in analysis.aspects.all()
+        ],
+    }
+
+
+def _anomalies(aspects):  # type: ignore[no-untyped-def]
+    now = timezone.now()
+    recent_start = now - timedelta(days=7)
+    baseline_start = recent_start - timedelta(days=28)
+    candidates = []
+    topics = aspects.values_list("topic_code", flat=True).distinct()
+    for topic in topics:
+        recent = aspects.filter(topic_code=topic, analysis__content__published_at__gte=recent_start).count()
+        baseline = aspects.filter(
+            topic_code=topic,
+            analysis__content__published_at__gte=baseline_start,
+            analysis__content__published_at__lt=recent_start,
+        ).count()
+        expected = baseline / 4
+        if recent >= 5 and recent >= max(expected * 2, 5):
+            candidates.append(
+                {
+                    "topic_code": topic,
+                    "observed_7d": recent,
+                    "baseline_28d": baseline,
+                    "expected_7d": expected,
+                    "reason": "近7天数量至少5且达到历史周均的2倍",
+                }
+            )
+    return candidates

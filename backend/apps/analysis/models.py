@@ -3,6 +3,7 @@
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
 
 from apps.common.models import TimeStampedModel
 from apps.products.models import Product
@@ -23,6 +24,16 @@ class AnalysisBatchStatus(models.TextChoices):
     PARTIAL = "PARTIAL", "部分成功"
     FAILED = "FAILED", "失败"
     CANCELLED = "CANCELLED", "已取消"
+    PAUSED = "PAUSED", "已暂停"
+    BUDGET_EXCEEDED = "BUDGET_EXCEEDED", "预算已停止"
+
+
+class StructuredRunStatus(models.TextChoices):
+    PENDING = "PENDING", "待分析"
+    RUNNING = "RUNNING", "分析中"
+    SUCCEEDED = "SUCCEEDED", "成功"
+    FAILED = "FAILED", "失败"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED", "待复核"
 
 
 class Aspect(models.TextChoices):
@@ -84,6 +95,17 @@ class AnalysisBatch(TimeStampedModel):
     started_at = models.DateTimeField("开始时间", null=True, blank=True)
     finished_at = models.DateTimeField("结束时间", null=True, blank=True)
     error_message = models.TextField("安全错误信息", blank=True)
+    dry_run = models.BooleanField("仅预估", default=True)
+    max_concurrency = models.PositiveSmallIntegerField("最大并发", default=1)
+    requests_per_minute = models.PositiveIntegerField("每分钟请求上限", default=10)
+    token_limit = models.PositiveBigIntegerField("Token 上限", null=True, blank=True)
+    cost_budget = models.DecimalField("成本预算", max_digits=12, decimal_places=4, null=True, blank=True)
+    estimated_cost = models.DecimalField("预计成本", max_digits=12, decimal_places=4, default=0)
+    actual_cost = models.DecimalField("实际成本", max_digits=12, decimal_places=4, default=0)
+    input_cost_per_million = models.DecimalField("输入百万 Token 单价", max_digits=12, decimal_places=4, default=0)
+    output_cost_per_million = models.DecimalField("输出百万 Token 单价", max_digits=12, decimal_places=4, default=0)
+    review_required_count = models.PositiveIntegerField("待复核数量", default=0)
+    cancelled_at = models.DateTimeField("取消时间", null=True, blank=True)
 
     class Meta:
         ordering = ("-created_at",)
@@ -221,3 +243,100 @@ class AnalysisEvaluation(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"分析 #{self.analysis_id} 人工评估"
+
+
+class AnalysisRun(TimeStampedModel):
+    """一次 V1 结构化分析执行；旧 AnalysisResult 保持不变以兼容历史。"""
+
+    content = models.ForeignKey(ReviewRecord, on_delete=models.CASCADE, related_name="structured_runs")
+    batch = models.ForeignKey(
+        AnalysisBatch, on_delete=models.SET_NULL, related_name="structured_runs", null=True, blank=True
+    )
+    status = models.CharField(max_length=30, choices=StructuredRunStatus.choices, default=StructuredRunStatus.PENDING)
+    provider = models.CharField(max_length=80)
+    model = models.CharField(max_length=150)
+    prompt_version = models.CharField(max_length=100, default="structured_analysis_v1")
+    taxonomy_version = models.CharField(max_length=30, default="1.0.0")
+    schema_version = models.CharField(max_length=30, default="1.0.0")
+    input_hash = models.CharField(max_length=64, db_index=True)
+    configuration_hash = models.CharField(max_length=64, db_index=True)
+    is_current = models.BooleanField(default=True, db_index=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    latency_ms = models.PositiveIntegerField(null=True, blank=True)
+    input_tokens = models.PositiveIntegerField(null=True, blank=True)
+    output_tokens = models.PositiveIntegerField(null=True, blank=True)
+    estimated_cost = models.DecimalField(max_digits=12, decimal_places=6, default=0)
+    error_code = models.CharField(max_length=80, blank=True, db_index=True)
+    error_message = models.TextField(blank=True)
+    attempt_count = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("content", "configuration_hash"),
+                condition=Q(is_current=True),
+                name="uniq_current_structured_run",
+            )
+        ]
+        indexes = [models.Index(fields=("status", "created_at"), name="struct_run_status_time")]
+
+
+class StructuredAnalysis(TimeStampedModel):
+    run = models.OneToOneField(AnalysisRun, on_delete=models.CASCADE, related_name="structured_analysis")
+    content = models.ForeignKey(ReviewRecord, on_delete=models.CASCADE, related_name="structured_analyses")
+    overall_sentiment = models.CharField(max_length=20)
+    language = models.CharField(max_length=20)
+    content_type = models.CharField(max_length=40)
+    relevance = models.CharField(max_length=20)
+    summary = models.TextField(blank=True)
+    model_mentions = models.JSONField(default=list, blank=True)
+    schema_valid = models.BooleanField(default=False, db_index=True)
+    review_required = models.BooleanField(default=False, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+
+class OpinionAspect(models.Model):
+    analysis = models.ForeignKey(StructuredAnalysis, on_delete=models.CASCADE, related_name="aspects")
+    business_domains = models.JSONField(default=list)
+    aspect_code = models.CharField(max_length=30, db_index=True)
+    topic_code = models.CharField(max_length=80, db_index=True)
+    sentiment = models.CharField(max_length=20, db_index=True)
+    intent = models.CharField(max_length=30)
+    issue_type = models.CharField(max_length=30)
+    severity = models.CharField(max_length=20, db_index=True)
+    scenario = models.TextField(null=True, blank=True)
+    trigger = models.TextField(null=True, blank=True)
+    phenomenon = models.TextField(null=True, blank=True)
+    target_product = models.CharField(max_length=150, null=True, blank=True)
+    compared_products = models.JSONField(default=list, blank=True)
+    relation_type = models.CharField(max_length=30)
+    evidence_text = models.TextField()
+    evidence_start = models.PositiveIntegerField()
+    evidence_end = models.PositiveIntegerField()
+    confidence = models.DecimalField(max_digits=4, decimal_places=3)
+    review_required = models.BooleanField(default=False, db_index=True)
+
+    class Meta:
+        ordering = ("id",)
+        indexes = [models.Index(fields=("aspect_code", "topic_code", "sentiment"), name="opinion_tax_sentiment")]
+
+
+class AnalysisReviewRecord(TimeStampedModel):
+    analysis = models.ForeignKey(StructuredAnalysis, on_delete=models.CASCADE, related_name="review_history")
+    aspect = models.ForeignKey(
+        OpinionAspect, on_delete=models.SET_NULL, related_name="review_history", null=True, blank=True
+    )
+    original_result = models.JSONField(default=dict)
+    corrected_result = models.JSONField(default=dict)
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="structured_analysis_reviews"
+    )
+    review_reason = models.TextField(blank=True)
+    reviewed_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ("-reviewed_at",)

@@ -38,5 +38,6 @@ def validate_structured_payload(raw: Any, source_text: str) -> StructuredValidat
             errors.append(f"aspects[{index}].target_product is not declared in model_mentions")
     if any(pattern.search(payload.summary) for pattern in _PII_PATTERNS):
         errors.append("summary contains personal information")
-    return StructuredValidationResult(not errors, payload if not errors else None, tuple(errors), review_required or bool(errors))
-
+    return StructuredValidationResult(
+        not errors, payload if not errors else None, tuple(errors), review_required or bool(errors)
+    )

@@ -1,6 +1,8 @@
 import copy
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from ai.schemas.structured_analysis import StructuredAnalysisPayload
@@ -9,7 +11,7 @@ from ai.validation import validate_structured_payload
 from pydantic import ValidationError
 
 
-def valid_payload() -> dict[str, object]:
+def valid_payload() -> dict[str, Any]:
     return {
         "schema_version": "1.0.0",
         "taxonomy_version": "1.0.0",
@@ -30,7 +32,7 @@ def valid_payload() -> dict[str, object]:
     }
 
 
-def test_taxonomy_is_versioned_and_has_fifteen_domains():
+def test_taxonomy_is_versioned_and_has_fifteen_domains() -> None:
     taxonomy = load_taxonomy()
     assert taxonomy.taxonomy_version == "1.0.0"
     assert len(taxonomy.domains) == 15
@@ -64,7 +66,9 @@ def test_taxonomy_is_versioned_and_has_fifteen_domains():
         (lambda p: p["aspects"][0].update(unknown=True), False),
     ],
 )
-def test_schema_positive_and_negative_cases(mutation, valid):
+def test_schema_positive_and_negative_cases(
+    mutation: Callable[[dict[str, Any]], object], valid: bool
+) -> None:
     payload = copy.deepcopy(valid_payload())
     mutation(payload)
     if valid:
@@ -74,14 +78,14 @@ def test_schema_positive_and_negative_cases(mutation, valid):
             StructuredAnalysisPayload.model_validate(payload)
 
 
-def test_evidence_offsets_use_python_unicode_code_points():
+def test_evidence_offsets_use_python_unicode_code_points() -> None:
     source = "地下车库信号不稳定"
     result = validate_structured_payload(valid_payload(), source)
     assert result.valid
     assert result.payload is not None
 
 
-def test_evidence_mismatch_is_rejected():
+def test_evidence_mismatch_is_rejected() -> None:
     payload = valid_payload()
     payload["aspects"][0]["evidence_start"] = 1
     result = validate_structured_payload(payload, "地下车库信号不稳定")
@@ -89,19 +93,19 @@ def test_evidence_mismatch_is_rejected():
     assert "offset mismatch" in result.errors[0]
 
 
-def test_target_product_must_be_declared():
+def test_target_product_must_be_declared() -> None:
     payload = valid_payload()
     payload["model_mentions"] = []
     assert not validate_structured_payload(payload, "地下车库信号不稳定").valid
 
 
-def test_personal_information_is_rejected_from_summary():
+def test_personal_information_is_rejected_from_summary() -> None:
     payload = valid_payload()
     payload["summary"] = "请联系 13800138000"
     assert not validate_structured_payload(payload, "地下车库信号不稳定").valid
 
 
-def test_json_schema_declares_draft_2020_12():
+def test_json_schema_declares_draft_2020_12() -> None:
     path = Path(__file__).parents[2] / "schemas" / "structured_analysis_v1.schema.json"
     schema = json.loads(path.read_text(encoding="utf-8"))
     assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"

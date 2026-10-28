@@ -4,18 +4,35 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ai.taxonomy import TAXONOMY_VERSION, validate_tag_relation
+from ai.taxonomy import validate_tag_relation
 
 SCHEMA_VERSION = "1.0.0"
 
 Sentiment = Literal["POSITIVE", "NEUTRAL", "NEGATIVE", "MIXED", "UNKNOWN"]
 Intent = Literal[
-    "EXPERIENCE", "COMPLAINT", "PRAISE", "QUESTION", "SUGGESTION", "COMPARISON",
-    "PURCHASE_INTENT", "SERVICE_REQUEST", "OTHER", "UNKNOWN",
+    "EXPERIENCE",
+    "COMPLAINT",
+    "PRAISE",
+    "QUESTION",
+    "SUGGESTION",
+    "COMPARISON",
+    "PURCHASE_INTENT",
+    "SERVICE_REQUEST",
+    "OTHER",
+    "UNKNOWN",
 ]
 IssueType = Literal[
-    "QUALITY", "PERFORMANCE", "USABILITY", "COMPATIBILITY", "RELIABILITY", "PRIVACY",
-    "SERVICE", "PRICE", "REQUIREMENT", "OTHER", "UNKNOWN",
+    "QUALITY",
+    "PERFORMANCE",
+    "USABILITY",
+    "COMPATIBILITY",
+    "RELIABILITY",
+    "PRIVACY",
+    "SERVICE",
+    "PRICE",
+    "REQUIREMENT",
+    "OTHER",
+    "UNKNOWN",
 ]
 Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"]
 
@@ -56,16 +73,19 @@ class OpinionAspectPayload(StrictModel):
 
 
 class StructuredAnalysisPayload(StrictModel):
-    schema_version: Literal["1.0.0"] = SCHEMA_VERSION
-    taxonomy_version: Literal["1.0.0"] = TAXONOMY_VERSION
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    taxonomy_version: Literal["1.0.0"] = "1.0.0"
     overall_sentiment: Sentiment
     language: str = Field(min_length=2, max_length=20)
     content_type: Literal[
-        "USER_REVIEW", "COMMUNITY_THREAD", "COMMUNITY_REPLY", "OFFICIAL_REPLY", "LOGISTICS_OR_SERVICE",
+        "USER_REVIEW",
+        "COMMUNITY_THREAD",
+        "COMMUNITY_REPLY",
+        "OFFICIAL_REPLY",
+        "LOGISTICS_OR_SERVICE",
         "OTHER",
     ]
     relevance: Literal["RELEVANT", "PARTIAL", "IRRELEVANT", "UNKNOWN"]
     summary: str = Field(max_length=500)
     model_mentions: list[str] = Field(default_factory=list)
     aspects: list[OpinionAspectPayload] = Field(default_factory=list)
-
