@@ -170,6 +170,7 @@ export const createCollectionTask = async (payload: {
   source_target: number
   task_type: 'FULL' | 'INCREMENTAL'
   requested_limit?: number
+  requested_pages?: number
 }): Promise<CollectionTask> =>
   (await apiClient.post<CollectionTask>('/collection-tasks/', payload)).data
 
