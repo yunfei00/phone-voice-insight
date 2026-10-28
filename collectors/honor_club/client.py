@@ -119,12 +119,16 @@ class HonorClubClient:
                 content.extend(chunk)
                 if len(content) > _MAX_RESPONSE_BYTES:
                     raise CollectorError("荣耀俱乐部响应过大; 已停止读取", code="RESPONSE_TOO_LARGE")
+            decoded_headers = {
+                key: value
+                for key, value in streamed.headers.items()
+                if key.casefold() not in {"content-encoding", "content-length"}
+            }
             return httpx.Response(
                 status_code=streamed.status_code,
-                headers=streamed.headers,
+                headers=decoded_headers,
                 content=bytes(content),
                 request=streamed.request,
-                extensions=streamed.extensions,
             )
 
     def get_html(self, url: str, *, request_interval_seconds: float) -> HonorHttpResponse:

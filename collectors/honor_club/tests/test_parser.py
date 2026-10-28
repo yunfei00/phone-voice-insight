@@ -1,3 +1,4 @@
+import gzip
 import os
 from pathlib import Path
 
@@ -195,6 +196,24 @@ def test_external_redirect_is_rejected_before_following() -> None:
             request_interval_seconds=3,
         )
     assert requested_urls == ["https://club.honor.com/cn/thread-30295048-1-1.html"]
+
+
+def test_compressed_response_is_decoded_once() -> None:
+    html = "<html><body>荣耀 Power2</body></html>"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html; charset=utf-8", "content-encoding": "gzip"},
+            content=gzip.compress(html.encode()),
+            request=request,
+        )
+
+    response = HonorClubClient(transport=httpx.MockTransport(handler)).get_html(
+        "https://club.honor.com/cn/threadtopic-595-1.html",
+        request_interval_seconds=3,
+    )
+    assert response.text == html
 
 
 @pytest.mark.skipif(os.getenv("RUN_HONOR_LIVE_TESTS") != "1", reason="live Honor test disabled")
