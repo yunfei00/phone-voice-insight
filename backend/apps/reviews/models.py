@@ -349,6 +349,10 @@ class GovernanceAIReview(TimeStampedModel):
     prompt_tokens = models.PositiveIntegerField(null=True, blank=True)
     completion_tokens = models.PositiveIntegerField(null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    human_decision = models.BooleanField(null=True, blank=True)
+    human_reason = models.TextField(blank=True)
+    human_reviewer = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.PROTECT)
+    human_reviewed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("-created_at", "-id")
