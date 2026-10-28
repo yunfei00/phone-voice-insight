@@ -84,7 +84,7 @@ export const getBrands = async (): Promise<PaginatedResponse<{ id: number; name:
 export const createBrand = async (payload: { name: string; code: string }) =>
   (await apiClient.post('/brands/', payload)).data
 
-export const createProduct = async (payload: { brand_id: number; name: string; normalized_name: string; series: string; model_code: string }) =>
+export const createProduct = async (payload: { brand_id: number; name: string }) =>
   (await apiClient.post<Product>('/products/', payload)).data
 
 export const updateProduct = async (id: number, payload: { name: string; series: string; model_code: string; is_active: boolean }) =>
