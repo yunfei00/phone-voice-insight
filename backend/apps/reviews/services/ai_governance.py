@@ -39,11 +39,16 @@ def validate_ai_governance_response(raw: str, original_content: str) -> dict:
 def review_quality_with_ai(quality_id: int, provider: AIProvider, *, force: bool = False) -> GovernanceAIReview:
     quality = ReviewQuality.objects.select_related("review__product", "review__source").get(pk=quality_id)
     review = quality.review
+    parent = None
+    if quality.context_required and review.parent_external_id:
+        parent = type(review).objects.filter(
+            source_id=review.source_id, external_id=review.parent_external_id
+        ).exclude(pk=review.pk).order_by('-id').first()
     digest = hashlib.sha256(
         json.dumps(
             [review.title, review.content, quality.context_required, quality.eligible_for_ai,
              quality.exclusion_reason, quality.processor_version, provider.provider_name,
-             provider.model, PROMPT_VERSION],
+             provider.model, PROMPT_VERSION, parent.content if parent else ''],
             ensure_ascii=False,
         ).encode("utf-8")
     ).hexdigest()
@@ -61,12 +66,6 @@ def review_quality_with_ai(quality_id: int, provider: AIProvider, *, force: bool
     try:
         if not review.content.strip():
             raise ValueError("EMPTY_REVIEW_CONTENT")
-        parent = None
-        if quality.context_required and review.parent_external_id:
-            parent = type(review).objects.filter(
-                source_id=review.source_id,
-                external_id=review.parent_external_id,
-            ).exclude(pk=review.pk).order_by('-id').first()
         request = ReviewAnalysisInput(
             review_id=str(review.id),
             product_model=review.product.name,
