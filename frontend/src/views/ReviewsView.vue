@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 
 import { getReviewFacets, getReviews, getSources } from '@/api'
 import type { DataSource, ReviewRecord } from '@/types/api'
 
 const reviews = ref<ReviewRecord[]>([])
+const route = useRoute()
 const sources = ref<DataSource[]>([])
-const facets = ref<{ variants: { product_variant_id: number; product_variant__sku_name: string; count: number }[]; regions: { source_region: string; count: number }[]; ratings: { rating: string; count: number }[] }>({ variants: [], regions: [], ratings: [] })
+const facets = ref<{
+  variants: { product_variant_id: number; product_variant__sku_name: string; count: number }[]
+  regions: { source_region: string; count: number }[]
+  ratings: { rating: string; count: number }[]
+}>({ variants: [], regions: [], ratings: [] })
 const selected = ref<ReviewRecord | null>(null)
 const loading = ref(false)
 const error = ref('')
@@ -18,6 +24,10 @@ const filters = reactive({
   rating: undefined as number | undefined,
   search: '',
   source_region: '',
+  product: route.query.product ? Number(route.query.product) : (undefined as number | undefined),
+  source_target: route.query.source_target
+    ? Number(route.query.source_target)
+    : (undefined as number | undefined),
   record_type: '',
   author_role: '',
   is_official: '' as '' | 'true' | 'false',
@@ -34,6 +44,8 @@ async function loadReviews(): Promise<void> {
       author_role: filters.author_role || undefined,
       search: filters.search || undefined,
       source_region: filters.source_region || undefined,
+      product: filters.product,
+      source_target: filters.source_target,
     })
     reviews.value = response.results
     total.value = response.count
@@ -68,7 +80,6 @@ onMounted(async () => {
     <div class="page-header">
       <div>
         <h1 class="page-title">原始数据</h1>
-
       </div>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
@@ -82,8 +93,29 @@ onMounted(async () => {
             :value="source.id"
           />
         </el-select>
-<el-select v-model="filters.source_region" clearable placeholder="来源地域" @change="applyFilters"><el-option v-for="region in facets.regions" :key="region.source_region" :label="`${region.source_region} (${region.count})`" :value="region.source_region" /><el-option label="未知地域" value="__UNKNOWN__" /></el-select>
-        <el-select v-if="facets.ratings.length" v-model="filters.rating" clearable placeholder="原始评分" @change="applyFilters"><el-option v-for="item in facets.ratings" :key="item.rating" :label="`${item.rating} 分 (${item.count})`" :value="Number(item.rating)" /></el-select>
+        <el-select
+          v-model="filters.source_region"
+          clearable
+          placeholder="来源地域"
+          @change="applyFilters"
+          ><el-option
+            v-for="region in facets.regions"
+            :key="region.source_region"
+            :label="`${region.source_region} (${region.count})`"
+            :value="region.source_region" /><el-option label="未知地域" value="__UNKNOWN__"
+        /></el-select>
+        <el-select
+          v-if="facets.ratings.length"
+          v-model="filters.rating"
+          clearable
+          placeholder="原始评分"
+          @change="applyFilters"
+          ><el-option
+            v-for="item in facets.ratings"
+            :key="item.rating"
+            :label="`${item.rating} 分 (${item.count})`"
+            :value="Number(item.rating)"
+        /></el-select>
         <el-select
           v-model="filters.record_type"
           clearable
@@ -131,16 +163,28 @@ onMounted(async () => {
       >
         <el-table-column prop="source_name" label="来源" width="120" />
         <el-table-column prop="product_name" label="产品" width="150" />
-        <el-table-column label="来源地域" width="130"><template #default="{ row }">{{ row.source_region || "未知" }}</template></el-table-column>
+        <el-table-column label="来源地域" width="130"
+          ><template #default="{ row }">{{
+            row.source_region || '未知'
+          }}</template></el-table-column
+        >
         <el-table-column prop="record_type" label="类型" width="130" />
         <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip />
-        <el-table-column label="原始评分" width="100"><template #default="{ row }">{{ row.rating == null ? "未提供" : row.rating }}</template></el-table-column>
+        <el-table-column label="原始评分" width="100"
+          ><template #default="{ row }">{{
+            row.rating == null ? '未提供' : row.rating
+          }}</template></el-table-column
+        >
         <el-table-column label="角色" width="90">
           <template #default="{ row }: { row: ReviewRecord }">
             <el-tag :type="row.is_official ? 'warning' : 'info'">{{ row.author_role }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="发布时间" min-width="170"><template #default="{ row }">{{ row.published_at || "未提供" }}</template></el-table-column>
+        <el-table-column label="发布时间" min-width="170"
+          ><template #default="{ row }">{{
+            row.published_at || '未提供'
+          }}</template></el-table-column
+        >
         <el-table-column prop="collected_at" label="采集时间" min-width="170" />
       </el-table>
 
@@ -163,18 +207,26 @@ onMounted(async () => {
       <template v-if="selected">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="来源">{{ selected.source_name }}</el-descriptions-item>
-          <el-descriptions-item label="来源地域">{{ selected.source_region || "未知" }}</el-descriptions-item>
-          <el-descriptions-item label="地域依据">{{ selected.region_evidence || "未提供" }}</el-descriptions-item>
+          <el-descriptions-item label="来源地域">{{
+            selected.source_region || '未知'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="地域依据">{{
+            selected.region_evidence || '未提供'
+          }}</el-descriptions-item>
           <el-descriptions-item label="产品">{{ selected.product_name }}</el-descriptions-item>
           <el-descriptions-item label="类型">{{ selected.record_type }}</el-descriptions-item>
-          <el-descriptions-item label="评分">{{ selected.rating ?? '未提供' }}</el-descriptions-item>
+          <el-descriptions-item label="评分">{{
+            selected.rating ?? '未提供'
+          }}</el-descriptions-item>
           <el-descriptions-item label="标题">{{ selected.title || '—' }}</el-descriptions-item>
           <el-descriptions-item label="内容">{{ selected.content }}</el-descriptions-item>
           <el-descriptions-item label="发布时间">{{
             selected.published_at || '—'
           }}</el-descriptions-item>
           <el-descriptions-item label="采集时间">{{ selected.collected_at }}</el-descriptions-item>
-          <el-descriptions-item label="软件版本">{{ selected.software_version || "未提供" }}</el-descriptions-item>
+          <el-descriptions-item label="软件版本">{{
+            selected.software_version || '未提供'
+          }}</el-descriptions-item>
           <el-descriptions-item label="角色">{{ selected.author_role }}</el-descriptions-item>
           <el-descriptions-item label="External ID">{{
             selected.external_id || '—'

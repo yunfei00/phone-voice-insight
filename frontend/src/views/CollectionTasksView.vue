@@ -23,7 +23,11 @@ const startingIds = ref(new Set<number>())
 const scheduleDialogVisible = ref(false)
 const newTaskVisible = ref(false)
 const newTaskSubmitting = ref(false)
-const newTaskForm = reactive({ source_target: undefined as number | undefined, task_type: 'INCREMENTAL' as 'FULL' | 'INCREMENTAL', requested_limit: 10 })
+const newTaskForm = reactive({
+  source_target: undefined as number | undefined,
+  task_type: 'INCREMENTAL' as 'FULL' | 'INCREMENTAL',
+  requested_limit: 10,
+})
 const scheduleSubmitting = ref(false)
 const scheduleTarget = ref<CollectionTargetState | null>(null)
 const historyVisible = ref(false)
@@ -85,10 +89,16 @@ async function loadTargets(silent = false): Promise<void> {
   try {
     const response = await getCollectionTargets({ page_size: 100 })
     targets.value = response.results
-    const activeIds = targets.value.map((target) => target.active_task).filter((id): id is number => id !== null)
+    const activeIds = targets.value
+      .map((target) => target.active_task)
+      .filter((id): id is number => id !== null)
     if (activeIds.length) {
       const activePage = await getCollectionTasks({ page_size: 100, ordering: '-created_at' })
-      activeTasks.value = Object.fromEntries(activePage.results.filter((task) => activeIds.includes(task.id)).map((task) => [task.id, task]))
+      activeTasks.value = Object.fromEntries(
+        activePage.results
+          .filter((task) => activeIds.includes(task.id))
+          .map((task) => [task.id, task]),
+      )
     } else activeTasks.value = {}
     refreshedAt.value = new Date().toLocaleTimeString('zh-CN')
     if (silent && !targets.value.some((item) => Boolean(item.active_task))) stopPolling()
@@ -112,7 +122,14 @@ function taskProgress(target: CollectionTargetState): string {
   const task = activeTask(target)
   if (!task) return target.active_task ? '正在读取任务进度…' : '无运行任务'
   const checkpoint = task.last_checkpoint || {}
-  const location = Object.entries(checkpoint).filter(([key, value]) => /page|thread|cursor/i.test(key) && ['string', 'number'].includes(typeof value)).slice(0, 3).map(([key, value]) => `${key}: ${value}`).join(' · ')
+  const location = Object.entries(checkpoint)
+    .filter(
+      ([key, value]) =>
+        /page|thread|cursor/i.test(key) && ['string', 'number'].includes(typeof value),
+    )
+    .slice(0, 3)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(' · ')
   return `任务 #${task.id} · 新增 ${task.new_records} · 重复 ${task.duplicate_records} · 失败 ${task.failure_count}${location ? ' · ' + location : ''}`
 }
 
@@ -173,7 +190,8 @@ async function submitNewTask(): Promise<void> {
     const task = await createCollectionTask({
       source_target: newTaskForm.source_target,
       task_type: newTaskForm.task_type,
-      requested_limit: newTaskForm.task_type === 'INCREMENTAL' ? newTaskForm.requested_limit : undefined,
+      requested_limit:
+        newTaskForm.task_type === 'INCREMENTAL' ? newTaskForm.requested_limit : undefined,
     })
     // Creation and execution are separate API operations.
     await runCollectionTask(task.id)
@@ -192,7 +210,11 @@ async function submitNewTask(): Promise<void> {
 async function recoverStale(target: CollectionTargetState): Promise<void> {
   if (!target.active_task) return
   try {
-    await ElMessageBox.confirm('仅当任务超过 15 分钟无更新且来源租约已过期时允许恢复。请先确认 Worker 没有仍在处理该任务。', '恢复异常任务', { type: 'warning' })
+    await ElMessageBox.confirm(
+      '仅当任务超过 15 分钟无更新且来源租约已过期时允许恢复。请先确认 Worker 没有仍在处理该任务。',
+      '恢复异常任务',
+      { type: 'warning' },
+    )
     await recoverStaleCollectionTask(target.active_task)
     ElMessage.success('异常任务已标记失败，可重新创建采集')
     await loadTargets(true)
@@ -268,7 +290,13 @@ onUnmounted(stopPolling)
         <h1 class="page-title">采集控制</h1>
         <p class="page-description">每个采集入口只有一个控制中心：先验证完整基线，之后自动增量。</p>
       </div>
-      <div><span v-if="refreshedAt" class="refresh-time">最近刷新 {{ refreshedAt }} · 运行中每 5 秒自动更新</span><el-button type="primary" :disabled="!auth.canWrite" @click="newTaskVisible = true">新增采集</el-button><el-button :loading="loading" @click="loadTargets()">刷新</el-button></div>
+      <div>
+        <span v-if="refreshedAt" class="refresh-time"
+          >最近刷新 {{ refreshedAt }} · 运行中每 5 秒自动更新</span
+        ><el-button type="primary" :disabled="!auth.canWrite" @click="newTaskVisible = true"
+          >新增采集</el-button
+        ><el-button :loading="loading" @click="loadTargets()">刷新</el-button>
+      </div>
     </div>
 
     <el-alert
@@ -296,7 +324,28 @@ onUnmounted(stopPolling)
           </el-tag>
         </div>
 
-        <div v-if="target.active_task" class="live-progress"><strong>实时采集状态</strong><p>{{ taskProgress(target) }}</p><p>状态：{{ activeTask(target)?.status || target.active_task_status }} · 最近心跳：{{ formatTime(activeTask(target)?.updated_at || null) }}</p><el-alert v-if="staleTask(target)" type="warning" :closable="false" title="任务超过 10 分钟未更新，可能卡住或 Worker 已停止；请检查任务详情与 Worker 日志，暂勿重复创建任务。" /><el-button size="small" @click="openHistory(target)">查看任务详情</el-button><el-button v-if="staleTask(target) && auth.canWrite" size="small" type="warning" @click="recoverStale(target)">安全恢复</el-button></div>
+        <div v-if="target.active_task" class="live-progress">
+          <strong>实时采集状态</strong>
+          <p>{{ taskProgress(target) }}</p>
+          <p>
+            状态：{{ activeTask(target)?.status || target.active_task_status }} · 最近心跳：{{
+              formatTime(activeTask(target)?.updated_at || null)
+            }}
+          </p>
+          <el-alert
+            v-if="staleTask(target)"
+            type="warning"
+            :closable="false"
+            title="任务超过 10 分钟未更新，可能卡住或 Worker 已停止；请检查任务详情与 Worker 日志，暂勿重复创建任务。"
+          /><el-button size="small" @click="openHistory(target)">查看任务详情</el-button
+          ><el-button
+            v-if="staleTask(target) && auth.canWrite"
+            size="small"
+            type="warning"
+            @click="recoverStale(target)"
+            >安全恢复</el-button
+          >
+        </div>
         <div class="state-block" :class="{ verified: target.full_verified }">
           <span class="state-label">数据基线</span>
           <strong>{{ baselineText(target) }}</strong>
@@ -360,7 +409,37 @@ onUnmounted(stopPolling)
       <el-empty v-if="!loading && !targets.length" description="暂无可用采集入口" />
     </div>
 
-    <el-dialog v-model="newTaskVisible" title="新增采集任务" width="min(480px, 92vw)"><el-form label-position="top"><el-form-item label="采集入口"><el-select v-model="newTaskForm.source_target" placeholder="选择采集入口"><el-option v-for="target in targets" :key="target.source_target" :label="`${target.product_name} / ${target.target_name}`" :value="target.source_target" :disabled="Boolean(target.active_task)" /></el-select></el-form-item><el-form-item label="任务类型"><el-radio-group v-model="newTaskForm.task_type"><el-radio value="INCREMENTAL">增量测试</el-radio><el-radio value="FULL">全量校验</el-radio></el-radio-group></el-form-item><el-form-item v-if="newTaskForm.task_type === 'INCREMENTAL'" label="最多扫描帖子数"><el-input-number v-model="newTaskForm.requested_limit" :min="1" :max="100" /></el-form-item><el-alert title="已有活动任务的入口不可重复创建。增量采集依赖已验证的全量基线；重新抓取旧帖应使用后续的定向复采功能。" type="info" :closable="false" /></el-form><template #footer><el-button @click="newTaskVisible = false">取消</el-button><el-button type="primary" :loading="newTaskSubmitting" @click="submitNewTask">创建并启动</el-button></template></el-dialog>
+    <el-dialog v-model="newTaskVisible" title="新增采集任务" width="min(480px, 92vw)"
+      ><el-form label-position="top"
+        ><el-form-item label="采集入口"
+          ><el-select v-model="newTaskForm.source_target" placeholder="选择采集入口"
+            ><el-option
+              v-for="target in targets"
+              :key="target.source_target"
+              :label="`${target.product_name} / ${target.target_name}`"
+              :value="target.source_target"
+              :disabled="Boolean(target.active_task)" /></el-select></el-form-item
+        ><el-form-item label="任务类型"
+          ><el-radio-group v-model="newTaskForm.task_type"
+            ><el-radio value="INCREMENTAL">增量测试</el-radio
+            ><el-radio value="FULL">全量校验</el-radio></el-radio-group
+          ></el-form-item
+        ><el-form-item v-if="newTaskForm.task_type === 'INCREMENTAL'" label="最多扫描帖子数"
+          ><el-input-number
+            v-model="newTaskForm.requested_limit"
+            :min="1"
+            :max="100" /></el-form-item
+        ><el-alert
+          title="已有活动任务的入口不可重复创建。增量采集依赖已验证的全量基线；重新抓取旧帖应使用后续的定向复采功能。"
+          type="info"
+          :closable="false" /></el-form
+      ><template #footer
+        ><el-button @click="newTaskVisible = false">取消</el-button
+        ><el-button type="primary" :loading="newTaskSubmitting" @click="submitNewTask"
+          >创建并启动</el-button
+        ></template
+      ></el-dialog
+    >
     <el-dialog v-model="scheduleDialogVisible" title="定时增量设置" width="min(460px, 92vw)">
       <el-form label-position="top">
         <el-form-item label="采集入口">
@@ -468,9 +547,22 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
-.live-progress { margin-top: 16px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #eff6ff; }
-.live-progress p { margin: 8px 0; overflow-wrap: anywhere; }
-.refresh-time { margin-right: 12px; color: #667085; font-size: 12px; }
+.live-progress {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+.live-progress p {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.refresh-time {
+  margin-right: 12px;
+  color: #667085;
+  font-size: 12px;
+}
 .notice {
   margin-bottom: 16px;
 }

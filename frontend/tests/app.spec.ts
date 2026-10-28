@@ -87,9 +87,8 @@ vi.mock('@/api', () => ({
 const expectedNavigationLabels = [
   '数据总览',
   '手机产品',
-  '采集任务',
   '帖子视图',
-  '原始反馈',
+  '原始数据',
   '数据质量',
   'AI结构化分析',
   'AI质量中心',
@@ -146,7 +145,7 @@ describe('App', () => {
       (item) => item.textContent?.trim(),
     )
     expect(navigationLabels).toEqual(expectedNavigationLabels)
-    expect(new Set(navigationLabels).size).toBe(12)
+    expect(new Set(navigationLabels).size).toBe(11)
     expect(container.querySelector('.el-menu--collapse')).toBeNull()
     expect(container.querySelector('.brand-copy')).not.toBeNull()
 
@@ -165,8 +164,8 @@ describe('App', () => {
     expect(container.querySelector('.sidebar')?.classList.contains('collapsed')).toBe(true)
     expect(container.querySelector('.nav-menu')?.classList.contains('el-menu--collapse')).toBe(true)
     expect(container.querySelector('.brand-copy')).toBeNull()
-    expect(container.querySelectorAll('.nav-menu .el-menu-item')).toHaveLength(12)
-    expect(container.querySelectorAll('.nav-menu .el-menu-item .el-icon')).toHaveLength(12)
+    expect(container.querySelectorAll('.nav-menu .el-menu-item')).toHaveLength(11)
+    expect(container.querySelectorAll('.nav-menu .el-menu-item .el-icon')).toHaveLength(11)
     expect(collapseButton?.getAttribute('aria-label')).toBe('展开菜单')
     expect(collapseButton?.textContent?.trim()).toBe('')
     expect(window.localStorage.getItem('pvi.sidebar.collapsed')).toBe('true')

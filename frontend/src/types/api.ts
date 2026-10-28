@@ -84,6 +84,11 @@ export interface SourceTarget {
   target_url: string
   external_id: string
   is_active: boolean
+  validation_status: 'UNVERIFIED' | 'VALID' | 'INVALID'
+  validated_at: string | null
+  validation_error_code: string
+  validation_error_message: string
+  validation_report: Record<string, unknown>
 }
 
 export interface DataSource {
@@ -93,6 +98,28 @@ export interface DataSource {
   source_type: 'ECOMMERCE' | 'COMMUNITY'
   is_active: boolean
   targets: SourceTarget[]
+}
+
+export interface SourceTargetCleanupPreview {
+  source_target_id: number
+  product_id: number
+  product_name: string
+  source_name: string
+  target_name: string
+  target_url: string
+  thread_count: number
+  reply_count: number
+  other_record_count: number
+  review_quality_count: number
+  review_quality_run_count: number
+  corpus_item_count: number
+  analysis_result_count: number
+  analysis_run_count: number
+  structured_analysis_count: number
+  collection_task_count: number
+  collection_run_count: number
+  active_collection_count: number
+  active_analysis_count: number
 }
 
 export type CollectionStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUCCESS' | 'FAILED' | 'CANCELLED'
@@ -172,6 +199,15 @@ export interface CollectionTargetState {
   schedule_enabled: boolean
   schedule_interval_hours: number | null
   has_historical_data: boolean
+  validation_status: 'UNVERIFIED' | 'VALID' | 'INVALID'
+  validated_at: string | null
+  validation_error_message: string
+  last_task_type: 'FULL' | 'INCREMENTAL' | null
+  last_task_status: CollectionStatus | null
+  last_new_threads: number
+  last_new_replies: number
+  last_failure_count: number
+  progress_stage: string
 }
 
 export interface CollectionTaskRunResponse {

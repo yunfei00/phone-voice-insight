@@ -19,6 +19,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
+import { CURRENT_PHASE_LABEL } from '@/config/project'
 
 const SIDEBAR_STORAGE_KEY = 'pvi.sidebar.collapsed'
 const DESKTOP_SIDEBAR_WIDTH = 220
@@ -44,7 +45,6 @@ const sidebarCollapsed = ref(initialSidebarCollapsed())
 const baseNavigationItems = [
   { path: '/dashboard', label: '数据总览', icon: Monitor },
   { path: '/products', label: '手机产品', icon: Iphone },
-  { path: '/collection-tasks', label: '采集任务', icon: List },
   { path: '/threads', label: '帖子视图', icon: ChatLineSquare },
   { path: '/reviews', label: '原始数据', icon: Document },
   { path: '/data-quality', label: '数据质量', icon: CircleCheck },
@@ -56,7 +56,11 @@ const baseNavigationItems = [
   { path: '/system', label: '系统状态', icon: Cpu },
 ]
 const navigationItems = computed(() => [
-  ...baseNavigationItems,
+  ...baseNavigationItems.flatMap((item) =>
+    item.path === '/products' && auth.isAdmin
+      ? [item, { path: '/collection-tasks', label: '采集任务', icon: List }]
+      : [item],
+  ),
   ...(auth.isAdmin ? [{ path: '/users', label: '用户管理', icon: UserFilled }] : []),
 ])
 const activePath = computed(
@@ -157,6 +161,7 @@ watch(sidebarCollapsed, (collapsed) => {
             <el-icon><Expand v-if="sidebarCollapsed" /><Fold v-else /></el-icon>
           </el-button>
         </el-tooltip>
+        <span class="phase-label">{{ CURRENT_PHASE_LABEL }}</span>
         <div class="topbar-right">
           <el-dropdown trigger="click" @command="handleUserCommand">
             <button class="user-trigger" type="button">

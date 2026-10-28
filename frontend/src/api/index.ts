@@ -20,6 +20,7 @@ import type {
   PersonalAIConfiguration,
   Product,
   SamplePreview,
+  SourceTargetCleanupPreview,
   ThreadDetail,
   ThreadPage,
   ReviewQuality,
@@ -78,8 +79,9 @@ export const getHealth = async (): Promise<HealthStatus> =>
 export const getProducts = async (params: PageParams = {}): Promise<PaginatedResponse<Product>> =>
   (await apiClient.get<PaginatedResponse<Product>>('/products/', { params })).data
 
-export const getBrands = async (): Promise<PaginatedResponse<{ id: number; name: string; code: string }>> =>
-  (await apiClient.get('/brands/', { params: { page_size: 100 } })).data
+export const getBrands = async (): Promise<
+  PaginatedResponse<{ id: number; name: string; code: string }>
+> => (await apiClient.get('/brands/', { params: { page_size: 100 } })).data
 
 export const createBrand = async (payload: { name: string; code: string }) =>
   (await apiClient.post('/brands/', payload)).data
@@ -87,14 +89,36 @@ export const createBrand = async (payload: { name: string; code: string }) =>
 export const createProduct = async (payload: { brand_id: number; name: string }) =>
   (await apiClient.post<Product>('/products/', payload)).data
 
-export const updateProduct = async (id: number, payload: { name: string; series: string; model_code: string; is_active: boolean }) =>
-  (await apiClient.patch<Product>(`/products/${id}/`, payload)).data
+export const updateProduct = async (
+  id: number,
+  payload: Partial<{ name: string; series: string; model_code: string; is_active: boolean }>,
+) => (await apiClient.patch<Product>(`/products/${id}/`, payload)).data
 
-export const createSourceTarget = async (payload: { source: number; product: number; name: string; target_type: 'COMMUNITY'; target_url: string; external_id: string; is_active: boolean }) =>
-  (await apiClient.post('/source-targets/', payload)).data
+export const createSourceTarget = async (payload: {
+  source: number
+  product: number
+  name: string
+  target_type: 'COMMUNITY'
+  target_url: string
+  external_id: string
+  is_active: boolean
+}) => (await apiClient.post('/source-targets/', payload)).data
 
-export const updateSourceTarget = async (id: number, payload: { target_url: string; external_id: string }) =>
-  (await apiClient.patch(`/source-targets/${id}/`, payload)).data
+export const updateSourceTarget = async (
+  id: number,
+  payload: { target_url: string; external_id: string },
+) => (await apiClient.patch(`/source-targets/${id}/`, payload)).data
+
+export const validateSourceTarget = async (id: number) =>
+  (await apiClient.post(`/source-targets/${id}/validate/`)).data
+
+export const getSourceTargetCleanupPreview = async (
+  id: number,
+): Promise<SourceTargetCleanupPreview> =>
+  (await apiClient.get<SourceTargetCleanupPreview>(`/source-targets/${id}/cleanup-preview/`)).data
+
+export const cleanupSourceTarget = async (id: number, confirmation: string) =>
+  (await apiClient.post(`/source-targets/${id}/cleanup/`, { confirmation })).data
 
 export const getSources = async (params: PageParams = {}): Promise<PaginatedResponse<DataSource>> =>
   (await apiClient.get<PaginatedResponse<DataSource>>('/sources/', { params })).data
@@ -116,8 +140,14 @@ export const getCollectionTargets = async (
     })
   ).data
 
-export const startSmartCollection = async (stateId: number): Promise<{task_id:number; task_type?:'FULL'|'INCREMENTAL'; existing?:boolean; status:string}> =>
-  (await apiClient.post(`/collection-targets/${stateId}/start-smart/`)).data
+export const startSmartCollection = async (
+  stateId: number,
+): Promise<{
+  task_id: number
+  task_type?: 'FULL' | 'INCREMENTAL'
+  existing?: boolean
+  status: string
+}> => (await apiClient.post(`/collection-targets/${stateId}/start-smart/`)).data
 
 export const startFullCollection = async (stateId: number): Promise<CollectionTaskRunResponse> =>
   (await apiClient.post<CollectionTaskRunResponse>(`/collection-targets/${stateId}/start-full/`))
