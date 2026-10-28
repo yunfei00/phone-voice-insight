@@ -93,6 +93,9 @@ export const updateProduct = async (id: number, payload: { name: string; series:
 export const createSourceTarget = async (payload: { source: number; product: number; name: string; target_type: 'COMMUNITY'; target_url: string; external_id: string; is_active: boolean }) =>
   (await apiClient.post('/source-targets/', payload)).data
 
+export const updateSourceTarget = async (id: number, payload: { target_url: string; external_id: string }) =>
+  (await apiClient.patch(`/source-targets/${id}/`, payload)).data
+
 export const getSources = async (params: PageParams = {}): Promise<PaginatedResponse<DataSource>> =>
   (await apiClient.get<PaginatedResponse<DataSource>>('/sources/', { params })).data
 
