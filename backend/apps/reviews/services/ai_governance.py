@@ -83,7 +83,8 @@ def review_quality_with_ai(quality_id: int, provider: AIProvider, *, force: bool
             software_version=review.software_version or None,
             published_at=review.published_at.isoformat() if review.published_at else None,
         )
-        response = provider.analyze_review(request, prompt=PROMPT_PATH.read_text(encoding="utf-8"))
+        prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        response = provider.analyze_review(request, prompt=prompt)
         payload = validate_ai_governance_response(response.content, review.content)
         item.ai_eligible = payload["eligible"]
         item.confidence = float(payload["confidence"])
@@ -102,9 +103,20 @@ def review_quality_with_ai(quality_id: int, provider: AIProvider, *, force: bool
     except AIProviderError as exc:
         item.status = GovernanceAIReview.Status.FAILED
         item.error_code = exc.code[:80]
-    except (ValueError, TypeError, ValidationError, OSError):
+    except (ValueError, TypeError, ValidationError, OSError) as exc:
         item.status = GovernanceAIReview.Status.FAILED
-        item.error_code = "INVALID_AI_OUTPUT"
+        if isinstance(exc, OSError):
+            item.error_code = "PROMPT_FILE_ERROR"
+        elif isinstance(exc, ValidationError):
+            item.error_code = "INVALID_REVIEW_INPUT"
+        elif isinstance(exc, json.JSONDecodeError):
+            item.error_code = "AI_INVALID_JSON"
+        elif str(exc) == "EMPTY_REVIEW_CONTENT":
+            item.error_code = "EMPTY_REVIEW_CONTENT"
+        elif str(exc).startswith("INVALID_"):
+            item.error_code = str(exc)[:80]
+        else:
+            item.error_code = "INVALID_AI_OUTPUT"
     item.reviewed_at = timezone.now()
     item.save()
     return item
