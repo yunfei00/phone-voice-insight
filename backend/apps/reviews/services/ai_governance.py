@@ -61,6 +61,12 @@ def review_quality_with_ai(quality_id: int, provider: AIProvider, *, force: bool
     try:
         if not review.content.strip():
             raise ValueError("EMPTY_REVIEW_CONTENT")
+        parent = None
+        if quality.context_required and review.parent_external_id:
+            parent = type(review).objects.filter(
+                source_id=review.source_id,
+                external_id=review.parent_external_id,
+            ).exclude(pk=review.pk).order_by('-id').first()
         request = ReviewAnalysisInput(
             review_id=str(review.id),
             product_model=review.product.name,
@@ -70,6 +76,9 @@ def review_quality_with_ai(quality_id: int, provider: AIProvider, *, force: bool
             record_type=review.record_type,
             author_role=review.author_role,
             content_purpose=quality.content_purpose,
+            parent_review_id=str(parent.id) if parent else '',
+            parent_content=parent.content[:2000] if parent else '',
+            context_text=(parent.content[:2000] if parent and quality.context_required else ''),
             is_official=review.is_official,
             rating=float(review.rating) if review.rating is not None else None,
             software_version=review.software_version or None,
