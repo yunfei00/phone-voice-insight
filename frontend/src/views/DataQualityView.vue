@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
-import { getDataQualitySummary, getReviewQualities, getProducts, processGovernanceBatch, startAsyncGovernance, getGovernanceTaskHistory, getGovernanceTaskStatus, retryGovernanceTask, startGovernanceAIReview, getGovernanceAIHistory, getGovernanceAIResults, confirmGovernanceAIReview } from '@/api'
+import { getDataQualitySummary, getReviewQualities, getProducts, processGovernanceBatch, startAsyncGovernance, getGovernanceTaskHistory, getGovernanceTaskStatus, retryGovernanceTask, startGovernanceAIReview, getGovernanceAIHistory, getGovernanceAIResults, confirmGovernanceAIReview, retryGovernanceAIBatch } from '@/api'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import type { Product, DataQualitySummary, ExclusionReason, ReviewQuality } from '@/types/api'
@@ -254,6 +254,20 @@ function startAIPolling(): void {
   aiPollTimer = setInterval(() => { void loadAIReviews() }, 3000)
 }
 
+async function retryAIReview(batchId: number): Promise<void> {
+  aiBusy.value = true
+  try {
+    await retryGovernanceAIBatch(batchId)
+    ElMessage.success('失败数据已重新提交')
+    await loadAIReviews()
+    startAIPolling()
+  } catch {
+    ElMessage.error('重试失败，请检查后台任务状态')
+  } finally {
+    aiBusy.value = false
+  }
+}
+
 async function startAIReview(): Promise<void> {
   if (!governanceProduct.value) return
   aiBusy.value = true
@@ -385,6 +399,11 @@ onUnmounted(() => { stopTaskPolling(); stopAIPolling() })
         <el-table-column prop="succeeded" label="通过" />
         <el-table-column prop="review_required" label="待人工确认" />
         <el-table-column prop="failed" label="失败" />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-button v-if="row.failed > 0 || row.status === 'FAILED'" size="small" :disabled="aiBusy" @click="retryAIReview(row.id)">重试失败</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <el-table :data="aiResults" size="small">
         <el-table-column prop="review_id" label="记录 ID" width="95" />
