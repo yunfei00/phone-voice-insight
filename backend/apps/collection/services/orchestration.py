@@ -41,6 +41,7 @@ def create_collection_task(
     task_type: str,
     trigger_type: str = CollectionTriggerType.MANUAL,
     requested_limit: int | None = None,
+    requested_pages: int | None = None,
 ) -> CollectionTask:
     state, _ = CollectionTargetState.objects.get_or_create(source_target=source_target)
     state = CollectionTargetState.objects.select_for_update().get(pk=state.pk)
@@ -59,6 +60,7 @@ def create_collection_task(
         task_type=task_type,
         trigger_type=trigger_type,
         requested_limit=requested_limit,
+        requested_pages=requested_pages,
     )
     state.active_task = task
     state.status = (
