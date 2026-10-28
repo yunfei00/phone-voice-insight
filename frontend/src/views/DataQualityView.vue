@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 
-import { getDataQualitySummary, getReviewQualities } from '@/api'
-import type { DataQualitySummary, ExclusionReason, ReviewQuality } from '@/types/api'
+import { getDataQualitySummary, getReviewQualities, getProducts, processGovernanceBatch } from '@/api'
+import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+import type { Product, DataQualitySummary, ExclusionReason, ReviewQuality } from '@/types/api'
 
 const emptySummary = (): DataQualitySummary => ({
   total: 0,
@@ -33,6 +35,12 @@ const emptySummary = (): DataQualitySummary => ({
   },
 })
 
+const auth = useAuthStore()
+const products = ref<Product[]>([])
+const governanceProduct = ref<number | undefined>(undefined)
+const governanceLimit = ref(20)
+const governanceBusy = ref(false)
+const preview = ref<{ total: number; eligible: number; excluded: number } | null>(null)
 const rows = ref<ReviewQuality[]>([])
 const summary = ref<DataQualitySummary>(emptySummary())
 const loading = ref(false)
@@ -117,7 +125,35 @@ function ratio(value: number): string {
   return summary.value.total ? `${((value / summary.value.total) * 100).toFixed(1)}%` : '0.0%'
 }
 
-onMounted(loadData)
+async function runGovernance(dryRun: boolean): Promise<void> {
+  if (!governanceProduct.value) return
+  governanceBusy.value = true
+  try {
+    const result = await processGovernanceBatch({
+      product_id: governanceProduct.value,
+      limit: governanceLimit.value,
+      dry_run: dryRun,
+    })
+    preview.value = result
+    ElMessage.success(dryRun ? '预览完成，未写入治理结果' : '批量治理完成')
+    if (!dryRun) await loadData()
+  } catch {
+    ElMessage.error('治理执行失败，请检查管理员权限或后端日志')
+  } finally {
+    governanceBusy.value = false
+  }
+}
+
+onMounted(async () => {
+  await loadData()
+  if (auth.isAdmin) {
+    try {
+      products.value = (await getProducts({ page_size: 100 })).results
+    } catch {
+      ElMessage.warning('产品列表加载失败')
+    }
+  }
+})
 </script>
 
 <template>
@@ -146,6 +182,24 @@ onMounted(loadData)
         <span>可用率</span><strong>{{ (summary.eligibility_rate * 100).toFixed(1) }}%</strong>
       </div>
     </div>
+
+    <section v-if="auth.isAdmin" class="panel governance-actions">
+      <h3>手动数据治理</h3>
+      <p>先预览，再执行。每批最多 100 条；当前为同步小批量处理。</p>
+      <div class="filters">
+        <el-select v-model="governanceProduct" placeholder="选择手机产品" style="width: 230px">
+          <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" />
+        </el-select>
+        <el-input-number v-model="governanceLimit" :min="1" :max="100" />
+        <el-button :disabled="!governanceProduct" :loading="governanceBusy" @click="runGovernance(true)">预览治理</el-button>
+        <el-popconfirm title="确认写入本批治理结果？原始记录不会修改。" @confirm="runGovernance(false)">
+          <template #reference>
+            <el-button type="primary" :disabled="!governanceProduct || governanceBusy" :loading="governanceBusy">执行治理</el-button>
+          </template>
+        </el-popconfirm>
+      </div>
+      <p v-if="preview">本批处理 {{ preview.total }} 条，可用 {{ preview.eligible }} 条，排除 {{ preview.excluded }} 条。</p>
+    </section>
 
     <section class="panel breakdown">
       <div v-for="item in breakdown" :key="item[0]">
@@ -265,6 +319,7 @@ onMounted(loadData)
 
 <style scoped>
 .notice,
+.governance-actions,
 .breakdown,
 .filters,
 .table-panel {
