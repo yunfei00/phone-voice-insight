@@ -1,5 +1,7 @@
 from django.db import transaction
 from django.db.models import Exists, OuterRef
+from django.utils import timezone
+from datetime import timedelta
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.mixins import CreateModelMixin, ListModelMixin, RetrieveModelMixin
@@ -9,6 +11,7 @@ from rest_framework.viewsets import GenericViewSet, ModelViewSet, ReadOnlyModelV
 
 from apps.collection.models import (
     CollectionSchedule,
+    CollectionSourceLease,
     CollectionStatus,
     CollectionTargetState,
     CollectionTask,
@@ -23,6 +26,8 @@ from apps.collection.serializers import (
 from apps.collection.services.orchestration import (
     CollectionAlreadyActive,
     claim_existing_task,
+    release_source_lease,
+    release_target,
     create_collection_task,
 )
 from apps.collection.tasks import run_collection_task
@@ -104,6 +109,36 @@ class CollectionTaskViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+    @action(detail=True, methods=("post",), url_path="recover-stale")
+    def recover_stale(self, request: Request, pk: str | None = None) -> Response:
+        """Explicit, guarded recovery: never override a live source lease."""
+        del request, pk
+        with transaction.atomic():
+            task = CollectionTask.objects.select_for_update().select_related("source_target__source").get(
+                pk=self.get_object().pk
+            )
+            if task.status not in (CollectionStatus.PENDING, CollectionStatus.RUNNING, CollectionStatus.PAUSED):
+                return Response({"detail": "任务不是活动状态"}, status=status.HTTP_409_CONFLICT)
+            if task.updated_at > timezone.now() - timedelta(minutes=15):
+                return Response({"detail": "任务最近仍有更新，拒绝恢复"}, status=status.HTTP_409_CONFLICT)
+            lease = CollectionSourceLease.objects.select_for_update().filter(
+                source=task.source_target.source
+            ).first()
+            if lease and lease.owner_task_id == task.id and lease.expires_at and lease.expires_at > timezone.now():
+                return Response({"detail": "来源租约仍有效，拒绝恢复"}, status=status.HTTP_409_CONFLICT)
+            task.status = CollectionStatus.FAILED
+            task.finished_at = timezone.now()
+            task.error_message = "STALE_TASK_RECOVERY: 人工确认超时且无有效来源租约"
+            task.save(update_fields=("status", "finished_at", "error_message", "updated_at"))
+            task.runs.filter(status=CollectionStatus.RUNNING).update(
+                status=CollectionStatus.FAILED, finished_at=timezone.now(),
+                error_message=task.error_message,
+            )
+            release_source_lease(task.id)
+            release_target(task, success=False, error=task.error_message)
+        return Response(self.get_serializer(task).data)
 
 
 class CollectionTargetStateViewSet(ReadOnlyModelViewSet):
