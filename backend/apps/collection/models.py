@@ -15,6 +15,7 @@ class CollectionStatus(models.TextChoices):
     SUCCESS = "SUCCESS", "成功"
     FAILED = "FAILED", "失败"
     CANCELLED = "CANCELLED", "已取消"
+    STOPPING = "STOPPING", "停止中"
 
 
 class CollectionTaskType(models.TextChoices):
@@ -51,8 +52,10 @@ ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
         CollectionStatus.SUCCESS,
         CollectionStatus.FAILED,
         CollectionStatus.CANCELLED,
+        CollectionStatus.STOPPING,
     },
-    CollectionStatus.PAUSED: {CollectionStatus.RUNNING, CollectionStatus.CANCELLED},
+    CollectionStatus.PAUSED: {CollectionStatus.RUNNING, CollectionStatus.CANCELLED, CollectionStatus.STOPPING},
+    CollectionStatus.STOPPING: {CollectionStatus.CANCELLED},
     CollectionStatus.SUCCESS: {CollectionStatus.PENDING},
     CollectionStatus.FAILED: {CollectionStatus.PENDING, CollectionStatus.RUNNING},
     CollectionStatus.CANCELLED: set(),
@@ -107,7 +110,7 @@ class CollectionTask(TimeStampedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=("source_target",),
-                condition=models.Q(status__in=("PENDING", "RUNNING", "PAUSED")),
+                condition=models.Q(status__in=("PENDING", "RUNNING", "PAUSED", "STOPPING")),
                 name="uniq_active_collection_per_target",
             )
         ]
