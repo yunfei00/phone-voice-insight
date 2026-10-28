@@ -25,6 +25,7 @@ from apps.collection.views import CollectionScheduleViewSet, CollectionTargetSta
 from apps.common.views import health
 from apps.products.views import BrandViewSet, ProductViewSet
 from apps.reviews.views import ReviewQualityViewSet, ReviewRecordViewSet, ThreadTreeViewSet
+from apps.reviews.ai_views import GovernanceAIViewSet
 from apps.sources.views import DataSourceViewSet, SourceTargetViewSet
 
 router = DefaultRouter()
@@ -39,6 +40,7 @@ router.register("collection-targets", CollectionTargetStateViewSet, basename="co
 router.register("reviews", ReviewRecordViewSet, basename="review")
 router.register("thread-trees", ThreadTreeViewSet, basename="thread-tree")
 router.register("review-quality", ReviewQualityViewSet, basename="review-quality")
+router.register("governance-ai", GovernanceAIViewSet, basename="governance-ai")
 router.register("analysis-results", AnalysisResultViewSet, basename="analysis-result")
 router.register("analysis-batches", AnalysisBatchViewSet, basename="analysis-batch")
 router.register("structured-runs", StructuredRunViewSet, basename="structured-run")
