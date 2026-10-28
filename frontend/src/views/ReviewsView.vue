@@ -67,6 +67,15 @@ async function loadMetadata(): Promise<void> {
   })
 }
 
+function formatPublishedAt(value: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(date)
+  const part = (type: string) => parts.find(item => item.type === type)?.value || ''
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
+}
+
 function formatRate(value: number): string {
   return `${(value * 100).toFixed(2)}%`
 }
@@ -200,7 +209,7 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column label="发布时间" min-width="170"
           ><template #default="{ row }">{{
-            row.published_at || '未提供'
+            formatPublishedAt(row.published_at)
           }}</template></el-table-column
         >
         <el-table-column prop="collected_at" label="采集时间" min-width="170" />
@@ -230,7 +239,7 @@ onMounted(async () => {
           <el-descriptions-item label="标题">{{ selected.title || '—' }}</el-descriptions-item>
           <el-descriptions-item label="内容">{{ selected.content }}</el-descriptions-item>
           <el-descriptions-item label="发布时间">{{
-            selected.published_at || '—'
+            formatPublishedAt(selected.published_at)
           }}</el-descriptions-item>
           <el-descriptions-item label="采集时间">{{ selected.collected_at }}</el-descriptions-item>
           <el-descriptions-item label="软件版本">{{
