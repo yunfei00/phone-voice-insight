@@ -210,6 +210,17 @@ async function loadGovernanceTasks(): Promise<void> {
   }
 }
 
+function aiBatchStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    PENDING: '等待执行',
+    RUNNING: '正在执行',
+    SUCCESS: '已完成',
+    PARTIAL: '部分失败',
+    FAILED: '失败',
+  }
+  return labels[status] || status
+}
+
 async function loadAIReviews(): Promise<void> {
   if (!auth.isAdmin) return
   try {
@@ -391,7 +402,7 @@ onUnmounted(() => { stopTaskPolling(); stopAIPolling() })
       <el-table :data="aiBatches" size="small" style="margin-bottom: 12px">
         <el-table-column prop="id" label="任务编号" width="95" />
         <el-table-column label="状态" width="120">
-          <template #default="{ row }">{{ ({ PENDING: '等待执行', RUNNING: '正在执行', SUCCESS: '已完成', PARTIAL: '部分失败', FAILED: '失败' } as Record<string, string>)[row.status] || row.status }}</template>
+          <template #default="{ row }">{{ aiBatchStatusLabel(row.status) }}</template>
         </el-table-column>
         <el-table-column label="进度">
           <template #default="{ row }">{{ row.processed }} / {{ row.total }}</template>
