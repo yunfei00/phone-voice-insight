@@ -94,9 +94,10 @@ def test_invalid_ai_governance_response_is_rejected(response: str) -> None:
 
 
 def test_governance_prompt_exists() -> None:
-    from apps.reviews.services.ai_governance import PROMPT_PATH
+    from apps.reviews.services.ai_governance import _PROMPT_CANDIDATES, PROMPT_PATH
 
     assert PROMPT_PATH.is_file(), f"Governance AI prompt missing: {PROMPT_PATH}"
+    assert PROMPT_PATH in _PROMPT_CANDIDATES
     assert "eligible" in PROMPT_PATH.read_text(encoding="utf-8")
 
 

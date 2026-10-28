@@ -9,13 +9,18 @@ from pathlib import Path
 
 from ai.providers import AIProvider, AIProviderError
 from ai.schemas.review_analysis import ReviewAnalysisInput
+from django.conf import settings
 from django.utils import timezone
 from pydantic import ValidationError
 
 from apps.reviews.models import GovernanceAIReview, ReviewQuality
 
 PROMPT_VERSION = "governance_review_v1"
-PROMPT_PATH = Path(__file__).resolve().parents[4] / "prompts" / f"{PROMPT_VERSION}.md"
+_PROMPT_CANDIDATES = (
+    Path(settings.BASE_DIR) / "prompts" / f"{PROMPT_VERSION}.md",
+    Path(settings.BASE_DIR).parent / "prompts" / f"{PROMPT_VERSION}.md",
+)
+PROMPT_PATH = next((path for path in _PROMPT_CANDIDATES if path.is_file()), _PROMPT_CANDIDATES[0])
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.I | re.S)
 
 
