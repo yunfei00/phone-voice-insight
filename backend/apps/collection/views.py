@@ -36,7 +36,7 @@ from apps.collection.services.orchestration import (
     release_target,
 )
 from apps.collection.services.smart_collection import SmartCollectionRejected, start_smart_collection
-from apps.collection.tasks import run_collection_task
+from apps.collection.tasks import dispatch_next_source_task, enqueue_collection_task
 from apps.reviews.models import ReviewRecord
 
 
@@ -118,12 +118,12 @@ class CollectionTaskViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin
                     task.last_checkpoint = {}
                 task.save(update_fields=("status", "error_message", "last_checkpoint", "updated_at"))
 
-        async_result = run_collection_task.delay(task.id)
+        async_result = enqueue_collection_task(task.id, force=True)
         return Response(
             {
                 "task_id": task.id,
                 "status": CollectionStatus.PENDING,
-                "celery_task_id": async_result.id,
+                "celery_task_id": str(getattr(async_result, "id", "")),
             },
             status=status.HTTP_202_ACCEPTED,
         )
@@ -132,11 +132,13 @@ class CollectionTaskViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin
     def stop(self, request: Request, pk: str | None = None) -> Response:
         """Request cooperative cancellation; RUNNING workers acknowledge at a safe boundary."""
         del request, pk
+        source_id: int | None = None
         with transaction.atomic():
             task = CollectionTask.objects.select_for_update().get(pk=self.get_object().pk)
             if task.status in (CollectionStatus.CANCELLED, CollectionStatus.STOPPING):
                 return Response({"task_id": task.id, "status": task.status})
             if task.status == CollectionStatus.PENDING:
+                source_id = task.source_target.source_id
                 task.transition_to(CollectionStatus.CANCELLED)
                 task.finished_at = timezone.now()
                 task.save(update_fields=("status", "finished_at", "updated_at"))
@@ -146,7 +148,9 @@ class CollectionTaskViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin
                 task.transition_to(CollectionStatus.STOPPING)
                 task.save(update_fields=("status", "updated_at"))
             else:
-                return Response({"detail": "任务已结束，无法停止"}, status=status.HTTP_409_CONFLICT)
+                return Response({"detail": "任务已结束。无法停止。"}, status=status.HTTP_409_CONFLICT)
+        if source_id is not None:
+            dispatch_next_source_task(source_id, force=True)
         return Response({"task_id": task.id, "status": task.status}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=("post",), url_path="recover-stale")
@@ -161,23 +165,50 @@ class CollectionTaskViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin
             )
             if task.status not in (CollectionStatus.PENDING, CollectionStatus.RUNNING, CollectionStatus.PAUSED):
                 return Response({"detail": "任务不是活动状态"}, status=status.HTTP_409_CONFLICT)
-            if task.updated_at > timezone.now() - timedelta(minutes=15):
+            heartbeat = task.heartbeat_at or task.updated_at
+            if heartbeat > timezone.now() - timedelta(minutes=15):
                 return Response({"detail": "任务最近仍有更新 无法恢复"}, status=status.HTTP_409_CONFLICT)
             lease = CollectionSourceLease.objects.select_for_update().filter(source=task.source_target.source).first()
             if lease and lease.owner_task_id == task.id and lease.expires_at and lease.expires_at > timezone.now():
                 return Response({"detail": "来源租约仍有效 无法恢复"}, status=status.HTTP_409_CONFLICT)
-            task.status = CollectionStatus.FAILED
-            task.finished_at = timezone.now()
+            old_token = task.execution_token
+            task.status = CollectionStatus.PENDING
+            task.finished_at = None
+            task.execution_token = None
+            task.heartbeat_at = None
+            task.dispatch_token = None
+            task.dispatched_at = None
+            task.waiting_reason = "管理员确认失联。等待从检查点恢复"
             task.error_message = "STALE_TASK_RECOVERY: 人工确认超时且无有效来源租约"
-            task.save(update_fields=("status", "finished_at", "error_message", "updated_at"))
+            task.save(
+                update_fields=(
+                    "status",
+                    "finished_at",
+                    "execution_token",
+                    "heartbeat_at",
+                    "dispatch_token",
+                    "dispatched_at",
+                    "waiting_reason",
+                    "error_message",
+                    "updated_at",
+                )
+            )
             task.runs.filter(status=CollectionStatus.RUNNING).update(
                 status=CollectionStatus.FAILED,
                 finished_at=timezone.now(),
                 error_message=task.error_message,
             )
-            release_source_lease(task.id)
-            release_target(task, success=False, error=task.error_message)
-        return Response(self.get_serializer(task).data)
+            release_source_lease(task.id, old_token)
+            CollectionTargetState.objects.filter(source_target=task.source_target).update(
+                active_task=task,
+                status="WAITING",
+                last_error=task.error_message,
+                updated_at=timezone.now(),
+            )
+        async_result = enqueue_collection_task(task.id, force=True)
+        data = self.get_serializer(task).data
+        data["celery_task_id"] = str(getattr(async_result, "id", ""))
+        return Response(data, status=status.HTTP_202_ACCEPTED)
 
 
 class CollectionTargetStateViewSet(ReadOnlyModelViewSet):
@@ -221,9 +252,13 @@ class CollectionTargetStateViewSet(ReadOnlyModelViewSet):
                 },
                 status=status.HTTP_409_CONFLICT,
             )
-        async_result = run_collection_task.delay(task.id)
+        async_result = enqueue_collection_task(task.id)
         return Response(
-            {"task_id": task.id, "status": task.status, "celery_task_id": async_result.id},
+            {
+                "task_id": task.id,
+                "status": task.status,
+                "celery_task_id": str(getattr(async_result, "id", "")),
+            },
             status=status.HTTP_202_ACCEPTED,
         )
 

@@ -133,7 +133,8 @@ def test_smart_collection_first_full_then_incremental(
 ) -> None:
     _mark_valid(source_target)
     monkeypatch.setattr(
-        "apps.collection.tasks.run_collection_task.delay", lambda _task_id: type("R", (), {"id": "x"})()
+        "apps.collection.tasks.enqueue_collection_task",
+        lambda _task_id, **_kwargs: type("R", (), {"id": "x"})(),
     )
     first = start_smart_collection(source_target.id)
     assert first.task.task_type == "FULL"
@@ -156,10 +157,10 @@ def test_smart_collection_submit_failure_is_not_left_pending(
 ) -> None:
     _mark_valid(source_target)
 
-    def fail(_task_id: int) -> None:
+    def fail(_task_id: int, **_kwargs: object) -> None:
         raise RuntimeError("broker down")
 
-    monkeypatch.setattr("apps.collection.tasks.run_collection_task.delay", fail)
+    monkeypatch.setattr("apps.collection.tasks.enqueue_collection_task", fail)
     with pytest.raises(SmartCollectionRejected, match="Celery"):
         start_smart_collection(source_target.id)
     task = CollectionTask.objects.get(source_target=source_target)

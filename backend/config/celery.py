@@ -17,4 +17,8 @@ app.conf.beat_schedule = {
         "task": "reconcile_collection_tasks",
         "schedule": 60.0,
     },
+    "reconcile-automatic-voice-pipeline": {
+        "task": "reconcile_automatic_voice_pipeline",
+        "schedule": 300.0,
+    },
 }

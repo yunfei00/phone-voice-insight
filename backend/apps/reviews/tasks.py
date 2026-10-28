@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from celery import shared_task
-
+from django.conf import settings
 from django.utils import timezone
-from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewRecord
+
 from apps.accounts.ai_service import get_user_ai_provider
+from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewRecord
 from apps.reviews.services.ai_governance import review_quality_with_ai
 from apps.reviews.services.governance_pipeline import GovernanceProcessor, process_reviews
 
@@ -33,7 +34,7 @@ def process_product_reviews(product_id: int, batch_size: int = 100) -> dict[str,
 
 
 @shared_task(bind=True, name="process_governance_batch")
-def process_governance_batch(self, governance_task_id: int) -> dict[str, Any]:
+def process_governance_batch(self: Any, governance_task_id: int) -> dict[str, Any]:
     """Execute the frozen batch, checkpointing progress to PostgreSQL."""
     task = GovernanceTask.objects.get(pk=governance_task_id)
     if task.status != GovernanceTask.Status.PENDING:
@@ -58,7 +59,9 @@ def process_governance_batch(self, governance_task_id: int) -> dict[str, Any]:
             task.processed += 1
             task.failures = failures
             task.save(update_fields=("eligible", "excluded", "reused", "failed", "processed", "failures", "updated_at"))
-            self.update_state(state="PROGRESS", meta={"task_id": task.id, "processed": task.processed, "total": task.total})
+            self.update_state(
+                state="PROGRESS", meta={"task_id": task.id, "processed": task.processed, "total": task.total}
+            )
     except Exception as exc:
         task.status = GovernanceTask.Status.FAILED
         task.error_message = type(exc).__name__
@@ -72,7 +75,7 @@ def process_governance_batch(self, governance_task_id: int) -> dict[str, Any]:
 
 
 @shared_task(bind=True, name="process_governance_ai_batch")
-def process_governance_ai_batch(self, batch_id: int) -> dict[str, Any]:
+def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2) -> dict[str, Any]:
     """Run a bounded AI review batch; failures are durable and individually retryable."""
     batch = GovernanceAIBatch.objects.select_related("requested_by").get(pk=batch_id)
     if batch.status != GovernanceAIBatch.Status.PENDING:
@@ -85,12 +88,29 @@ def process_governance_ai_batch(self, batch_id: int) -> dict[str, Any]:
         provider = get_user_ai_provider(batch.requested_by)
         for quality_id in batch.quality_ids:
             try:
-                result = review_quality_with_ai(quality_id, provider)
-                if result.status == GovernanceAIReview.Status.FAILED:
+                result: GovernanceAIReview | None = None
+                for attempt in range(min(max(max_attempts, 1), 3)):
+                    result = review_quality_with_ai(quality_id, provider, force=attempt > 0)
+                    batch.prompt_tokens += result.prompt_tokens or 0
+                    batch.completion_tokens += result.completion_tokens or 0
+                    if result.status != GovernanceAIReview.Status.ERROR:
+                        break
+                assert result is not None
+                if result.status in (GovernanceAIReview.Status.ERROR, GovernanceAIReview.Status.FAILED):
                     batch.failed += 1
                     batch.failure_ids.append(quality_id)
-                elif result.status == GovernanceAIReview.Status.REVIEW_REQUIRED:
+                elif result.status in (
+                    GovernanceAIReview.Status.UNCERTAIN,
+                    GovernanceAIReview.Status.REVIEW_REQUIRED,
+                ):
+                    batch.uncertain += 1
                     batch.review_required += 1
+                elif result.status == GovernanceAIReview.Status.ACCEPTED:
+                    batch.accepted += 1
+                    batch.succeeded += 1
+                elif result.status == GovernanceAIReview.Status.REJECTED:
+                    batch.rejected += 1
+                    batch.succeeded += 1
                 else:
                     batch.succeeded += 1
             except Exception:
@@ -99,8 +119,17 @@ def process_governance_ai_batch(self, batch_id: int) -> dict[str, Any]:
             batch.processed += 1
             batch.save(
                 update_fields=(
-                    "processed", "succeeded", "review_required", "failed",
-                    "failure_ids", "updated_at",
+                    "processed",
+                    "succeeded",
+                    "review_required",
+                    "failed",
+                    "accepted",
+                    "rejected",
+                    "uncertain",
+                    "prompt_tokens",
+                    "completion_tokens",
+                    "failure_ids",
+                    "updated_at",
                 )
             )
         batch.status = GovernanceAIBatch.Status.PARTIAL if batch.failed else GovernanceAIBatch.Status.SUCCESS
@@ -109,11 +138,35 @@ def process_governance_ai_batch(self, batch_id: int) -> dict[str, Any]:
         batch.error_code = str(getattr(exc, "code", type(exc).__name__))[:80]
         # Provider setup can fail before any record is processed.
         # Preserve all unprocessed ids for a later retry.
-        batch.failure_ids = list(dict.fromkeys([
-            *batch.failure_ids, *batch.quality_ids[batch.processed:],
-        ]))
+        batch.failure_ids = list(
+            dict.fromkeys(
+                [
+                    *batch.failure_ids,
+                    *batch.quality_ids[batch.processed :],
+                ]
+            )
+        )
         batch.failed = len(batch.failure_ids)
     finally:
         batch.finished_at = timezone.now()
         batch.save(update_fields=("status", "error_code", "failed", "failure_ids", "finished_at", "updated_at"))
     return {"batch_id": batch.id, "status": batch.status, "processed": batch.processed}
+
+
+@shared_task(name="run_automatic_voice_pipeline", autoretry_for=(), max_retries=0)
+def run_automatic_voice_pipeline(product_id: int, source_id: int | None = None) -> dict[str, object]:
+    from apps.reviews.services.automatic_pipeline import run_automatic_pipeline
+
+    return run_automatic_pipeline(product_id, source_id).as_dict()
+
+
+@shared_task(name="reconcile_automatic_voice_pipeline", time_limit=120, autoretry_for=(), max_retries=0)
+def reconcile_automatic_voice_pipeline() -> dict[str, int | str]:
+    if not settings.AI_AUTOMATION_ENABLED:
+        return {"status": "disabled", "queued": 0}
+    pairs = list(
+        ReviewRecord.objects.filter(quality__isnull=True).values_list("product_id", "source_id").distinct()[:20]
+    )
+    for product_id, source_id in pairs:
+        run_automatic_voice_pipeline.delay(product_id, source_id)
+    return {"status": "queued", "queued": len(pairs)}

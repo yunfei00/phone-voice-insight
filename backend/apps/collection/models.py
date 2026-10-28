@@ -32,6 +32,7 @@ class CollectionTriggerType(models.TextChoices):
 
 class CollectionTargetStatus(models.TextChoices):
     NOT_INITIALIZED = "NOT_INITIALIZED", "未初始化"
+    WAITING = "WAITING", "等待执行"
     FULL_RUNNING = "FULL_RUNNING", "全量执行中"
     INCREMENTAL_RUNNING = "INCREMENTAL_RUNNING", "增量执行中"
     READY = "READY", "已就绪"
@@ -89,6 +90,11 @@ class CollectionTask(TimeStampedModel):
     )
     requested_limit = models.PositiveIntegerField("计划采集条数", null=True, blank=True)
     requested_pages = models.PositiveIntegerField("计划采集页数", null=True, blank=True)
+    waiting_reason = models.CharField("等待原因", max_length=120, blank=True)
+    dispatch_token = models.UUIDField("派发令牌", null=True, blank=True, editable=False)
+    dispatched_at = models.DateTimeField("最近派发时间", null=True, blank=True)
+    execution_token = models.UUIDField("执行代次令牌", null=True, blank=True, editable=False)
+    heartbeat_at = models.DateTimeField("执行心跳", null=True, blank=True)
     started_at = models.DateTimeField("开始时间", null=True, blank=True)
     finished_at = models.DateTimeField("结束时间", null=True, blank=True)
     last_checkpoint = models.JSONField("最近检查点", default=dict, blank=True)
@@ -247,6 +253,7 @@ class CollectionSourceLease(TimeStampedModel):
         verbose_name="持有任务",
     )
     expires_at = models.DateTimeField("过期时间", null=True, blank=True)
+    owner_token = models.UUIDField("持有代次令牌", null=True, blank=True, editable=False)
 
 
 class CollectionScheduleEvent(TimeStampedModel):
@@ -267,6 +274,7 @@ class CollectionScheduleEvent(TimeStampedModel):
 class CollectionRun(models.Model):
     task = models.ForeignKey(CollectionTask, on_delete=models.CASCADE, related_name="runs", verbose_name="任务")
     run_number = models.PositiveIntegerField("运行序号")
+    execution_token = models.UUIDField("执行代次令牌", null=True, blank=True, editable=False)
     status = models.CharField("状态", max_length=20, choices=CollectionStatus.choices)
     started_at = models.DateTimeField("开始时间", null=True, blank=True)
     finished_at = models.DateTimeField("结束时间", null=True, blank=True)

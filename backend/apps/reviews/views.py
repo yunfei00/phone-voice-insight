@@ -1,7 +1,10 @@
-from django.db.models import Count, F, Sum
+from typing import Any
+
 from django.db import transaction
+from django.db.models import Count, F, Sum
 from rest_framework import serializers
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -17,7 +20,6 @@ from apps.reviews.serializers import (
 )
 from apps.reviews.services.governance_pipeline import apply_manual_override, clear_manual_override, process_reviews
 from apps.reviews.services.governance_selection import governance_selection
-from apps.reviews.tasks import process_governance_batch
 from apps.reviews.services.metadata_completeness import metadata_completeness as build_metadata_completeness
 from apps.reviews.services.thread_tree import (
     annotate_thread_metrics,
@@ -27,6 +29,7 @@ from apps.reviews.services.thread_tree import (
     serialize_reply_node,
     serialize_thread,
 )
+from apps.reviews.tasks import process_governance_batch
 from apps.reviews.thread_serializers import ThreadTreeQuerySerializer
 
 
@@ -40,7 +43,18 @@ class ReviewRecordViewSet(ReadOnlyModelViewSet):
     serializer_class = ReviewRecordSerializer
     filterset_class = ReviewRecordFilter
     search_fields = ("title", "content", "external_id")
-    ordering_fields = ("published_at", "collected_at", "created_at", "rating", "source__name", "product__name", "record_type", "content", "author_role", "source_region")
+    ordering_fields = (
+        "published_at",
+        "collected_at",
+        "created_at",
+        "rating",
+        "source__name",
+        "product__name",
+        "record_type",
+        "content",
+        "author_role",
+        "source_region",
+    )
 
     @action(detail=False, methods=["get"])
     def facets(self, request: Request) -> Response:
@@ -185,26 +199,35 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
             persist=not values["dry_run"],
             reprocess=values["reprocess"],
         )
-        return Response({
-            **result.as_dict(),
-            "product_id": values["product_id"],
-            "source_id": values.get("source_id"),
-            "limit": values["limit"],
-            "dry_run": values["dry_run"],
-            "reprocess": values["reprocess"],
-            "processed_review_ids": ids,
-        })
+        return Response(
+            {
+                **result.as_dict(),
+                "product_id": values["product_id"],
+                "source_id": values.get("source_id"),
+                "limit": values["limit"],
+                "dry_run": values["dry_run"],
+                "reprocess": values["reprocess"],
+                "processed_review_ids": ids,
+            }
+        )
 
     @staticmethod
-    def _task_data(task: GovernanceTask) -> dict:
+    def _task_data(task: GovernanceTask) -> dict[str, Any]:
         return {
-            "id": task.id, "status": task.status, "product_id": task.product_id,
-            "source_id": task.source_id, "total": task.total,
-            "processed": task.processed, "eligible": task.eligible,
-            "excluded": task.excluded, "reused": task.reused,
-            "failed": task.failed, "failures": task.failures,
+            "id": task.id,
+            "status": task.status,
+            "product_id": task.product_id,
+            "source_id": task.source_id,
+            "total": task.total,
+            "processed": task.processed,
+            "eligible": task.eligible,
+            "excluded": task.excluded,
+            "reused": task.reused,
+            "failed": task.failed,
+            "failures": task.failures,
             "error_message": task.error_message,
-            "created_at": task.created_at, "started_at": task.started_at,
+            "created_at": task.created_at,
+            "started_at": task.started_at,
             "finished_at": task.finished_at,
         }
 
@@ -214,7 +237,7 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
         params.is_valid(raise_exception=True)
         values = params.validated_data
         if values["dry_run"]:
-            return Response({"detail": "异步任务不支持预览，请使用 process-batch 接口"}, status=400)
+            return Response({"detail": "异步任务不支持预览。请使用 process-batch 接口。"}, status=400)
         # Serialize concurrent submissions for the same product to prevent overlapping reservations.
         with transaction.atomic():
             product = Product.objects.select_for_update().filter(pk=values["product_id"]).first()
@@ -228,9 +251,15 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
             )
             if not ids:
                 return Response({"detail": "没有待治理的数据", "total": 0}, status=409)
+            user_id = request.user.pk
+            if user_id is None:
+                return Response({"detail": "用户身份无效"}, status=403)
             task = GovernanceTask.objects.create(
-                product=product, source_id=values.get("source_id"),
-                requested_by=request.user, review_ids=ids, total=len(ids),
+                product=product,
+                source_id=values.get("source_id"),
+                requested_by_id=user_id,
+                review_ids=ids,
+                total=len(ids),
                 reprocess=values["reprocess"],
             )
         try:
@@ -250,15 +279,20 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
             task_id = int(request.query_params.get("task_id", ""))
         except (TypeError, ValueError):
             return Response({"detail": "无效任务标识"}, status=400)
-        task = GovernanceTask.objects.filter(pk=task_id, requested_by=request.user).first()
+        task = GovernanceTask.objects.filter(pk=task_id, requested_by_id=request.user.pk).first()
         if task is None:
             return Response({"detail": "任务不存在"}, status=404)
         return Response(self._task_data(task))
 
     @action(detail=False, methods=("get",), url_path="task-history", permission_classes=[IsAdministrator])
     def task_history(self, request: Request) -> Response:
-        tasks = GovernanceTask.objects.filter(requested_by=request.user).order_by("-id")[:30]
-        return Response({"results": [self._task_data(task) for task in tasks]})
+        tasks = GovernanceTask.objects.filter(requested_by_id=request.user.pk).order_by("-id")
+        if product_id := request.query_params.get("product_id"):
+            tasks = tasks.filter(product_id=int(product_id))
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        page = paginator.paginate_queryset(tasks, request)
+        return paginator.get_paginated_response([self._task_data(task) for task in (page or [])])
 
     @action(detail=False, methods=("post",), url_path="retry-failed", permission_classes=[IsAdministrator])
     def retry_failed(self, request: Request) -> Response:
@@ -266,19 +300,26 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
             task_id = int(request.data.get("task_id", ""))
         except (TypeError, ValueError):
             return Response({"detail": "无效任务标识"}, status=400)
-        original = GovernanceTask.objects.filter(pk=task_id, requested_by=request.user).first()
+        original = GovernanceTask.objects.filter(pk=task_id, requested_by_id=request.user.pk).first()
         if original is None:
             return Response({"detail": "任务不存在"}, status=404)
         if original.status not in {GovernanceTask.Status.PARTIAL, GovernanceTask.Status.FAILED}:
             return Response({"detail": "任务未处于失败状态"}, status=400)
         failed_ids = [item["review_id"] for item in original.failures]
         if not failed_ids and original.status == GovernanceTask.Status.FAILED:
-            failed_ids = original.review_ids[original.processed:]
+            failed_ids = original.review_ids[original.processed :]
         if not failed_ids:
             return Response({"detail": "没有可重试的记录"}, status=400)
+        user_id = request.user.pk
+        if user_id is None:
+            return Response({"detail": "用户身份无效"}, status=403)
         task = GovernanceTask.objects.create(
-            product=original.product, source=original.source, requested_by=request.user,
-            review_ids=failed_ids, total=len(failed_ids), reprocess=True,
+            product=original.product,
+            source=original.source,
+            requested_by_id=user_id,
+            review_ids=failed_ids,
+            total=len(failed_ids),
+            reprocess=True,
         )
         try:
             queued = process_governance_batch.delay(task.id)

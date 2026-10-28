@@ -2,11 +2,29 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
-import { getReviewFacets, getReviewMetadataCompleteness, getReviews, getSources, getProducts } from '@/api'
+import {
+  getReviewFacets,
+  getReviewMetadataCompleteness,
+  getReviews,
+  getSources,
+  getProducts,
+} from '@/api'
 import type { DataSource, ReviewMetadataCompleteness, ReviewRecord, Product } from '@/types/api'
 
-const recordTypeLabels: Record<string, string> = { REVIEW: '评价', APPEND_REVIEW: '追评', THREAD: '帖子', REPLY: '回复', OFFICIAL_REPLY: '官方回复' }
-const authorRoleLabels: Record<string, string> = { USER: '普通用户', OFFICIAL: '官方', MODERATOR: '版主', EXPERT: '达人', UNKNOWN: '未知' }
+const recordTypeLabels: Record<string, string> = {
+  REVIEW: '评价',
+  APPEND_REVIEW: '追评',
+  THREAD: '帖子',
+  REPLY: '回复',
+  OFFICIAL_REPLY: '官方回复',
+}
+const authorRoleLabels: Record<string, string> = {
+  USER: '普通用户',
+  OFFICIAL: '官方',
+  MODERATOR: '版主',
+  EXPERT: '达人',
+  UNKNOWN: '未知',
+}
 const reviews = ref<ReviewRecord[]>([])
 const route = useRoute()
 const sources = ref<DataSource[]>([])
@@ -74,8 +92,17 @@ function formatPublishedAt(value: string | null): string {
   if (!value) return ''
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(date)
-  const part = (type: string) => parts.find(item => item.type === type)?.value || ''
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const part = (type: string) => parts.find((item) => item.type === type)?.value || ''
   return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
 }
 
@@ -83,15 +110,24 @@ function formatRate(value: number): string {
   return `${(value * 100).toFixed(2)}%`
 }
 
-function onSortChange(sort: { prop: string | null; order: 'ascending' | 'descending' | null }): void {
+function onSortChange(sort: {
+  prop: string | null
+  order: 'ascending' | 'descending' | null
+}): void {
   const fields: Record<string, string> = {
-    source_name: 'source__name', product_name: 'product__name', record_type: 'record_type',
-    content: 'content', author_role: 'author_role', ip_location: 'source_region',
-    published_at: 'published_at', collected_at: 'collected_at',
+    source_name: 'source__name',
+    product_name: 'product__name',
+    record_type: 'record_type',
+    content: 'content',
+    author_role: 'author_role',
+    ip_location: 'source_region',
+    published_at: 'published_at',
+    collected_at: 'collected_at',
   }
-  filters.ordering = sort.prop && sort.order && fields[sort.prop]
-    ? `${sort.order === 'descending' ? '-' : ''}${fields[sort.prop]}`
-    : '-published_at'
+  filters.ordering =
+    sort.prop && sort.order && fields[sort.prop]
+      ? `${sort.order === 'descending' ? '-' : ''}${fields[sort.prop]}`
+      : '-published_at'
   filters.page = 1
   void loadReviews()
 }
@@ -136,11 +172,32 @@ onMounted(async () => {
         <strong>{{ formatRate(metadata.summary.published_at_rate) }}</strong>
         <small>{{ metadata.summary.published_at_count }} / {{ metadata.summary.total }}</small>
       </div>
+      <div class="metadata-card">
+        <span>公开 IP 属地完整率</span>
+        <strong>{{ formatRate(metadata.summary.ip_location_rate) }}</strong>
+        <small>{{ metadata.summary.ip_location_count }} / {{ metadata.summary.total }}</small>
+      </div>
+      <div class="metadata-card">
+        <span>用户填写地区完整率</span>
+        <strong>{{ formatRate(metadata.summary.profile_region_rate) }}</strong>
+        <small>{{ metadata.summary.profile_region_count }} / {{ metadata.summary.total }}</small>
+      </div>
     </div>
     <div class="panel">
       <div class="filters">
-        <el-select v-model="filters.product" clearable filterable placeholder="全部产品" @change="applyFilters">
-          <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" />
+        <el-select
+          v-model="filters.product"
+          clearable
+          filterable
+          placeholder="全部产品"
+          @change="applyFilters"
+        >
+          <el-option
+            v-for="product in products"
+            :key="product.id"
+            :label="product.name"
+            :value="product.id"
+          />
         </el-select>
         <el-select v-model="filters.source" clearable placeholder="全部来源" @change="applyFilters">
           <el-option
@@ -204,10 +261,18 @@ onMounted(async () => {
             {{ recordTypeLabels[row.record_type] || row.record_type }}
           </template>
         </el-table-column>
-        <el-table-column prop="content" label="内容" sortable="custom" min-width="300" show-overflow-tooltip />
+        <el-table-column
+          prop="content"
+          label="内容"
+          sortable="custom"
+          min-width="300"
+          show-overflow-tooltip
+        />
         <el-table-column prop="author_role" label="角色" width="90" sortable="custom">
           <template #default="{ row }: { row: ReviewRecord }">
-            <el-tag :type="row.is_official ? 'warning' : 'info'">{{ authorRoleLabels[row.author_role] || row.author_role }}</el-tag>
+            <el-tag :type="row.is_official ? 'warning' : 'info'">{{
+              authorRoleLabels[row.author_role] || row.author_role
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="ip_location" label="IP 属地" sortable="custom" min-width="110" />
@@ -216,7 +281,11 @@ onMounted(async () => {
             formatPublishedAt(row.published_at)
           }}</template></el-table-column
         >
-        <el-table-column prop="collected_at" label="采集时间" sortable="custom" min-width="170"><template #default="{ row }: { row: ReviewRecord }">{{ formatPublishedAt(row.collected_at) }}</template></el-table-column>
+        <el-table-column prop="collected_at" label="采集时间" sortable="custom" min-width="170"
+          ><template #default="{ row }: { row: ReviewRecord }">{{
+            formatPublishedAt(row.collected_at)
+          }}</template></el-table-column
+        >
       </el-table>
 
       <el-pagination
@@ -239,18 +308,26 @@ onMounted(async () => {
         <el-descriptions :column="1" border>
           <el-descriptions-item label="来源">{{ selected.source_name }}</el-descriptions-item>
           <el-descriptions-item label="产品">{{ selected.product_name }}</el-descriptions-item>
-          <el-descriptions-item label="类型">{{ recordTypeLabels[selected.record_type] || selected.record_type }}</el-descriptions-item>
+          <el-descriptions-item label="类型">{{
+            recordTypeLabels[selected.record_type] || selected.record_type
+          }}</el-descriptions-item>
           <el-descriptions-item label="标题">{{ selected.title || '—' }}</el-descriptions-item>
           <el-descriptions-item label="内容">{{ selected.content }}</el-descriptions-item>
           <el-descriptions-item label="发布时间">{{
             formatPublishedAt(selected.published_at)
           }}</el-descriptions-item>
-          <el-descriptions-item label="IP 属地">{{ selected.ip_location || '' }}</el-descriptions-item>
-          <el-descriptions-item label="采集时间">{{ formatPublishedAt(selected.collected_at) }}</el-descriptions-item>
+          <el-descriptions-item label="IP 属地">{{
+            selected.ip_location || ''
+          }}</el-descriptions-item>
+          <el-descriptions-item label="采集时间">{{
+            formatPublishedAt(selected.collected_at)
+          }}</el-descriptions-item>
           <el-descriptions-item label="软件版本">{{
             selected.software_version || '未提供'
           }}</el-descriptions-item>
-          <el-descriptions-item label="角色">{{ authorRoleLabels[selected.author_role] || selected.author_role }}</el-descriptions-item>
+          <el-descriptions-item label="角色">{{
+            authorRoleLabels[selected.author_role] || selected.author_role
+          }}</el-descriptions-item>
           <el-descriptions-item label="External ID">{{
             selected.external_id || '—'
           }}</el-descriptions-item>

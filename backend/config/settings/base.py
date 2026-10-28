@@ -24,7 +24,9 @@ DEBUG = env_bool("DEBUG", False)
 ALLOWED_HOSTS = [item.strip() for item in env("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if item.strip()]
 # SSRF exception for an administrator-approved split-horizon DNS mapping.
 # A hostname alone never grants access to arbitrary private IP addresses.
-SSRF_ALLOWED_HOSTS = [item.strip().lower() for item in env("SSRF_ALLOWED_HOSTS", "club.honor.com").split(",") if item.strip()]
+SSRF_ALLOWED_HOSTS = [
+    item.strip().lower() for item in env("SSRF_ALLOWED_HOSTS", "club.honor.com").split(",") if item.strip()
+]
 SSRF_ALLOWED_PRIVATE_IPS = [item.strip() for item in env("SSRF_ALLOWED_PRIVATE_IPS", "").split(",") if item.strip()]
 
 INSTALLED_APPS = [
@@ -164,6 +166,13 @@ AI_TEMPERATURE = float(env("AI_TEMPERATURE", "0"))
 AI_MAX_OUTPUT_TOKENS = int(env("AI_MAX_OUTPUT_TOKENS", "1500"))
 AI_ALLOW_FAKE_PROVIDER = env_bool("AI_ALLOW_FAKE_PROVIDER", False)
 AI_CREDENTIAL_ENCRYPTION_KEY = env("AI_CREDENTIAL_ENCRYPTION_KEY") or SECRET_KEY
+AI_AUTOMATION_ENABLED = env_bool("AI_AUTOMATION_ENABLED", False)
+AI_AUTOMATION_BATCH_SIZE = min(max(int(env("AI_AUTOMATION_BATCH_SIZE", "10")), 1), 50)
+AI_AUTOMATION_MAX_ATTEMPTS = min(max(int(env("AI_AUTOMATION_MAX_ATTEMPTS", "2")), 1), 3)
+AI_AUTOMATION_DAILY_TOKEN_BUDGET = max(int(env("AI_AUTOMATION_DAILY_TOKEN_BUDGET", "100000")), 0)
+AI_AUTOMATION_REQUESTS_PER_MINUTE = min(max(int(env("AI_AUTOMATION_REQUESTS_PER_MINUTE", "6")), 1), 60)
+AI_LIVE_ACCEPTANCE_ENABLED = env_bool("AI_LIVE_ACCEPTANCE_ENABLED", False)
+AI_LIVE_ACCEPTANCE_MAX_ITEMS = min(max(int(env("AI_LIVE_ACCEPTANCE_MAX_ITEMS", "10")), 1), 10)
 
 LOGGING = {
     "version": 1,

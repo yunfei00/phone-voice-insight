@@ -122,7 +122,8 @@ export interface SourceTargetCleanupPreview {
   active_analysis_count: number
 }
 
-export type CollectionStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'STOPPING'
+export type CollectionStatus =
+  'PENDING' | 'RUNNING' | 'PAUSED' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'STOPPING'
 
 export interface CollectionRun {
   id: number
@@ -155,6 +156,9 @@ export interface CollectionTask {
   status: CollectionStatus
   requested_limit: number | null
   requested_pages: number | null
+  waiting_reason: string
+  dispatched_at: string | null
+  heartbeat_at: string | null
   success_count: number
   skipped_count: number
   failure_count: number
@@ -184,7 +188,8 @@ export interface CollectionTargetState {
   product_name: string
   target_name: string
   target_url: string
-  status: 'NOT_INITIALIZED' | 'FULL_RUNNING' | 'INCREMENTAL_RUNNING' | 'READY' | 'DEGRADED'
+  status:
+    'NOT_INITIALIZED' | 'WAITING' | 'FULL_RUNNING' | 'INCREMENTAL_RUNNING' | 'READY' | 'DEGRADED'
   full_verified: boolean
   full_verified_at: string | null
   active_task: number | null
@@ -679,6 +684,25 @@ export interface StructuredQuality {
   review_required: number
   human_evaluation_status: 'NOT_EVALUATED'
   accuracy_metrics: null
+}
+
+export interface StructuredAggregateItem {
+  aspect_code?: string
+  topic_code?: string
+  sentiment?: string
+  severity?: string
+  count: number
+}
+
+export interface StructuredAggregates {
+  disclaimer: string
+  content_count: number
+  opinion_count: number
+  domain_distribution: StructuredAggregateItem[]
+  topic_distribution: StructuredAggregateItem[]
+  sentiment_distribution: StructuredAggregateItem[]
+  severity_distribution: StructuredAggregateItem[]
+  high_frequency_clusters: StructuredAggregateItem[]
 }
 
 export interface StructuredBatch extends AnalysisBatch {

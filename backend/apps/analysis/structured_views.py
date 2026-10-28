@@ -60,14 +60,19 @@ class StructuredBatchViewSet(ViewSet):
         queryset = AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1").select_related(
             "product", "source"
         )
+        if product_id := request.query_params.get("product"):
+            queryset = queryset.filter(product_id=int(product_id))
+        if source_id := request.query_params.get("source"):
+            queryset = queryset.filter(source_id=int(source_id))
         page = max(int(request.query_params.get("page", 1)), 1)
         page_size = min(max(int(request.query_params.get("page_size", 20)), 1), 100)
         start = (page - 1) * page_size
+        count = queryset.count()
         return Response(
             {
-                "count": queryset.count(),
-                "next": None,
-                "previous": None,
+                "count": count,
+                "next": page + 1 if start + page_size < count else None,
+                "previous": page - 1 if page > 1 else None,
                 "results": StructuredBatchSerializer(queryset[start : start + page_size], many=True).data,
             }
         )
@@ -267,13 +272,20 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
         return Response(StructuredAnalysisSerializer(self.get_object()).data)
 
     @action(detail=False, methods=("get",), url_path="quality")
-    def quality(self, _request: Request) -> Response:
+    def quality(self, request: Request) -> Response:
         runs = AnalysisRun.objects.filter(is_current=True)
+        analyses = StructuredAnalysis.objects.filter(run__is_current=True)
+        if product_id := request.query_params.get("product"):
+            runs = runs.filter(content__product_id=int(product_id))
+            analyses = analyses.filter(content__product_id=int(product_id))
+        if source_id := request.query_params.get("source"):
+            runs = runs.filter(content__source_id=int(source_id))
+            analyses = analyses.filter(content__source_id=int(source_id))
         total = runs.count()
         successful = runs.filter(
             status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED)
         ).count()
-        schema_valid = StructuredAnalysis.objects.filter(run__is_current=True, schema_valid=True).count()
+        schema_valid = analyses.filter(schema_valid=True).count()
         error_distribution = list(
             runs.filter(status=StructuredRunStatus.FAILED)
             .values("error_code")
@@ -297,9 +309,7 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
                 "successful_runs": successful,
                 "success_rate": successful / total if total else None,
                 "schema_valid_rate": schema_valid / successful if successful else None,
-                "review_required": StructuredAnalysis.objects.filter(
-                    run__is_current=True, review_required=True
-                ).count(),
+                "review_required": analyses.filter(review_required=True).count(),
                 "human_evaluation_status": "NOT_EVALUATED",
                 "accuracy_metrics": None,
                 "error_distribution": error_distribution,

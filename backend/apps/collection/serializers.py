@@ -47,6 +47,9 @@ class CollectionTaskSerializer(serializers.ModelSerializer):
             "status",
             "requested_limit",
             "requested_pages",
+            "waiting_reason",
+            "dispatched_at",
+            "heartbeat_at",
             "started_at",
             "finished_at",
             "last_checkpoint",
@@ -67,6 +70,9 @@ class CollectionTaskSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "status",
+            "waiting_reason",
+            "dispatched_at",
+            "heartbeat_at",
             "started_at",
             "finished_at",
             "last_checkpoint",

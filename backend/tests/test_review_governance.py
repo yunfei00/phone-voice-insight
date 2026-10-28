@@ -635,13 +635,11 @@ def test_manual_governance_batch_requires_admin_and_defaults_to_preview(
     )
     url = "/api/v1/review-quality/process-batch/"
     payload = {"product_id": product.id, "limit": 20}
-    unauthenticated = api_client.post(url, payload, format="json")
+    unauthenticated = APIClient().post(url, payload, format="json")
     assert unauthenticated.status_code in (401, 403)
 
     user_model = get_user_model()
-    admin = user_model.objects.create_superuser(
-        username="governance_batch_admin", password="test-password-123"
-    )
+    admin = user_model.objects.create_superuser(username="governance_batch_admin", password="test-password-123")
     api_client.force_authenticate(user=admin)
     preview = api_client.post(url, payload, format="json")
     assert preview.status_code == 200
@@ -671,12 +669,15 @@ def test_governance_next_batch_skips_processed_and_active_reservations(
     product: Product,
 ) -> None:
     from django.contrib.auth import get_user_model
+
     from apps.reviews.models import GovernanceTask
     from apps.reviews.services.governance_selection import governance_selection
 
     reviews = [
         make_governance_review(
-            source=source, source_target=source_target, product=product,
+            source=source,
+            source_target=source_target,
+            product=product,
             external_id=f"honor_thread:next-batch-{i}",
             content=f"荣耀Power2续航体验第{i}条",
         )
@@ -687,10 +688,10 @@ def test_governance_next_batch_skips_processed_and_active_reservations(
     assert governance_selection(product_id=product.id, limit=2) == [reviews[2].id, reviews[3].id]
     user = get_user_model().objects.create_superuser(username="governance_next_admin", password="test-password-123")
     GovernanceTask.objects.create(
-        product=product, requested_by=user, total=2,
+        product=product,
+        requested_by=user,
+        total=2,
         review_ids=[reviews[2].id, reviews[3].id],
     )
     assert governance_selection(product_id=product.id, limit=2) == [reviews[4].id]
-    assert governance_selection(product_id=product.id, limit=2, reprocess=True) == [
-        reviews[0].id, reviews[1].id
-    ]
+    assert governance_selection(product_id=product.id, limit=2, reprocess=True) == [reviews[0].id, reviews[1].id]

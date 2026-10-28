@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 from collectors.base import BaseCollector, CollectionCheckpoint, CollectionRequest, CollectorError, CollectorTarget
 from collectors.honor_club.normalizer import is_product_related
@@ -73,6 +74,7 @@ def _collect_one_thread(
     collector: BaseCollector,
     target: CollectorTarget,
     item: CollectionDiscoveredThread,
+    execution_token: UUID,
 ) -> tuple[int, int, int, bool, bool]:
     inserted = duplicates = reply_pages = 0
     start_page = max(item.next_reply_page, 1)
@@ -133,7 +135,7 @@ def _collect_one_thread(
         item.reply_pages_scanned += 1
         item.next_reply_page = page_number + 1
         item.save(update_fields=("reply_pages_scanned", "next_reply_page", "updated_at"))
-        refresh_source_lease(item.task_id)
+        refresh_source_lease(item.task_id, execution_token)
     return inserted, duplicates, reply_pages, product_match, item.next_reply_page > pages
 
 
@@ -208,6 +210,9 @@ def run_honor_full_chunk(
     from apps.collection.services.collection_runner import check_collection_stop
 
     check_collection_stop(task.id)
+    if task.execution_token is None:
+        raise RuntimeError("采集任务缺少执行代次令牌")
+    execution_token = task.execution_token
     checkpoint = dict(task.last_checkpoint or {})
     phase = str(checkpoint.get("phase", "discovery"))
     inserted = duplicates = failed = 0
@@ -232,7 +237,7 @@ def run_honor_full_chunk(
                     ),
                 )
             )
-            refresh_source_lease(task.id)
+            refresh_source_lease(task.id, execution_token)
             html = _raw_text(raw_page)
             if not is_valid_topic_page(html):
                 raise CollectorError(
@@ -337,6 +342,7 @@ def run_honor_full_chunk(
                     collector=collector,
                     target=target,
                     item=item,
+                    execution_token=execution_token,
                 )
                 inserted += new_count
                 duplicates += duplicate_count

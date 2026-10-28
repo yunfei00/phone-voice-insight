@@ -15,7 +15,13 @@ import {
   saveCollectionSchedule,
 } from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import type { CollectionStatus, CollectionTargetState, CollectionTask, Product, DataSource } from '@/types/api'
+import type {
+  CollectionStatus,
+  CollectionTargetState,
+  CollectionTask,
+  Product,
+  DataSource,
+} from '@/types/api'
 
 const auth = useAuthStore()
 const targets = ref<CollectionTargetState[]>([])
@@ -23,8 +29,24 @@ const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
 const createDialogVisible = ref(false)
 const createSubmitting = ref(false)
-const createForm = reactive({ product: undefined as number | undefined, source_target: undefined as number | undefined, pages: 2, target_url: '', target_name: '' })
-const availableEntries = computed(() => sources.value.flatMap(source => (source.targets || []).filter(target => target.is_active && target.product === createForm.product).map(target => ({ id: target.id, label: `${source.name} / ${target.name}`, status: target.validation_status }))))
+const createForm = reactive({
+  product: undefined as number | undefined,
+  source_target: undefined as number | undefined,
+  pages: 2,
+  target_url: '',
+  target_name: '',
+})
+const availableEntries = computed(() =>
+  sources.value.flatMap((source) =>
+    (source.targets || [])
+      .filter((target) => target.is_active && target.product === createForm.product)
+      .map((target) => ({
+        id: target.id,
+        label: `${source.name} / ${target.name}`,
+        status: target.validation_status,
+      })),
+  ),
+)
 
 const loading = ref(false)
 const error = ref('')
@@ -94,7 +116,7 @@ function baselineText(target: CollectionTargetState): string {
 }
 
 function currentStatus(target: CollectionTargetState): string {
-  if (target.active_task_status === 'PENDING') return '等待执行'
+  if (target.active_task_status === 'PENDING') return '等待中'
   if (target.active_task_status === 'RUNNING') return staleTask(target) ? '采集可能卡住' : '采集中'
   if (target.active_task_status === 'PAUSED') return '已暂停'
   if (target.active_task_status === 'STOPPING') return '正在停止'
@@ -106,7 +128,11 @@ async function loadTargets(silent = false): Promise<void> {
   if (!silent) loading.value = true
   error.value = ''
   try {
-    const [response, productResponse, sourceResponse] = await Promise.all([getCollectionTargets({ page_size: 100 }), getProducts({ page_size: 100 }), getSources({ page_size: 100 })])
+    const [response, productResponse, sourceResponse] = await Promise.all([
+      getCollectionTargets({ page_size: 100 }),
+      getProducts({ page_size: 100 }),
+      getSources({ page_size: 100 }),
+    ])
     products.value = productResponse.results
     sources.value = sourceResponse.results
     targets.value = response.results
@@ -142,6 +168,7 @@ function staleTask(target: CollectionTargetState): boolean {
 function taskProgress(target: CollectionTargetState): string {
   const task = activeTask(target)
   if (!task) return target.active_task ? '正在读取任务进度…' : '无运行任务'
+  if (task.status === 'PENDING') return `等待中 · ${task.waiting_reason || '等待来源调度'}`
   const checkpoint = task.last_checkpoint || {}
   const location = Object.entries(checkpoint)
     .filter(
@@ -165,18 +192,28 @@ function stopPolling(): void {
 }
 
 async function startProductCollection(target: CollectionTargetState): Promise<void> {
-  if (productBusy(target)) { ElMessage.warning('该产品已有采集任务'); return }
+  if (productBusy(target)) {
+    ElMessage.warning('该产品已有采集任务')
+    return
+  }
   const mode = modeByProduct[target.product_id] || 'PAGES'
   if (mode === 'INCREMENTAL' && !target.full_verified) {
-    ElMessage.warning('请先完成全量完整性验证'); return
+    ElMessage.warning('请先完成全量完整性验证')
+    return
   }
   try {
     await ElMessageBox.confirm(
-      mode === 'PAGES' ? `确认执行最多 ${pagesByProduct[target.product_id] || 2} 页的测试采集？这不会建立全量基线。` :
-      mode === 'FULL' ? '确认开始完整全量采集？' : '确认开始增量采集？',
-      '启动采集', { type: 'warning' },
+      mode === 'PAGES'
+        ? `确认执行最多 ${pagesByProduct[target.product_id] || 2} 页的测试采集？这不会建立全量基线。`
+        : mode === 'FULL'
+          ? '确认开始完整全量采集？'
+          : '确认开始增量采集？',
+      '启动采集',
+      { type: 'warning' },
     )
-  } catch { return }
+  } catch {
+    return
+  }
   startingIds.value.add(target.id)
   try {
     const task = await createCollectionTask({
@@ -188,23 +225,34 @@ async function startProductCollection(target: CollectionTargetState): Promise<vo
     ElMessage.success(`任务 #${task.id} 已启动`)
     await loadTargets(true)
     startPolling()
-  } catch { ElMessage.error('启动失败，请检查是否存在运行中任务或采集入口状态') }
-  finally { startingIds.value.delete(target.id) }
+  } catch {
+    ElMessage.error('启动失败，请检查是否存在运行中任务或采集入口状态')
+  } finally {
+    startingIds.value.delete(target.id)
+  }
 }
 
 async function stopActive(target: CollectionTargetState): Promise<void> {
   if (!target.active_task) return
   try {
     await ElMessageBox.confirm('停止当前采集？已入库的数据将保留。', '停止采集', {
-      type: 'warning', confirmButtonText: '停止采集', cancelButtonText: '返回',
+      type: 'warning',
+      confirmButtonText: '停止采集',
+      cancelButtonText: '返回',
     })
-  } catch { return }
+  } catch {
+    return
+  }
   try {
     const result = await stopCollectionTask(target.active_task)
-    ElMessage.info(result.status === 'CANCELLED' ? '待执行任务已取消' : '已请求停止，等待当前采集步骤安全结束')
+    ElMessage.info(
+      result.status === 'CANCELLED' ? '待执行任务已取消' : '已请求停止，等待当前采集步骤安全结束',
+    )
     await loadTargets(true)
     startPolling()
-  } catch { ElMessage.error('停止请求失败，请检查任务状态或管理员权限') }
+  } catch {
+    ElMessage.error('停止请求失败，请检查任务状态或管理员权限')
+  }
 }
 
 async function recoverStale(target: CollectionTargetState): Promise<void> {
@@ -224,12 +272,15 @@ async function recoverStale(target: CollectionTargetState): Promise<void> {
 }
 
 async function submitTestCollection(): Promise<void> {
-  if (!createForm.product) { ElMessage.warning('请选择手机产品'); return }
+  if (!createForm.product) {
+    ElMessage.warning('请选择手机产品')
+    return
+  }
   createSubmitting.value = true
   try {
     let targetId = createForm.source_target
     if (!targetId) {
-      const source = sources.value.find(item => item.code === 'HONOR_CLUB')
+      const source = sources.value.find((item) => item.code === 'HONOR_CLUB')
       if (!source || !createForm.target_url.trim()) {
         ElMessage.warning('没有采集入口，请填写荣耀俱乐部入口 URL')
         return
@@ -245,14 +296,21 @@ async function submitTestCollection(): Promise<void> {
       })
       targetId = created.id
     }
-    const task = await createCollectionTask({ source_target: targetId, task_type: 'INCREMENTAL', requested_pages: createForm.pages })
+    const task = await createCollectionTask({
+      source_target: targetId,
+      task_type: 'INCREMENTAL',
+      requested_pages: createForm.pages,
+    })
     await runCollectionTask(task.id)
     createDialogVisible.value = false
     ElMessage.success(`测试任务 #${task.id} 已启动，最多采集 ${createForm.pages} 页`)
     await loadTargets(true)
     startPolling()
-  } catch { ElMessage.error('创建失败：请检查采集入口、任务占用或网络配置') }
-  finally { createSubmitting.value = false }
+  } catch {
+    ElMessage.error('创建失败：请检查采集入口、任务占用或网络配置')
+  } finally {
+    createSubmitting.value = false
+  }
 }
 
 function openSchedule(target: CollectionTargetState): void {
@@ -325,7 +383,9 @@ onUnmounted(stopPolling)
       <div>
         <span v-if="refreshedAt" class="refresh-time"
           >最近刷新 {{ refreshedAt }} · 运行中每 5 秒自动更新</span
-        ><el-button v-if="auth.canWrite" type="primary" @click="createDialogVisible = true">新建测试采集</el-button><el-button :loading="loading" @click="loadTargets()">刷新</el-button>
+        ><el-button v-if="auth.canWrite" type="primary" @click="createDialogVisible = true"
+          >新建测试采集</el-button
+        ><el-button :loading="loading" @click="loadTargets()">刷新</el-button>
       </div>
     </div>
 
@@ -339,7 +399,12 @@ onUnmounted(stopPolling)
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
 
     <div v-loading="loading" class="target-grid">
-      <el-card v-for="target in productTargets" :key="target.product_id" class="target-card" shadow="hover">
+      <el-card
+        v-for="target in productTargets"
+        :key="target.product_id"
+        class="target-card"
+        shadow="hover"
+      >
         <div class="card-heading">
           <div>
             <h2>{{ target.product_name }}</h2>
@@ -369,8 +434,16 @@ onUnmounted(stopPolling)
             title="任务超过 10 分钟未更新，可能卡住或 Worker 已停止；请检查任务详情与 Worker 日志，暂勿重复创建任务。"
           /><el-button size="small" @click="openHistory(target)">查看任务详情</el-button
           ><el-button
-            v-if="auth.canWrite && ['PENDING', 'RUNNING', 'PAUSED'].includes(activeTask(target)?.status || target.active_task_status || '')"
-            size="small" type="danger" plain @click="stopActive(target)"
+            v-if="
+              auth.canWrite &&
+              ['PENDING', 'RUNNING', 'PAUSED'].includes(
+                activeTask(target)?.status || target.active_task_status || '',
+              )
+            "
+            size="small"
+            type="danger"
+            plain
+            @click="stopActive(target)"
             >停止采集</el-button
           ><el-button
             v-if="staleTask(target) && auth.canWrite"
@@ -415,7 +488,10 @@ onUnmounted(stopPolling)
         />
 
         <div class="card-actions">
-          <el-radio-group v-model="modeByProduct[target.product_id]" :disabled="productBusy(target)">
+          <el-radio-group
+            v-model="modeByProduct[target.product_id]"
+            :disabled="productBusy(target)"
+          >
             <el-radio-button value="FULL">全量</el-radio-button>
             <el-radio-button value="INCREMENTAL">增量</el-radio-button>
             <el-radio-button value="PAGES">测试采集（指定页数）</el-radio-button>
@@ -423,10 +499,17 @@ onUnmounted(stopPolling)
           <el-input-number
             v-if="(modeByProduct[target.product_id] || 'PAGES') === 'PAGES'"
             v-model="pagesByProduct[target.product_id]"
-            :min="1" :max="10" :disabled="productBusy(target)"
+            :min="1"
+            :max="10"
+            :disabled="productBusy(target)"
           />
-          <el-button type="primary" :disabled="!auth.canWrite || productBusy(target)"
-            :loading="startingIds.has(target.id)" @click="startProductCollection(target)">开始采集</el-button>
+          <el-button
+            type="primary"
+            :disabled="!auth.canWrite || productBusy(target)"
+            :loading="startingIds.has(target.id)"
+            @click="startProductCollection(target)"
+            >开始采集</el-button
+          >
           <el-button :disabled="!auth.canWrite" @click="openSchedule(target)">定时设置</el-button>
           <el-button @click="openHistory(target)">运行历史</el-button>
         </div>
@@ -436,16 +519,56 @@ onUnmounted(stopPolling)
 
     <el-dialog v-model="createDialogVisible" title="新建测试采集任务" width="min(520px, 94vw)">
       <el-form label-position="top">
-        <el-form-item label="手机产品"><el-select v-model="createForm.product" filterable placeholder="选择产品" style="width:100%" @change="createForm.source_target = undefined"><el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" /></el-select></el-form-item>
-        <el-form-item label="已有采集入口"><el-select v-model="createForm.source_target" clearable placeholder="没有入口时可在下方新建" style="width:100%"><el-option v-for="entry in availableEntries" :key="entry.id" :label="entry.label" :value="entry.id" /></el-select></el-form-item>
+        <el-form-item label="手机产品"
+          ><el-select
+            v-model="createForm.product"
+            filterable
+            placeholder="选择产品"
+            style="width: 100%"
+            @change="createForm.source_target = undefined"
+            ><el-option
+              v-for="product in products"
+              :key="product.id"
+              :label="product.name"
+              :value="product.id" /></el-select
+        ></el-form-item>
+        <el-form-item label="已有采集入口"
+          ><el-select
+            v-model="createForm.source_target"
+            clearable
+            placeholder="没有入口时可在下方新建"
+            style="width: 100%"
+            ><el-option
+              v-for="entry in availableEntries"
+              :key="entry.id"
+              :label="entry.label"
+              :value="entry.id" /></el-select
+        ></el-form-item>
         <template v-if="!createForm.source_target">
-          <el-form-item label="荣耀俱乐部入口 URL"><el-input v-model="createForm.target_url" placeholder="https://club.honor.com/cn/threadtopic-..." /></el-form-item>
-          <el-form-item label="入口名称"><el-input v-model="createForm.target_name" placeholder="荣耀俱乐部测试入口" /></el-form-item>
+          <el-form-item label="荣耀俱乐部入口 URL"
+            ><el-input
+              v-model="createForm.target_url"
+              placeholder="https://club.honor.com/cn/threadtopic-..."
+          /></el-form-item>
+          <el-form-item label="入口名称"
+            ><el-input v-model="createForm.target_name" placeholder="荣耀俱乐部测试入口"
+          /></el-form-item>
         </template>
-        <el-form-item label="最多采集页数"><el-input-number v-model="createForm.pages" :min="1" :max="10" /></el-form-item>
-        <el-alert type="info" :closable="false" title="测试采集无需全量基线；只保存本次采集结果，不标记全量完成。新入口需符合来源 URL 校验规则。" />
+        <el-form-item label="最多采集页数"
+          ><el-input-number v-model="createForm.pages" :min="1" :max="10"
+        /></el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          title="测试采集无需全量基线；只保存本次采集结果，不标记全量完成。新入口需符合来源 URL 校验规则。"
+        />
       </el-form>
-      <template #footer><el-button @click="createDialogVisible = false">取消</el-button><el-button type="primary" :loading="createSubmitting" @click="submitTestCollection">创建并启动</el-button></template>
+      <template #footer
+        ><el-button @click="createDialogVisible = false">取消</el-button
+        ><el-button type="primary" :loading="createSubmitting" @click="submitTestCollection"
+          >创建并启动</el-button
+        ></template
+      >
     </el-dialog>
 
     <el-dialog v-model="scheduleDialogVisible" title="定时增量设置" width="min(460px, 92vw)">

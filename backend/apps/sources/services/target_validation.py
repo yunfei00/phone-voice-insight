@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import ipaddress
+import os
 import re
 import socket
 from dataclasses import dataclass
@@ -14,8 +14,8 @@ from collectors.base import CollectorError
 from collectors.honor_club.client import HonorClubClient, validate_honor_url
 from collectors.honor_club.normalizer import normalize_match_text
 from collectors.honor_club.parser import extract_topic_identity, is_valid_topic_page, parse_topic_page
-from django.utils import timezone
 from django.conf import settings
+from django.utils import timezone
 
 from apps.sources.models import SourceTarget, TargetValidationStatus
 
@@ -41,26 +41,26 @@ def diagnose_dns(hostname: str) -> dict[str, object]:
         "runtime": "docker-or-linux",
         "httpx_trust_env": False,
         "proxy_environment_present": any(
-            os.environ.get(key) for key in (
-                "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
-                "http_proxy", "https_proxy", "all_proxy",
+            os.environ.get(key)
+            for key in (
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
             )
         ),
     }
     try:
         with open("/etc/resolv.conf", encoding="utf-8") as handle:
             report["dns_nameservers"] = [
-                line.split()[1] for line in handle
-                if line.strip().startswith("nameserver ") and len(line.split()) >= 2
+                line.split()[1] for line in handle if line.strip().startswith("nameserver ") and len(line.split()) >= 2
             ]
     except OSError:
         report["dns_nameservers"] = []
     try:
-        addresses = sorted({
-            str(item[4][0]) for item in socket.getaddrinfo(
-                hostname, 443, type=socket.SOCK_STREAM
-            )
-        })
+        addresses = sorted({str(item[4][0]) for item in socket.getaddrinfo(hostname, 443, type=socket.SOCK_STREAM)})
     except OSError:
         report.update({"dns_status": "DNS_ERROR", "resolved_addresses": []})
         return report
@@ -69,8 +69,9 @@ def diagnose_dns(hostname: str) -> dict[str, object]:
     report["blocked_addresses"] = blocked
     report["dns_status"] = "SSRF_BLOCKED" if blocked else ("PUBLIC" if addresses else "DNS_ERROR")
     report["recommendation"] = (
-        "检查 Windows/WSL2/Docker DNS 分流及经批准的企业代理；禁止直接放行私网 IP"
-        if blocked else "DNS 检查通过；仍需检查真实请求路径、代理与重定向"
+        "检查 Windows/WSL2/Docker DNS 分流及经批准的企业代理。禁止直接放行私网 IP"
+        if blocked
+        else "DNS 检查通过。仍需检查真实请求路径、代理与重定向"
     )
     return report
 
@@ -79,8 +80,10 @@ def _public_addresses(hostname: str) -> list[str]:
     diagnosis = diagnose_dns(hostname)
     if diagnosis["dns_status"] == "DNS_ERROR":
         raise CollectorError("采集入口 DNS 解析失败", code="DNS_ERROR", retryable=True)
-    addresses = list(diagnosis["resolved_addresses"])
-    blocked = list(diagnosis["blocked_addresses"])
+    raw_addresses = diagnosis.get("resolved_addresses")
+    raw_blocked = diagnosis.get("blocked_addresses")
+    addresses = [str(value) for value in raw_addresses] if isinstance(raw_addresses, list) else []
+    blocked = [str(value) for value in raw_blocked] if isinstance(raw_blocked, list) else []
     if blocked:
         allowed_hosts = {host.lower().rstrip(".") for host in settings.SSRF_ALLOWED_HOSTS}
         pinned_ips = set(settings.SSRF_ALLOWED_PRIVATE_IPS)

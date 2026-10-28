@@ -64,7 +64,7 @@ def test_collection_task_run_api_queues_celery_task(
         id = "celery-test-id"
 
     task = CollectionTask.objects.create(source_target=source_target)
-    monkeypatch.setattr("apps.collection.views.run_collection_task.delay", lambda _task_id: Result())
+    monkeypatch.setattr("apps.collection.views.enqueue_collection_task", lambda _task_id, **_kwargs: Result())
 
     response = api_client.post(f"/api/v1/collection-tasks/{task.id}/run/")
 

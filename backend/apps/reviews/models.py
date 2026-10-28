@@ -302,10 +302,20 @@ class GovernanceTask(TimeStampedModel):
         PARTIAL = "PARTIAL", "部分失败"
         FAILED = "FAILED", "失败"
 
+    class TriggerType(models.TextChoices):
+        MANUAL = "MANUAL", "管理员手动"
+        AUTOMATIC = "AUTOMATIC", "采集后自动"
+
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="governance_tasks")
     source = models.ForeignKey(DataSource, on_delete=models.PROTECT, null=True, blank=True)
     requested_by = models.ForeignKey("auth.User", on_delete=models.PROTECT)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    trigger_type = models.CharField(
+        max_length=16,
+        choices=TriggerType.choices,
+        default=TriggerType.MANUAL,
+        db_index=True,
+    )
     celery_task_id = models.CharField(max_length=100, blank=True, db_index=True)
     review_ids = models.JSONField(default=list)
     reprocess = models.BooleanField(default=False)
@@ -329,6 +339,11 @@ class GovernanceAIReview(TimeStampedModel):
 
     class Status(models.TextChoices):
         PENDING = "PENDING", "待复核"
+        ACCEPTED = "ACCEPTED", "自动接受"
+        REJECTED = "REJECTED", "自动排除"
+        UNCERTAIN = "UNCERTAIN", "证据不足"
+        ERROR = "ERROR", "技术失败"
+        # Legacy values remain readable for existing rows and diagnostics.
         SUCCEEDED = "SUCCEEDED", "复核完成"
         REVIEW_REQUIRED = "REVIEW_REQUIRED", "需要人工确认"
         FAILED = "FAILED", "调用失败"
@@ -349,6 +364,7 @@ class GovernanceAIReview(TimeStampedModel):
     prompt_tokens = models.PositiveIntegerField(null=True, blank=True)
     completion_tokens = models.PositiveIntegerField(null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    attempt_count = models.PositiveSmallIntegerField(default=0)
     human_decision = models.BooleanField(null=True, blank=True)
     human_reason = models.TextField(blank=True)
     human_reviewer = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.PROTECT)
@@ -370,7 +386,15 @@ class GovernanceAIBatch(TimeStampedModel):
         FAILED = "FAILED", "失败"
 
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="governance_ai_batches")
+    source = models.ForeignKey(
+        "sources.DataSource",
+        on_delete=models.PROTECT,
+        related_name="governance_ai_batches",
+        null=True,
+        blank=True,
+    )
     requested_by = models.ForeignKey("auth.User", on_delete=models.PROTECT)
+    automatic = models.BooleanField(default=False, db_index=True)
     quality_ids = models.JSONField(default=list)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
     celery_task_id = models.CharField(max_length=100, blank=True)
@@ -379,6 +403,11 @@ class GovernanceAIBatch(TimeStampedModel):
     succeeded = models.PositiveIntegerField(default=0)
     review_required = models.PositiveIntegerField(default=0)
     failed = models.PositiveIntegerField(default=0)
+    accepted = models.PositiveIntegerField(default=0)
+    rejected = models.PositiveIntegerField(default=0)
+    uncertain = models.PositiveIntegerField(default=0)
+    prompt_tokens = models.PositiveIntegerField(default=0)
+    completion_tokens = models.PositiveIntegerField(default=0)
     failure_ids = models.JSONField(default=list)
     error_code = models.CharField(max_length=80, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)

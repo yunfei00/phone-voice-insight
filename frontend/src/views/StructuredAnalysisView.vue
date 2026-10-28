@@ -2,15 +2,38 @@
 import { ElMessage } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
 
-import { getStructuredAnalyses, getTaxonomy, reviewStructuredAnalysis } from '@/api'
+import {
+  getProducts,
+  getStructuredAggregates,
+  getStructuredAnalyses,
+  getStructuredBatches,
+  getStructuredQuality,
+  getTaxonomy,
+  reviewStructuredAnalysis,
+} from '@/api'
 import HighlightText from '@/components/HighlightText.vue'
-import type { StructuredAnalysisV1, TaxonomyDefinition } from '@/types/api'
+import type {
+  Product,
+  StructuredAggregates,
+  StructuredAnalysisV1,
+  StructuredBatch,
+  StructuredQuality,
+  TaxonomyDefinition,
+} from '@/types/api'
 
 const loading = ref(false)
 const error = ref('')
 const items = ref<StructuredAnalysisV1[]>([])
 const count = ref(0)
 const taxonomy = ref<TaxonomyDefinition>()
+const products = ref<Product[]>([])
+const selectedProduct = ref<number>()
+const quality = ref<StructuredQuality>()
+const aggregates = ref<StructuredAggregates>()
+const batches = ref<StructuredBatch[]>([])
+const batchCount = ref(0)
+const page = ref(1)
+const batchPage = ref(1)
 const filters = reactive({ search: '', aspect_code: '', sentiment: '', review_required: '' })
 const reviewVisible = ref(false)
 const reviewTarget = ref<StructuredAnalysisV1>()
@@ -21,9 +44,19 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await getStructuredAnalyses({ ...filters, page_size: 30 })
+    const scope = { product: selectedProduct.value }
+    const [response, qualityResult, aggregateResult, batchResult] = await Promise.all([
+      getStructuredAnalyses({ ...filters, ...scope, page: page.value, page_size: 10 }),
+      getStructuredQuality(scope),
+      getStructuredAggregates(scope),
+      getStructuredBatches({ ...scope, page: batchPage.value, page_size: 10 }),
+    ])
     items.value = response.results
     count.value = response.count
+    quality.value = qualityResult
+    aggregates.value = aggregateResult
+    batches.value = batchResult.results
+    batchCount.value = batchResult.count
     taxonomy.value ||= await getTaxonomy()
   } catch {
     error.value = '结构化分析数据加载失败，请稍后重试。'
@@ -68,7 +101,21 @@ async function saveReview() {
   }
 }
 
-onMounted(load)
+async function changeProduct() {
+  page.value = 1
+  batchPage.value = 1
+  await load()
+}
+
+onMounted(async () => {
+  try {
+    products.value = (await getProducts({ page_size: 100 })).results
+    selectedProduct.value = products.value[0]?.id
+  } catch {
+    ElMessage.warning('产品列表加载失败')
+  }
+  await load()
+})
 </script>
 
 <template>
@@ -76,12 +123,37 @@ onMounted(load)
     <header class="page-header">
       <div>
         <h1>AI 结构化分析</h1>
-        <p>查看观点拆分、标签、证据与人工复核状态</p>
+        <p>自动治理后的有效反馈将无人值守进入结构化分析；证据不足和技术错误不会混入问题统计。</p>
       </div>
       <el-tag effect="plain">Taxonomy {{ taxonomy?.taxonomy_version || '1.0.0' }}</el-tag>
     </header>
+    <div class="metric-grid">
+      <el-card shadow="never"
+        ><span>AI 已分析量</span><strong>{{ quality?.total_runs || 0 }}</strong></el-card
+      >
+      <el-card shadow="never"
+        ><span>有效分析量</span><strong>{{ quality?.successful_runs || 0 }}</strong></el-card
+      >
+      <el-card shadow="never"
+        ><span>明确问题/观点</span><strong>{{ aggregates?.opinion_count || 0 }}</strong></el-card
+      >
+      <el-card shadow="never"
+        ><span>分析失败量</span
+        ><strong>{{
+          (quality?.total_runs || 0) - (quality?.successful_runs || 0)
+        }}</strong></el-card
+      >
+    </div>
     <el-card shadow="never">
       <div class="filters">
+        <el-select v-model="selectedProduct" placeholder="选择手机产品" @change="changeProduct">
+          <el-option
+            v-for="product in products"
+            :key="product.id"
+            :label="product.name"
+            :value="product.id"
+          />
+        </el-select>
         <el-input
           v-model="filters.search"
           clearable
@@ -115,7 +187,7 @@ onMounted(load)
     <div v-loading="loading" class="analysis-list">
       <el-empty
         v-if="!loading && !error && !items.length"
-        description="暂无 V1 结构化分析结果；系统不会自动调用收费模型"
+        description="暂无结构化分析结果；自动流水线将在治理通过且预算可用时运行"
       />
       <el-card v-for="item in items" :key="item.id" class="analysis-card" shadow="hover">
         <template #header>
@@ -164,7 +236,50 @@ onMounted(load)
         </footer>
       </el-card>
     </div>
-    <p v-if="count" class="count">共 {{ count }} 条结果</p>
+    <el-pagination
+      v-model:current-page="page"
+      :page-size="10"
+      :total="count"
+      layout="prev, pager, next, total"
+      @current-change="load"
+    />
+    <el-card shadow="never">
+      <template #header><strong>高频问题与分类</strong></template>
+      <div class="ranking">
+        <el-tag v-for="item in aggregates?.high_frequency_clusters || []" :key="item.topic_code">
+          {{ item.topic_code }} · {{ item.count }}
+        </el-tag>
+        <el-empty
+          v-if="!aggregates?.high_frequency_clusters.length"
+          :image-size="48"
+          description="暂无聚合结果"
+        />
+      </div>
+    </el-card>
+    <el-card shadow="never">
+      <template #header><strong>最近自动分析任务</strong></template>
+      <el-table :data="batches" empty-text="暂无自动分析任务">
+        <el-table-column prop="id" label="任务 ID" width="90" />
+        <el-table-column prop="product_name" label="产品" />
+        <el-table-column prop="status" label="状态" width="110" />
+        <el-table-column label="进度"
+          ><template #default="{ row }"
+            >{{ row.success_count + row.failed_count + row.skipped_count }} /
+            {{ row.requested_count }}</template
+          ></el-table-column
+        >
+        <el-table-column prop="success_count" label="成功" width="85" />
+        <el-table-column prop="failed_count" label="失败" width="85" />
+        <el-table-column prop="total_tokens" label="Token" width="100" />
+      </el-table>
+      <el-pagination
+        v-model:current-page="batchPage"
+        :page-size="10"
+        :total="batchCount"
+        layout="prev, pager, next, total"
+        @current-change="load"
+      />
+    </el-card>
     <el-dialog
       v-model="reviewVisible"
       title="人工复核（可修改、删除或补充观点）"
@@ -204,6 +319,22 @@ footer {
 .page-header p {
   margin: 6px 0 0;
   color: #6b7280;
+}
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.metric-grid span,
+.metric-grid strong {
+  display: block;
+}
+.metric-grid span {
+  color: #6b7280;
+}
+.metric-grid strong {
+  margin-top: 8px;
+  font-size: 28px;
 }
 .filters {
   display: grid;
@@ -260,6 +391,11 @@ footer {
   text-align: center;
   color: #6b7280;
 }
+.ranking {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 @media (max-width: 900px) {
   .filters {
     grid-template-columns: 1fr;
@@ -269,6 +405,9 @@ footer {
   footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

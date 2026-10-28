@@ -18,6 +18,7 @@ import { ElMessage } from 'element-plus'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { CURRENT_PHASE_LABEL } from '@/config/project'
 import { useAuthStore } from '@/stores/auth'
 
 const SIDEBAR_STORAGE_KEY = 'pvi.sidebar.collapsed'
@@ -160,6 +161,7 @@ watch(sidebarCollapsed, (collapsed) => {
             <el-icon><Expand v-if="sidebarCollapsed" /><Fold v-else /></el-icon>
           </el-button>
         </el-tooltip>
+        <span class="phase-label">{{ CURRENT_PHASE_LABEL }}</span>
         <div class="topbar-right">
           <el-dropdown trigger="click" @command="handleUserCommand">
             <button class="user-trigger" type="button">
@@ -347,6 +349,13 @@ watch(sidebarCollapsed, (collapsed) => {
   display: inline-flex;
 }
 
+.phase-label {
+  margin-right: auto;
+  margin-left: 12px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
 .content {
   padding: 28px;
 }
@@ -400,6 +409,12 @@ watch(sidebarCollapsed, (collapsed) => {
 
   .collapse-button {
     display: none;
+  }
+
+  .phase-label {
+    margin-right: 8px;
+    margin-left: 8px;
+    font-size: 12px;
   }
 
   .content {

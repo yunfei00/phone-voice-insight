@@ -1,12 +1,15 @@
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessageBox } from 'element-plus'
 import { createApp, nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   getCollectionTargets,
   getCollectionTasks,
+  getProducts,
+  getSources,
+  createCollectionTask,
+  runCollectionTask,
   saveCollectionSchedule,
-  startIncrementalCollection,
 } from '@/api'
 import CollectionTasksView from '@/views/CollectionTasksView.vue'
 
@@ -17,9 +20,14 @@ vi.mock('@/stores/auth', () => ({
 vi.mock('@/api', () => ({
   getCollectionTargets: vi.fn(),
   getCollectionTasks: vi.fn(),
+  getProducts: vi.fn(),
+  getSources: vi.fn(),
+  createCollectionTask: vi.fn(),
+  runCollectionTask: vi.fn(),
+  createSourceTarget: vi.fn(),
+  recoverStaleCollectionTask: vi.fn(),
+  stopCollectionTask: vi.fn(),
   saveCollectionSchedule: vi.fn(),
-  startFullCollection: vi.fn(),
-  startIncrementalCollection: vi.fn(),
 }))
 
 const target = {
@@ -72,11 +80,50 @@ describe('CollectionTasksView', () => {
       previous: null,
       results: [],
     })
-    vi.mocked(startIncrementalCollection).mockReset().mockResolvedValue({
+    vi.mocked(getProducts)
+      .mockReset()
+      .mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
+    vi.mocked(getSources)
+      .mockReset()
+      .mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
+    vi.mocked(createCollectionTask).mockReset().mockResolvedValue({
+      id: 10,
+      source_target: 9,
+      source_name: '荣耀俱乐部',
+      product_name: '荣耀 Power2',
+      target_name: 'Power2 官方话题',
+      task_type: 'INCREMENTAL',
+      trigger_type: 'MANUAL',
+      status: 'PENDING',
+      requested_limit: null,
+      requested_pages: 2,
+      waiting_reason: '等待来源调度',
+      dispatched_at: null,
+      heartbeat_at: null,
+      success_count: 0,
+      skipped_count: 0,
+      failure_count: 0,
+      new_threads: 0,
+      known_threads: 0,
+      new_records: 0,
+      duplicate_records: 0,
+      stopped_at_known_boundary: false,
+      error_message: '',
+      completion_verified: false,
+      verification_report: {},
+      started_at: null,
+      finished_at: null,
+      last_checkpoint: {},
+      runs: [],
+      created_at: '2026-10-27T08:00:00Z',
+      updated_at: '2026-10-27T08:00:00Z',
+    })
+    vi.mocked(runCollectionTask).mockReset().mockResolvedValue({
       task_id: 10,
       status: 'PENDING',
       celery_task_id: 'celery-10',
     })
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
     vi.mocked(saveCollectionSchedule).mockReset().mockResolvedValue({
       id: 3,
       source_target: 9,
@@ -101,9 +148,15 @@ describe('CollectionTasksView', () => {
 
     expect(container.textContent).toContain('全量完整性验证通过')
     const buttons = Array.from(container.querySelectorAll('button'))
-    buttons.find((button) => button.textContent?.includes('立即增量'))?.click()
+    buttons.find((button) => button.textContent?.includes('开始采集'))?.click()
     await flush()
-    expect(startIncrementalCollection).toHaveBeenCalledWith(4)
+    await flush()
+    expect(createCollectionTask).toHaveBeenCalledWith({
+      source_target: 9,
+      task_type: 'INCREMENTAL',
+      requested_pages: 2,
+    })
+    expect(runCollectionTask).toHaveBeenCalledWith(10)
 
     buttons.find((button) => button.textContent?.includes('运行历史'))?.click()
     await flush()

@@ -6,6 +6,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID, uuid4
 
 from collectors.base import (
     BaseCollector,
@@ -21,10 +22,19 @@ from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 
-from apps.collection.models import CollectionRun, CollectionStatus, CollectionTask, CollectionTaskType
+from apps.collection.models import (
+    CollectionRun,
+    CollectionStatus,
+    CollectionTargetState,
+    CollectionTargetStatus,
+    CollectionTask,
+    CollectionTaskType,
+)
 from apps.collection.services.collector_registry import get_collector
 from apps.collection.services.honor_full import run_honor_full_chunk
 from apps.collection.services.orchestration import (
+    DuplicateCollectionExecution,
+    StaleCollectionExecution,
     acquire_source_lease,
     claim_existing_task,
     refresh_source_lease,
@@ -89,8 +99,15 @@ def _build_collector_target(source_target: SourceTarget, *, target_url: str | No
     )
 
 
-def _start_run(task_id: int) -> tuple[CollectionTask, CollectionRun]:
+def _start_run(task_id: int, dispatch_token: UUID) -> tuple[CollectionTask, CollectionRun]:
     with transaction.atomic():
+        candidate = CollectionTask.objects.select_related("source_target").get(pk=task_id)
+        # Match admission lock order before taking the task row lock.
+        from apps.products.models import Product
+        from apps.sources.models import DataSource
+
+        DataSource.objects.select_for_update().get(pk=candidate.source_target.source_id)
+        Product.objects.select_for_update().get(pk=candidate.source_target.product_id)
         task = (
             CollectionTask.objects.select_for_update()
             .select_related("source_target__source", "source_target__product")
@@ -98,8 +115,12 @@ def _start_run(task_id: int) -> tuple[CollectionTask, CollectionRun]:
         )
         if task.status in (CollectionStatus.STOPPING, CollectionStatus.CANCELLED):
             raise CollectionStopRequested()
+        if task.status != CollectionStatus.PENDING or task.dispatch_token != dispatch_token:
+            raise DuplicateCollectionExecution(f"任务 #{task.id} 的派发消息已失效")
         claim_existing_task(task)
-        acquire_source_lease(task)
+        execution_token = uuid4()
+        task.execution_token = execution_token
+        acquire_source_lease(task, execution_token)
         task.runs.filter(status=CollectionStatus.RUNNING).update(
             status=CollectionStatus.FAILED,
             finished_at=timezone.now(),
@@ -119,6 +140,10 @@ def _start_run(task_id: int) -> tuple[CollectionTask, CollectionRun]:
             task.duplicate_records = 0
             task.stopped_at_known_boundary = False
         task.error_message = ""
+        task.waiting_reason = ""
+        task.dispatch_token = None
+        task.dispatched_at = None
+        task.heartbeat_at = started_at
         task.save(
             update_fields=(
                 "status",
@@ -133,8 +158,21 @@ def _start_run(task_id: int) -> tuple[CollectionTask, CollectionRun]:
                 "duplicate_records",
                 "stopped_at_known_boundary",
                 "error_message",
+                "waiting_reason",
+                "dispatch_token",
+                "dispatched_at",
+                "execution_token",
+                "heartbeat_at",
                 "updated_at",
             )
+        )
+        CollectionTargetState.objects.filter(source_target=task.source_target, active_task=task).update(
+            status=(
+                CollectionTargetStatus.FULL_RUNNING
+                if task.task_type == CollectionTaskType.FULL
+                else CollectionTargetStatus.INCREMENTAL_RUNNING
+            ),
+            updated_at=started_at,
         )
         latest_run = task.runs.aggregate(max_number=Max("run_number"))["max_number"] or 0
         run = CollectionRun.objects.create(
@@ -142,6 +180,7 @@ def _start_run(task_id: int) -> tuple[CollectionTask, CollectionRun]:
             run_number=latest_run + 1,
             status=CollectionStatus.RUNNING,
             started_at=started_at,
+            execution_token=execution_token,
         )
     return task, run
 
@@ -158,10 +197,15 @@ def _save_progress(
 ) -> None:
     with transaction.atomic():
         task = CollectionTask.objects.select_for_update().get(pk=task_id)
+        run = CollectionRun.objects.select_for_update().get(pk=run_id)
+        if run.execution_token is None or task.execution_token != run.execution_token:
+            raise StaleCollectionExecution(f"任务 #{task_id} 的旧执行实例已失效")
+        execution_token = run.execution_token
         task.success_count = inserted
         task.skipped_count = skipped
         task.failure_count = failed
         task.last_checkpoint = checkpoint
+        task.heartbeat_at = timezone.now()
         if progress_stats:
             task.new_threads = int(progress_stats.get("new_threads", 0))
             task.known_threads = int(progress_stats.get("known_threads", 0))
@@ -174,6 +218,7 @@ def _save_progress(
                 "skipped_count",
                 "failure_count",
                 "last_checkpoint",
+                "heartbeat_at",
                 "new_threads",
                 "known_threads",
                 "new_records",
@@ -182,7 +227,6 @@ def _save_progress(
                 "updated_at",
             )
         )
-        run = CollectionRun.objects.select_for_update().get(pk=run_id)
         run.success_count = inserted
         run.skipped_count = skipped
         run.failure_count = failed
@@ -206,7 +250,7 @@ def _save_progress(
                 "stopped_at_known_boundary",
             )
         )
-    refresh_source_lease(task_id)
+    refresh_source_lease(task_id, execution_token)
 
 
 def _finish_success(
@@ -219,20 +263,35 @@ def _finish_success(
     finished_at = timezone.now()
     with transaction.atomic():
         task = CollectionTask.objects.select_for_update().get(pk=task_id)
+        run = CollectionRun.objects.select_for_update().get(pk=run_id)
+        if run.execution_token is None or task.execution_token != run.execution_token:
+            raise StaleCollectionExecution(f"任务 #{task_id} 的旧执行实例已失效")
         if task.status == CollectionStatus.STOPPING:
             raise CollectionStopRequested()
         task.transition_to(CollectionStatus.SUCCESS)
         task.finished_at = finished_at
         task.completion_verified = verified
         task.verification_report = report or {}
-        task.save(update_fields=("status", "finished_at", "completion_verified", "verification_report", "updated_at"))
-        run = CollectionRun.objects.select_for_update().get(pk=run_id)
+        execution_token = task.execution_token
+        task.execution_token = None
+        task.heartbeat_at = None
+        task.save(
+            update_fields=(
+                "status",
+                "finished_at",
+                "completion_verified",
+                "verification_report",
+                "execution_token",
+                "heartbeat_at",
+                "updated_at",
+            )
+        )
         run.status = CollectionStatus.SUCCESS
         run.finished_at = finished_at
         run.completion_verified = verified
         run.verification_report = report or {}
         run.save(update_fields=("status", "finished_at", "completion_verified", "verification_report"))
-    release_source_lease(task_id)
+    release_source_lease(task_id, execution_token)
     release_target(task, success=True, verified=verified)
 
 
@@ -240,18 +299,33 @@ def _finish_failed(task_id: int, run_id: int, message: str) -> None:
     finished_at = timezone.now()
     with transaction.atomic():
         task = CollectionTask.objects.select_for_update().get(pk=task_id)
+        run = CollectionRun.objects.select_for_update().get(pk=run_id)
+        if run.execution_token is None or task.execution_token != run.execution_token:
+            raise StaleCollectionExecution(f"任务 #{task_id} 的旧执行实例已失效")
         task.transition_to(CollectionStatus.FAILED)
         task.finished_at = finished_at
         task.failure_count += 1
         task.error_message = message
-        task.save(update_fields=("status", "finished_at", "failure_count", "error_message", "updated_at"))
-        run = CollectionRun.objects.select_for_update().get(pk=run_id)
+        execution_token = task.execution_token
+        task.execution_token = None
+        task.heartbeat_at = None
+        task.save(
+            update_fields=(
+                "status",
+                "finished_at",
+                "failure_count",
+                "error_message",
+                "execution_token",
+                "heartbeat_at",
+                "updated_at",
+            )
+        )
         run.status = CollectionStatus.FAILED
         run.finished_at = finished_at
         run.failure_count = task.failure_count
         run.error_message = message
         run.save(update_fields=("status", "finished_at", "failure_count", "error_message"))
-    release_source_lease(task_id)
+    release_source_lease(task_id, execution_token)
     release_target(task, success=False, error=message)
 
 
@@ -259,18 +333,22 @@ def _finish_continuation(task_id: int, run_id: int) -> None:
     finished_at = timezone.now()
     with transaction.atomic():
         task = CollectionTask.objects.select_for_update().get(pk=task_id)
+        run = CollectionRun.objects.select_for_update().get(pk=run_id)
+        if run.execution_token is None or task.execution_token != run.execution_token:
+            raise StaleCollectionExecution(f"任务 #{task_id} 的旧执行实例已失效")
         if task.status == CollectionStatus.STOPPING:
             raise CollectionStopRequested()
         task.transition_to(CollectionStatus.SUCCESS)
         task.transition_to(CollectionStatus.PENDING)
-        task.save(update_fields=("status", "updated_at"))
-        run = CollectionRun.objects.select_for_update().get(pk=run_id)
+        execution_token = task.execution_token
+        task.execution_token = None
+        task.heartbeat_at = None
+        task.waiting_reason = "等待下一采集分块"
+        task.save(update_fields=("status", "execution_token", "heartbeat_at", "waiting_reason", "updated_at"))
         run.status = CollectionStatus.SUCCESS
         run.finished_at = finished_at
         run.save(update_fields=("status", "finished_at"))
-    refresh_source_lease(task_id)
-
-
+    refresh_source_lease(task_id, execution_token)
 
 
 class CollectionStopRequested(Exception):
@@ -278,7 +356,9 @@ class CollectionStopRequested(Exception):
 
 
 def check_collection_stop(task_id: int) -> None:
-    if CollectionTask.objects.filter(pk=task_id, status__in=(CollectionStatus.STOPPING, CollectionStatus.CANCELLED)).exists():
+    if CollectionTask.objects.filter(
+        pk=task_id, status__in=(CollectionStatus.STOPPING, CollectionStatus.CANCELLED)
+    ).exists():
         raise CollectionStopRequested()
 
 
@@ -286,14 +366,20 @@ def _finish_stopped(task_id: int, run_id: int) -> None:
     now = timezone.now()
     with transaction.atomic():
         task = CollectionTask.objects.select_for_update().get(pk=task_id)
+        run = CollectionRun.objects.select_for_update().get(pk=run_id)
+        if run.execution_token is None or task.execution_token != run.execution_token:
+            raise StaleCollectionExecution(f"任务 #{task_id} 的旧执行实例已失效")
         if task.status == CollectionStatus.STOPPING:
             task.transition_to(CollectionStatus.CANCELLED)
         task.finished_at = now
-        task.save(update_fields=("status", "finished_at", "updated_at"))
+        execution_token = task.execution_token
+        task.execution_token = None
+        task.heartbeat_at = None
+        task.save(update_fields=("status", "finished_at", "execution_token", "heartbeat_at", "updated_at"))
         CollectionRun.objects.filter(pk=run_id, status=CollectionStatus.RUNNING).update(
             status=CollectionStatus.CANCELLED, finished_at=now
         )
-    release_source_lease(task_id)
+    release_source_lease(task_id, execution_token)
     release_target(task, success=False, error="用户主动停止采集")
 
 
@@ -448,11 +534,22 @@ def _collect_jd_pages(
 def run_collection(
     task_id: int,
     *,
+    dispatch_token: str | UUID | None = None,
     limit_override: int | None = None,
     pages_override: int | None = None,
 ) -> CollectionSummary:
+    if dispatch_token is None:
+        with transaction.atomic():
+            direct_task = CollectionTask.objects.select_for_update().get(pk=task_id)
+            if direct_task.status != CollectionStatus.PENDING:
+                raise DuplicateCollectionExecution(f"任务 #{task_id} 当前不可直接执行")
+            direct_token = direct_task.dispatch_token or uuid4()
+            direct_task.dispatch_token = direct_token
+            direct_task.dispatched_at = timezone.now()
+            direct_task.save(update_fields=("dispatch_token", "dispatched_at", "updated_at"))
+        dispatch_token = direct_token
     try:
-        task, run = _start_run(task_id)
+        task, run = _start_run(task_id, UUID(str(dispatch_token)))
     except CollectionStopRequested:
         return CollectionSummary(0, 0, 0, 0, {}, [], completed=False)
     source_target = task.source_target

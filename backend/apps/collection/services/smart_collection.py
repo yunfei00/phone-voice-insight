@@ -125,10 +125,10 @@ def start_smart_collection(source_target_id: int) -> SmartCollectionResult:
     task, existing, recovered = _admit(source_target_id)
     if existing:
         return SmartCollectionResult(task=task, existing=True, recovered=False)
-    from apps.collection.tasks import run_collection_task
+    from apps.collection.tasks import enqueue_collection_task
 
     try:
-        async_result = run_collection_task.delay(task.id)
+        async_result = enqueue_collection_task(task.id)
     except Exception as exc:
         _mark_submission_failed(task, exc)
         raise SmartCollectionRejected("CELERY_SUBMISSION_FAILED", "采集任务提交失败; 请检查 Celery 和 Redis") from exc
@@ -136,5 +136,5 @@ def start_smart_collection(source_target_id: int) -> SmartCollectionResult:
         task=task,
         existing=False,
         recovered=recovered,
-        celery_task_id=str(async_result.id),
+        celery_task_id=str(getattr(async_result, "id", "")),
     )

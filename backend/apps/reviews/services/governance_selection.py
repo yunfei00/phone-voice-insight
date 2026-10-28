@@ -1,8 +1,13 @@
 """Selection policy shared by preview, synchronous and background governance."""
+
+from django.db.models import QuerySet
+
 from apps.reviews.models import GovernanceTask, ReviewRecord
 
 
-def governance_candidates(*, product_id: int, source_id: int | None = None, reprocess: bool = False):
+def governance_candidates(
+    *, product_id: int, source_id: int | None = None, reprocess: bool = False
+) -> QuerySet[ReviewRecord]:
     queryset = ReviewRecord.objects.filter(product_id=product_id)
     if source_id is not None:
         queryset = queryset.filter(source_id=source_id)
@@ -21,6 +26,8 @@ def governance_candidates(*, product_id: int, source_id: int | None = None, repr
     return queryset.order_by("id")
 
 
-def governance_selection(*, product_id: int, source_id: int | None = None, limit: int = 20, reprocess: bool = False):
+def governance_selection(
+    *, product_id: int, source_id: int | None = None, limit: int = 20, reprocess: bool = False
+) -> list[int]:
     candidates = governance_candidates(product_id=product_id, source_id=source_id, reprocess=reprocess)
     return list(candidates.values_list("id", flat=True)[:limit])

@@ -24,8 +24,8 @@ from apps.analysis.views import AnalysisBatchViewSet, AnalysisResultViewSet
 from apps.collection.views import CollectionScheduleViewSet, CollectionTargetStateViewSet, CollectionTaskViewSet
 from apps.common.views import health
 from apps.products.views import BrandViewSet, ProductViewSet
-from apps.reviews.views import ReviewQualityViewSet, ReviewRecordViewSet, ThreadTreeViewSet
 from apps.reviews.ai_views import GovernanceAIViewSet
+from apps.reviews.views import ReviewQualityViewSet, ReviewRecordViewSet, ThreadTreeViewSet
 from apps.sources.views import DataSourceViewSet, SourceTargetViewSet
 
 router = DefaultRouter()
