@@ -205,6 +205,8 @@ export interface ReviewRecord {
   content: string
   rating: string | null
   published_at: string | null
+  source_region: string
+  region_evidence: string
   author_role: string
   is_official: boolean
   external_id: string | null
