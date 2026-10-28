@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from decimal import Decimal
 from typing import Any
@@ -14,6 +15,8 @@ from apps.analysis.models import AnalysisBatch, AnalysisBatchStatus, StructuredR
 from apps.analysis.services.analysis_runner import error_counts, run_analysis_batch
 from apps.analysis.services.structured_engine import analyze_content
 from apps.reviews.models import AnalysisCorpusItem
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task(name="run_analysis_batch_task", autoretry_for=(), max_retries=0)
@@ -53,10 +56,17 @@ def run_structured_analysis_batch_task(
         batch.error_message = "BATCH_OWNER_MISSING"
         batch.save()
         return {"batch_id": batch_id, "status": batch.status}
-    provider = get_user_ai_provider(batch.created_by)
     batch.status = AnalysisBatchStatus.RUNNING
     batch.started_at = timezone.now()
     batch.save()
+    try:
+        provider = get_user_ai_provider(batch.created_by)
+    except Exception as exc:
+        batch.status = AnalysisBatchStatus.FAILED
+        batch.error_message = f"{type(exc).__name__}: {exc}"[:1000]
+        batch.finished_at = timezone.now()
+        batch.save(update_fields=("status", "error_message", "finished_at", "updated_at"))
+        return {"batch_id": batch.id, "status": batch.status, "success": 0, "failed": len(content_ids)}
     next_allowed = time.monotonic()
     for content_id in content_ids:
         batch.refresh_from_db(fields=("status", "actual_cost", "total_tokens"))
@@ -71,7 +81,14 @@ def run_structured_analysis_batch_task(
         wait_seconds = next_allowed - time.monotonic()
         if wait_seconds > 0:
             time.sleep(wait_seconds)
-        run = analyze_content(content_id, provider, max_retries=max_retries, batch_id=batch.id)
+        try:
+            run = analyze_content(content_id, provider, max_retries=max_retries, batch_id=batch.id)
+        except Exception as exc:
+            logger.exception("structured_analysis_item_failed batch_id=%s content_id=%s", batch.id, content_id)
+            batch.failed_count += 1
+            batch.error_message = f"{type(exc).__name__}: {exc}"[:1000]
+            batch.save(update_fields=("failed_count", "error_message", "updated_at"))
+            continue
         next_allowed = time.monotonic() + 60 / batch.requests_per_minute
         if run.status in (StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED):
             batch.success_count += 1

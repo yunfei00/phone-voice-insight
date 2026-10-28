@@ -44,6 +44,13 @@ class TimeoutProvider(StructuredProvider):
         raise AIProviderError("AI_TIMEOUT", "AI request timed out", retriable=True)
 
 
+def test_structured_prompt_exists() -> None:
+    from apps.analysis.services.structured_engine import _PROMPT_CANDIDATES, PROMPT_PATH
+
+    assert PROMPT_PATH.is_file(), f"Structured analysis prompt missing: {PROMPT_PATH}"
+    assert PROMPT_PATH in _PROMPT_CANDIDATES
+
+
 def payload(text: str) -> dict[str, Any]:
     evidence = "信号不稳定" if "信号不稳定" in text else text
     start = text.index(evidence)

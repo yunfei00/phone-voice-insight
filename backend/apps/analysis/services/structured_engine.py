@@ -12,6 +12,7 @@ from ai.schemas.review_analysis import ReviewAnalysisInput
 from ai.schemas.structured_analysis import SCHEMA_VERSION, StructuredAnalysisPayload
 from ai.taxonomy import TAXONOMY_VERSION
 from ai.validation import StructuredValidationResult, validate_structured_payload
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -19,12 +20,16 @@ from apps.analysis.models import AnalysisRun, OpinionAspect, StructuredAnalysis,
 from apps.reviews.models import ReviewRecord
 
 PROMPT_VERSION = "structured_analysis_v1"
-_ROOT = Path(__file__).resolve().parents[4]
+_PROMPT_CANDIDATES = (
+    Path(settings.BASE_DIR) / "prompts" / f"{PROMPT_VERSION}.md",
+    Path(settings.BASE_DIR).parent / "prompts" / f"{PROMPT_VERSION}.md",
+)
+PROMPT_PATH = next((path for path in _PROMPT_CANDIDATES if path.is_file()), _PROMPT_CANDIDATES[0])
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL | re.IGNORECASE)
 
 
 def _prompt() -> str:
-    return (_ROOT / "prompts" / f"{PROMPT_VERSION}.md").read_text(encoding="utf-8")
+    return PROMPT_PATH.read_text(encoding="utf-8")
 
 
 def _provider_input(review: ReviewRecord) -> ReviewAnalysisInput:
@@ -121,6 +126,8 @@ def analyze_content(
         _persist_failure(run, exc.code, exc.safe_message)
     except (ValueError, TypeError) as exc:
         _persist_failure(run, "STRUCTURED_VALIDATION_FAILED", str(exc)[:500])
+    except OSError as exc:
+        _persist_failure(run, "PROMPT_FILE_ERROR", str(exc)[:500])
     return run
 
 
