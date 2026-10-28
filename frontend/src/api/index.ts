@@ -129,6 +129,9 @@ export const getCollectionTasks = async (
 ): Promise<PaginatedResponse<CollectionTask>> =>
   (await apiClient.get<PaginatedResponse<CollectionTask>>('/collection-tasks/', { params })).data
 
+export const stopCollectionTask = async (taskId: number): Promise<{ task_id: number; status: string }> =>
+  (await apiClient.post<{ task_id: number; status: string }>(`/collection-tasks/${taskId}/stop/`)).data
+
 export const recoverStaleCollectionTask = async (taskId: number): Promise<CollectionTask> =>
   (await apiClient.post<CollectionTask>(`/collection-tasks/${taskId}/recover-stale/`)).data
 
