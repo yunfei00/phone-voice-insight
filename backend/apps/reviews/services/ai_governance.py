@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from django.utils import timezone
+from pydantic import ValidationError
 
 from ai.providers import AIProvider, AIProviderError
 from ai.schemas.review_analysis import ReviewAnalysisInput
@@ -58,6 +59,8 @@ def review_quality_with_ai(quality_id: int, provider: AIProvider, *, force: bool
         input_hash=digest, provider=provider.provider_name, model_name=provider.model,
     )
     try:
+        if not review.content.strip():
+            raise ValueError("EMPTY_REVIEW_CONTENT")
         request = ReviewAnalysisInput(
             review_id=str(review.id),
             product_model=review.product.name,
@@ -66,6 +69,7 @@ def review_quality_with_ai(quality_id: int, provider: AIProvider, *, force: bool
             source=review.source.code,
             record_type=review.record_type,
             author_role=review.author_role,
+            content_purpose=quality.content_purpose,
             is_official=review.is_official,
             rating=float(review.rating) if review.rating is not None else None,
             software_version=review.software_version or None,
@@ -90,7 +94,7 @@ def review_quality_with_ai(quality_id: int, provider: AIProvider, *, force: bool
     except AIProviderError as exc:
         item.status = GovernanceAIReview.Status.FAILED
         item.error_code = exc.code[:80]
-    except (ValueError, TypeError, json.JSONDecodeError, OSError):
+    except (ValueError, TypeError, ValidationError, OSError):
         item.status = GovernanceAIReview.Status.FAILED
         item.error_code = "INVALID_AI_OUTPUT"
     item.reviewed_at = timezone.now()
