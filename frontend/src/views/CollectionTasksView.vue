@@ -23,6 +23,8 @@ const scheduleTarget = ref<CollectionTargetState | null>(null)
 const historyVisible = ref(false)
 const historyTarget = ref<CollectionTargetState | null>(null)
 const history = ref<CollectionTask[]>([])
+const activeTasks = ref<Record<number, CollectionTask>>({})
+const refreshedAt = ref('')
 const historyCount = ref(0)
 const historyPage = ref(1)
 const historyLoading = ref(false)
@@ -77,12 +79,35 @@ async function loadTargets(silent = false): Promise<void> {
   try {
     const response = await getCollectionTargets({ page_size: 100 })
     targets.value = response.results
+    const activeIds = targets.value.map((target) => target.active_task).filter((id): id is number => id !== null)
+    if (activeIds.length) {
+      const activePage = await getCollectionTasks({ page_size: 100, ordering: '-created_at' })
+      activeTasks.value = Object.fromEntries(activePage.results.filter((task) => activeIds.includes(task.id)).map((task) => [task.id, task]))
+    } else activeTasks.value = {}
+    refreshedAt.value = new Date().toLocaleTimeString('zh-CN')
     if (silent && !targets.value.some((item) => Boolean(item.active_task))) stopPolling()
   } catch {
     error.value = '采集控制状态加载失败。'
   } finally {
     if (!silent) loading.value = false
   }
+}
+
+function activeTask(target: CollectionTargetState): CollectionTask | undefined {
+  return target.active_task ? activeTasks.value[target.active_task] : undefined
+}
+
+function staleTask(target: CollectionTargetState): boolean {
+  const task = activeTask(target)
+  return Boolean(task && Date.now() - new Date(task.updated_at).getTime() > 10 * 60_000)
+}
+
+function taskProgress(target: CollectionTargetState): string {
+  const task = activeTask(target)
+  if (!task) return target.active_task ? '正在读取任务进度…' : '无运行任务'
+  const checkpoint = task.last_checkpoint || {}
+  const location = Object.entries(checkpoint).filter(([key, value]) => /page|thread|cursor/i.test(key) && ['string', 'number'].includes(typeof value)).slice(0, 3).map(([key, value]) => `${key}: ${value}`).join(' · ')
+  return `任务 #${task.id} · 新增 ${task.new_records} · 重复 ${task.duplicate_records} · 失败 ${task.failure_count}${location ? ' · ' + location : ''}`
 }
 
 function startPolling(): void {
@@ -202,7 +227,7 @@ onUnmounted(stopPolling)
         <h1 class="page-title">采集控制</h1>
         <p class="page-description">每个采集入口只有一个控制中心：先验证完整基线，之后自动增量。</p>
       </div>
-      <el-button :loading="loading" @click="loadTargets()">刷新</el-button>
+      <div><span v-if="refreshedAt" class="refresh-time">最近刷新 {{ refreshedAt }} · 运行中每 5 秒自动更新</span><el-button :loading="loading" @click="loadTargets()">刷新</el-button></div>
     </div>
 
     <el-alert
@@ -230,6 +255,7 @@ onUnmounted(stopPolling)
           </el-tag>
         </div>
 
+        <div v-if="target.active_task" class="live-progress"><strong>实时采集状态</strong><p>{{ taskProgress(target) }}</p><p>状态：{{ activeTask(target)?.status || target.active_task_status }} · 最近心跳：{{ formatTime(activeTask(target)?.updated_at || null) }}</p><el-alert v-if="staleTask(target)" type="warning" :closable="false" title="任务超过 10 分钟未更新，可能卡住或 Worker 已停止；请检查任务详情与 Worker 日志，暂勿重复创建任务。" /><el-button size="small" @click="openHistory(target)">查看任务详情</el-button></div>
         <div class="state-block" :class="{ verified: target.full_verified }">
           <span class="state-label">数据基线</span>
           <strong>{{ baselineText(target) }}</strong>
@@ -400,6 +426,9 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
+.live-progress { margin-top: 16px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #eff6ff; }
+.live-progress p { margin: 8px 0; overflow-wrap: anywhere; }
+.refresh-time { margin-right: 12px; color: #667085; font-size: 12px; }
 .notice {
   margin-bottom: 16px;
 }
