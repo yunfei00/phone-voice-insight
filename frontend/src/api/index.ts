@@ -421,3 +421,6 @@ export const getGovernanceAIResults = async (productId: number): Promise<{ resul
 
 export const confirmGovernanceAIReview = async (payload: { review_id: number; eligible: boolean; reason: string }): Promise<{ confirmed: boolean }> =>
   (await apiClient.post('/governance-ai/confirm/', payload)).data
+
+export const retryGovernanceAIBatch = async (batchId: number): Promise<{ id: number; total: number }> =>
+  (await apiClient.post('/governance-ai/retry-failed/', { batch_id: batchId })).data
