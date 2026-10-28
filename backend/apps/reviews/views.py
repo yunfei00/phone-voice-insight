@@ -1,6 +1,6 @@
 from django.db.models import Count, F, Sum
 from celery.result import AsyncResult
-from django.core.cache import cache
+from django.core import signing
 from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.request import Request
@@ -204,8 +204,8 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
             queryset = queryset.filter(source_id=values["source_id"])
         ids = list(queryset.order_by("id").values_list("id", flat=True)[: values["limit"]])
         task = process_governance_batch.delay(ids, reprocess=values["reprocess"])
-        cache.set(f"governance-task-owner:{task.id}", request.user.pk, timeout=7 * 24 * 3600)
-        return Response({"task_id": task.id, "status": "PENDING", "total": len(ids)}, status=202)
+        token = signing.dumps({"task_id": task.id, "user_id": request.user.pk}, salt="governance-task")
+        return Response({"task_id": task.id, "task_token": token, "status": "PENDING", "total": len(ids)}, status=202)
 
     @action(detail=False, methods=("get",), url_path="async-status", permission_classes=[IsAdministrator])
     def async_status(self, request: Request) -> Response:
@@ -215,8 +215,12 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
             UUID(task_id)
         except (ValueError, AttributeError):
             return Response({"detail": "无效任务标识"}, status=400)
-        if cache.get(f"governance-task-owner:{task_id}") != request.user.pk:
-            return Response({"detail": "任务不存在或已过期"}, status=404)
+        try:
+            claims = signing.loads(str(request.query_params.get("task_token", "")), salt="governance-task", max_age=604800)
+        except signing.BadSignature:
+            return Response({"detail": "任务凭证无效或已过期"}, status=404)
+        if claims.get("task_id") != task_id or claims.get("user_id") != request.user.pk:
+            return Response({"detail": "无权查看该任务"}, status=404)
         result = AsyncResult(task_id)
         state = result.state
         details = result.info if state in {"PROGRESS", "SUCCESS"} and isinstance(result.info, dict) else {}
