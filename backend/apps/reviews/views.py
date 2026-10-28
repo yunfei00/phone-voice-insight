@@ -1,4 +1,6 @@
 from django.db.models import Count, F, Sum
+from celery.result import AsyncResult
+from django.core.cache import cache
 from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.request import Request
@@ -14,6 +16,7 @@ from apps.reviews.serializers import (
     ReviewRecordSerializer,
 )
 from apps.reviews.services.governance_pipeline import apply_manual_override, clear_manual_override, process_reviews
+from apps.reviews.tasks import process_governance_batch
 from apps.reviews.services.metadata_completeness import metadata_completeness as build_metadata_completeness
 from apps.reviews.services.thread_tree import (
     annotate_thread_metrics,
@@ -188,6 +191,36 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
             "reprocess": values["reprocess"],
             "processed_review_ids": ids,
         })
+
+    @action(detail=False, methods=("post",), url_path="start-async", permission_classes=[IsAdministrator])
+    def start_async(self, request: Request) -> Response:
+        params = GovernanceBatchRequestSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        values = params.validated_data
+        if values["dry_run"]:
+            return Response({"detail": "异步任务不支持预览，请使用 process-batch 接口"}, status=400)
+        queryset = ReviewRecord.objects.filter(product_id=values["product_id"])
+        if "source_id" in values:
+            queryset = queryset.filter(source_id=values["source_id"])
+        ids = list(queryset.order_by("id").values_list("id", flat=True)[: values["limit"]])
+        task = process_governance_batch.delay(ids, reprocess=values["reprocess"])
+        cache.set(f"governance-task-owner:{task.id}", request.user.pk, timeout=7 * 24 * 3600)
+        return Response({"task_id": task.id, "status": "PENDING", "total": len(ids)}, status=202)
+
+    @action(detail=False, methods=("get",), url_path="async-status", permission_classes=[IsAdministrator])
+    def async_status(self, request: Request) -> Response:
+        task_id = str(request.query_params.get("task_id", ""))
+        from uuid import UUID
+        try:
+            UUID(task_id)
+        except (ValueError, AttributeError):
+            return Response({"detail": "无效任务标识"}, status=400)
+        if cache.get(f"governance-task-owner:{task_id}") != request.user.pk:
+            return Response({"detail": "任务不存在或已过期"}, status=404)
+        result = AsyncResult(task_id)
+        state = result.state
+        details = result.info if state in {"PROGRESS", "SUCCESS"} and isinstance(result.info, dict) else {}
+        return Response({"task_id": task_id, "status": state, **details})
 
     @action(detail=False, methods=("get",))
     def summary(self, request: Request) -> Response:
