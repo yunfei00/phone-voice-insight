@@ -1,11 +1,11 @@
 from django.db.models import Count, F, Sum
 from rest_framework import serializers
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAdminUser
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from apps.accounts.permissions import IsAdministrator
 from apps.reviews.filters import ReviewQualityFilter, ReviewRecordFilter
 from apps.reviews.models import ExclusionReason, ReviewQuality, ReviewRecord
 from apps.reviews.serializers import (
@@ -164,7 +164,7 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
     search_fields = ("review__title", "review__content", "review__external_id", "normalized_text")
     ordering_fields = ("quality_score", "processed_at", "review__published_at", "review_id")
 
-    @action(detail=False, methods=("post",), url_path="process-batch", permission_classes=[IsAdminUser])
+    @action(detail=False, methods=("post",), url_path="process-batch", permission_classes=[IsAdministrator])
     def process_batch(self, request: Request) -> Response:
         """Run a bounded manual batch; dry-run by default."""
         params = GovernanceBatchRequestSerializer(data=request.data)
