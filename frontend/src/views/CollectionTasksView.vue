@@ -43,6 +43,19 @@ const selectedTask = ref<CollectionTask | null>(null)
 const scheduleForm = reactive({ enabled: true, interval_hours: 6 })
 let pollTimer: ReturnType<typeof setInterval> | undefined
 
+const productTargets = computed(() => {
+  const seen = new Set<number>()
+  return targets.value.filter((target) => {
+    if (seen.has(target.product_id)) return false
+    seen.add(target.product_id)
+    return true
+  })
+})
+const modeByProduct = reactive<Record<number, 'FULL' | 'INCREMENTAL' | 'PAGES'>>({})
+const pagesByProduct = reactive<Record<number, number>>({})
+const productBusy = (target: CollectionTargetState): boolean =>
+  targets.value.some((item) => item.product_id === target.product_id && Boolean(item.active_task))
+
 const hasActiveTarget = computed(() => targets.value.some((item) => Boolean(item.active_task)))
 const statusType: Record<CollectionStatus, 'info' | 'primary' | 'warning' | 'success' | 'danger'> =
   {
@@ -144,6 +157,37 @@ function startPolling(): void {
 function stopPolling(): void {
   if (pollTimer) clearInterval(pollTimer)
   pollTimer = undefined
+}
+
+async function startProductCollection(target: CollectionTargetState): Promise<void> {
+  if (productBusy(target)) { ElMessage.warning('该产品已有采集任务'); return }
+  const mode = modeByProduct[target.product_id] || 'FULL'
+  if (mode === 'INCREMENTAL' && !target.full_verified) {
+    ElMessage.warning('请先完成全量完整性验证'); return
+  }
+  if (mode === 'PAGES' && !target.full_verified) {
+    ElMessage.warning('指定页数采集属于增量模式，须先完成全量基线'); return
+  }
+  try {
+    await ElMessageBox.confirm(
+      mode === 'PAGES' ? `确认采集最多 ${pagesByProduct[target.product_id] || 5} 页？` :
+      mode === 'FULL' ? '确认开始完整全量采集？' : '确认开始增量采集？',
+      '启动采集', { type: 'warning' },
+    )
+  } catch { return }
+  startingIds.value.add(target.id)
+  try {
+    const task = await createCollectionTask({
+      source_target: target.source_target,
+      task_type: mode === 'FULL' ? 'FULL' : 'INCREMENTAL',
+      requested_pages: mode === 'PAGES' ? pagesByProduct[target.product_id] || 5 : undefined,
+    })
+    await runCollectionTask(task.id)
+    ElMessage.success(`任务 #${task.id} 已启动`)
+    await loadTargets(true)
+    startPolling()
+  } catch { ElMessage.error('启动失败，请检查是否存在运行中任务或采集入口状态') }
+  finally { startingIds.value.delete(target.id) }
 }
 
 async function startFull(target: CollectionTargetState): Promise<void> {
@@ -327,7 +371,7 @@ onUnmounted(stopPolling)
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
 
     <div v-loading="loading" class="target-grid">
-      <el-card v-for="target in targets" :key="target.id" class="target-card" shadow="hover">
+      <el-card v-for="target in productTargets" :key="target.product_id" class="target-card" shadow="hover">
         <div class="card-heading">
           <div>
             <h2>{{ target.product_name }}</h2>
@@ -403,27 +447,18 @@ onUnmounted(stopPolling)
         />
 
         <div class="card-actions">
-          <el-button
-            type="primary"
-            :disabled="!auth.canWrite || Boolean(target.active_task) || !target.full_verified"
-            :loading="startingIds.has(target.id)"
-            @click="startIncremental(target)"
-          >
-            立即增量
-          </el-button>
-          <el-button
-            :disabled="!auth.canWrite || Boolean(target.active_task)"
-            :loading="startingIds.has(target.id)"
-            @click="startFull(target)"
-          >
-            {{
-              target.full_verified
-                ? '重新全量校验'
-                : target.has_historical_data
-                  ? '执行完整性校验'
-                  : '开始全量初始化'
-            }}
-          </el-button>
+          <el-radio-group v-model="modeByProduct[target.product_id]" :disabled="productBusy(target)">
+            <el-radio-button value="FULL">全量</el-radio-button>
+            <el-radio-button value="INCREMENTAL">增量</el-radio-button>
+            <el-radio-button value="PAGES">指定页数</el-radio-button>
+          </el-radio-group>
+          <el-input-number
+            v-if="modeByProduct[target.product_id] === 'PAGES'"
+            v-model="pagesByProduct[target.product_id]"
+            :min="1" :max="10" :disabled="productBusy(target)"
+          />
+          <el-button type="primary" :disabled="!auth.canWrite || productBusy(target)"
+            :loading="startingIds.has(target.id)" @click="startProductCollection(target)">开始采集</el-button>
           <el-button :disabled="!auth.canWrite" @click="openSchedule(target)">定时设置</el-button>
           <el-button @click="openHistory(target)">运行历史</el-button>
         </div>
@@ -436,7 +471,7 @@ onUnmounted(stopPolling)
         ><el-form-item label="采集入口"
           ><el-select v-model="newTaskForm.source_target" placeholder="选择采集入口"
             ><el-option
-              v-for="target in targets"
+              v-for="target in productTargets"
               :key="target.source_target"
               :label="`${target.product_name} / ${target.target_name}`"
               :value="target.source_target"
