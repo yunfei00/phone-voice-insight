@@ -17,6 +17,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet, ViewSet
 
+from apps.accounts.permissions import IsAnalystOrAdministrator
 from apps.analysis.models import (
     AnalysisBatch,
     AnalysisBatchStatus,
@@ -56,6 +57,8 @@ class StructuredRunViewSet(ReadOnlyModelViewSet):
 
 
 class StructuredBatchViewSet(ViewSet):
+    permission_classes = (IsAnalystOrAdministrator,)
+
     def list(self, request: Request) -> Response:
         queryset = AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1").select_related(
             "product", "source"

@@ -41,6 +41,7 @@ from apps.reviews.models import ReviewRecord
 
 
 class CollectionTaskViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin, GenericViewSet):
+    permission_classes = (IsAdministrator,)
     queryset = CollectionTask.objects.select_related(
         "source_target__source",
         "source_target__product",

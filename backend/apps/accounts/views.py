@@ -16,7 +16,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from apps.accounts.ai_service import get_user_ai_provider
 from apps.accounts.models import UserAIConfiguration, UserProfile, UserRole
-from apps.accounts.permissions import IsAdministrator, get_user_role
+from apps.accounts.permissions import IsAdministrator, IsAnalystOrAdministrator, get_user_role
 from apps.accounts.serializers import (
     LoginSerializer,
     PasswordChangeSerializer,
@@ -129,7 +129,7 @@ class UserViewSet(ModelViewSet):
 
 
 class UserAIConfigurationView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAnalystOrAdministrator,)
 
     def get(self, request: Request) -> Response:
         user = cast(DjangoUser, request.user)
@@ -164,7 +164,7 @@ class UserAIConfigurationView(APIView):
 
 
 class UserAIConnectivityView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAnalystOrAdministrator,)
 
     def post(self, request: Request) -> Response:
         user = cast(DjangoUser, request.user)

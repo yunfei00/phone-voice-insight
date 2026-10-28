@@ -213,7 +213,7 @@ def test_low_confidence_routes_to_review(review):  # type: ignore[no-untyped-def
 @pytest.mark.django_db
 def test_invalid_taxonomy_fails_without_saving_analysis(review):  # type: ignore[no-untyped-def]
     raw = payload(review.content)
-    raw["aspects"][0]["topic_code"] = "BAT.CHARGING"
+    raw["aspects"][0]["topic_code"] = "UNKNOWN.TOPIC"
     run = analyze_content(review.id, StructuredProvider([json.dumps(raw, ensure_ascii=False)]), max_retries=0)
     assert run.status == StructuredRunStatus.FAILED
     assert run.input_tokens == 20
@@ -244,3 +244,17 @@ def test_primary_aspect_is_added_to_business_domains(review):  # type: ignore[no
 
     assert run.status == StructuredRunStatus.SUCCEEDED
     assert run.structured_analysis.aspects.get().business_domains == ["NET"]
+
+
+@pytest.mark.django_db
+def test_topic_taxonomy_repairs_mismatched_primary_aspect(review):  # type: ignore[no-untyped-def]
+    raw = payload(review.content)
+    raw["aspects"][0]["aspect_code"] = "BAT"
+    raw["aspects"][0]["business_domains"] = ["BAT"]
+
+    run = analyze_content(review.id, StructuredProvider([json.dumps(raw, ensure_ascii=False)]), max_retries=0)
+
+    assert run.status == StructuredRunStatus.SUCCEEDED
+    aspect = run.structured_analysis.aspects.get()
+    assert aspect.aspect_code == "NET"
+    assert "NET" in aspect.business_domains
