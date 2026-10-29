@@ -681,9 +681,10 @@ onUnmounted(stopPolling)
 .live-progress {
   margin-top: 16px;
   padding: 14px;
-  border: 1px solid #dbeafe;
+  border: 1px solid var(--el-border-color);
   border-radius: 10px;
-  background: #eff6ff;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
 }
 .live-progress p {
   margin: 8px 0;
@@ -691,7 +692,7 @@ onUnmounted(stopPolling)
 }
 .refresh-time {
   margin-right: 12px;
-  color: #667085;
+  color: var(--el-text-color-regular);
   font-size: 12px;
 }
 .notice {
@@ -714,12 +715,12 @@ onUnmounted(stopPolling)
 .card-heading h2 {
   margin: 0 0 5px;
   font-size: 20px;
-  color: #172033;
+  color: var(--el-text-color-primary);
 }
 .card-heading p,
 .history-subtitle {
   margin: 0;
-  color: #667085;
+  color: var(--el-text-color-regular);
 }
 .state-block {
   display: flex;
@@ -729,18 +730,20 @@ onUnmounted(stopPolling)
   margin: 18px 0;
   padding: 14px 16px;
   border-radius: 10px;
-  background: #fff7ed;
-  color: #9a3412;
+  border: 1px solid var(--el-color-warning-light-5);
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
 }
 .state-block.verified {
-  background: #ecfdf3;
-  color: #166534;
+  border-color: var(--el-color-success-light-5);
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
 }
 .state-block small {
-  color: #667085;
+  color: var(--el-text-color-regular);
 }
 .state-label {
-  color: #667085;
+  color: var(--el-text-color-regular);
   margin-right: 4px;
 }
 .facts {
@@ -750,17 +753,17 @@ onUnmounted(stopPolling)
 }
 .facts div {
   padding: 12px 14px;
-  border: 1px solid #e9edf3;
+  border: 1px solid var(--el-border-color-lighter);
   border-radius: 10px;
 }
 .facts span {
   display: block;
   margin-bottom: 7px;
-  color: #667085;
+  color: var(--el-text-color-regular);
   font-size: 13px;
 }
 .facts strong {
-  color: #263244;
+  color: var(--el-text-color-primary);
 }
 .target-error {
   margin-top: 14px;
