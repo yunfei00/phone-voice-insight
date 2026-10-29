@@ -1,15 +1,13 @@
-# 截图证据状态
+# 截图证据
 
-状态：BLOCKED
+状态：PASS
 
-2026-10-29 本轮尝试连接已登录 Edge 页面时，Windows 计算机控制无法以足够置信度确认当前浏览器 URL，安全策略主动终止自动化。未绕过该限制，也未使用设计稿或旧图冒充本轮截图。
+2026-10-29 使用 Playwright 登录 `pvi-v010-acceptance` 隔离 Docker 环境生成，页面数据来自独立 PostgreSQL，不是设计稿或静态 Mock。隔离页面通过 SSH 回环隧道访问，未暴露公网；截图后隧道已关闭。
 
-可复验生产入口：
+| 文件 | 页面 | 验收重点 |
+| --- | --- | --- |
+| `01-dashboard.png` | 智能驾驶舱 | 深色主题、真实空数据状态、筛选和投屏入口 |
+| `02-data-quality.png` | 数据质量 | 测试产品、1 条反馈、全量治理任务 SUCCESS 1/1 |
+| `03-structured-analysis.png` | AI 结构化分析 | taxonomy、筛选、空结果和任务区域 |
 
-- `http://106.52.122.214/phone/dashboard`
-- `http://106.52.122.214/phone/products`
-- `http://106.52.122.214/phone/data-quality`
-- `http://106.52.122.214/phone/structured-analysis`
-- `http://106.52.122.214/phone/operations`
-
-隔离 Docker 页面仅绑定服务器回环地址 `127.0.0.1:18089`，未暴露公网。
+三张 PNG 均已人工目视检查，无登录密码、API Key 或生产用户数据。
