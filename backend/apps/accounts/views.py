@@ -1,5 +1,7 @@
 from typing import Any, cast
 
+import httpx
+
 from ai.providers import AIProviderError
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User as DjangoUser
@@ -183,3 +185,26 @@ class UserAIConnectivityView(APIView):
                 "latency_ms": result.latency_ms,
             }
         )
+
+
+class OllamaModelsView(APIView):
+    permission_classes = (IsAnalystOrAdministrator,)
+
+    def get(self, request: Request) -> Response:
+        from urllib.parse import urlsplit
+
+        base_url = str(request.query_params.get("base_url", "")).rstrip("/")
+        parsed = urlsplit(base_url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
+            return Response({"error_code": "INVALID_OLLAMA_URL"}, status=status.HTTP_400_BAD_REQUEST)
+        root = base_url[:-3] if base_url.endswith("/v1") else base_url
+        try:
+            response = httpx.get(f"{root}/api/tags", timeout=8, follow_redirects=False, trust_env=False)
+            response.raise_for_status()
+            payload = response.json()
+            models = sorted(
+                {item["name"] for item in payload.get("models", []) if isinstance(item, dict) and isinstance(item.get("name"), str)}
+            )
+        except (httpx.HTTPError, ValueError, TypeError, KeyError):
+            return Response({"error_code": "OLLAMA_UNREACHABLE"}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({"models": models})
