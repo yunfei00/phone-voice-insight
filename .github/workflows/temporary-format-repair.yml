@@ -1,0 +1,39 @@
+name: Temporary formatting repair
+on:
+  push:
+    branches: [feat/ai-governance-full-batches]
+permissions:
+  contents: write
+jobs:
+  format:
+    if: "!contains(github.event.head_commit.message, '[format-bot]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ai-governance-full-batches
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.2"
+      - run: uv sync --frozen
+        working-directory: backend
+      - run: uv run ruff format apps/reviews/ai_views.py apps/reviews/models.py apps/reviews/tasks.py
+        working-directory: backend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npx prettier --write src/api/index.ts src/views/DataQualityView.vue
+        working-directory: frontend
+      - name: Commit formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/apps/reviews/ai_views.py backend/apps/reviews/models.py backend/apps/reviews/tasks.py frontend/src/api/index.ts frontend/src/views/DataQualityView.vue
+          if ! git diff --cached --quiet; then
+            git commit -m "style: format AI governance files [format-bot]"
+            git push origin HEAD:feat/ai-governance-full-batches
+          fi
