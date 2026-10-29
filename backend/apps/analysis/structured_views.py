@@ -336,6 +336,7 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
 
     @action(detail=False, methods=("get",), url_path="aggregates")
     def aggregates(self, request: Request) -> Response:
+        del request
         analyses = self.get_queryset().filter(
             run__is_current=True,
             run__status=StructuredRunStatus.SUCCEEDED,
