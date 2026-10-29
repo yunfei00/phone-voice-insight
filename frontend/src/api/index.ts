@@ -488,7 +488,8 @@ export const startFullGovernanceAIReview = async (payload: {
 
 export interface FullGovernanceAIProgress {
   id: number
-  status: 'RUNNING' | 'STOPPED' | 'COMPLETED'
+  status: 'RUNNING' | 'STOPPING' | 'STOPPED' | 'COMPLETED'
+  can_stop: boolean
   total: number
   processed: number
   remaining: number
