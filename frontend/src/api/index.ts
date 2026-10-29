@@ -485,6 +485,27 @@ export const startFullGovernanceAIReview = async (payload: {
 }): Promise<{ id?: number; total: number; automatic?: boolean; detail?: string }> =>
   (await apiClient.post('/governance-ai/start-full/', payload)).data
 
+export interface FullGovernanceAIProgress {
+  id: number
+  status: 'RUNNING' | 'STOPPED' | 'COMPLETED'
+  total: number
+  processed: number
+  remaining: number
+  failed: number
+  accepted: number
+  rejected: number
+  uncertain: number
+  prompt_tokens: number
+  completion_tokens: number
+}
+
+export const getFullGovernanceAIProgress = async (id: number): Promise<FullGovernanceAIProgress> =>
+  (await apiClient.get('/governance-ai/full-progress/', { params: { id } })).data
+
+export const stopFullGovernanceAI = async (id: number): Promise<void> => {
+  await apiClient.post('/governance-ai/stop-full/', { id })
+}
+
 export const getGovernanceAIHistory = async (params: {
   product_id?: number
   source_id?: number
