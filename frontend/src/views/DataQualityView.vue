@@ -72,6 +72,7 @@ const taskLoading = ref(false)
 const aiBusy = ref(false)
 const fullAIProgress = ref<FullGovernanceAIProgress | null>(null)
 const fullAIId = ref<number | null>(null)
+const stoppingFullAI = ref(false)
 const aiBatches = ref<GovernanceAIBatchInfo[]>([])
 const aiResults = ref<GovernanceAIResultInfo[]>([])
 const governanceTaskPage = ref(1)
@@ -390,6 +391,12 @@ async function startFullAIReview(): Promise<void> {
   }
 }
 
+function formatTokenCount(value: number): string {
+  if (value >= 1_000_000) return (value / 1_000_000).toFixed(2) + 'M tokens'
+  if (value >= 1_000) return (value / 1_000).toFixed(1) + 'K tokens'
+  return value.toLocaleString() + ' tokens'
+}
+
 async function stopFullAIReview(): Promise<void> {
   if (!fullAIId.value) return
   try {
@@ -397,9 +404,16 @@ async function stopFullAIReview(): Promise<void> {
   } catch {
     return
   }
-  await stopFullGovernanceAI(fullAIId.value)
-  ElMessage.success('已请求停止，当前正在处理的记录完成后退出')
-  await loadAIReviews()
+  stoppingFullAI.value = true
+  try {
+    await stopFullGovernanceAI(fullAIId.value)
+    ElMessage.success('已请求停止，当前正在处理的记录完成后退出')
+    await loadAIReviews()
+  } catch {
+    ElMessage.error('停止请求失败，请稍后重试')
+  } finally {
+    stoppingFullAI.value = false
+  }
 }
 
 function stopTaskPolling(): void {
@@ -598,7 +612,7 @@ onUnmounted(() => {
           @click="startFullAIReview"
           >一键 AI 判断全部</el-button
         >
-        <el-button type="danger" :disabled="!fullAIId || fullAIProgress?.status !== 'RUNNING'" @click="stopFullAIReview">停止全量任务</el-button>
+        <el-button type="danger" :disabled="!fullAIId || !fullAIProgress?.can_stop || stoppingFullAI" :loading="stoppingFullAI" @click="stopFullAIReview">停止全量任务</el-button>
         <el-button @click="loadAIReviews">查看复核结果</el-button>
         <span v-if="aiBatches.some((b) => b.status === 'RUNNING' || b.status === 'PENDING')"
           >每 3 秒自动更新</span
@@ -608,7 +622,9 @@ onUnmounted(() => {
         <strong>全量进度：{{ fullAIProgress.processed }} / {{ fullAIProgress.total }}</strong>
         <el-progress :percentage="fullAIProgress.total ? Math.min(100, Math.round(fullAIProgress.processed / fullAIProgress.total * 100)) : 100" />
         <p>状态：{{ fullAIProgress.status }} · 剩余：{{ fullAIProgress.remaining }} · 自动接受：{{ fullAIProgress.accepted }} · 自动排除：{{ fullAIProgress.rejected }} · 证据不足：{{ fullAIProgress.uncertain }} · 失败：{{ fullAIProgress.failed }}</p>
-        <p>Token：{{ fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens }}</p>
+        <p>Token 消耗（单位：tokens）：输入 {{ formatTokenCount(fullAIProgress.prompt_tokens) }} · 输出 {{ formatTokenCount(fullAIProgress.completion_tokens) }} · 累计 {{ formatTokenCount(fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) }}</p>
+        <p v-if="fullAIProgress.processed > 0">预计总消耗：{{ formatTokenCount(Math.round((fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) / fullAIProgress.processed * fullAIProgress.total)) }} · 预计剩余：{{ formatTokenCount(Math.max(0, Math.round((fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) / fullAIProgress.processed * fullAIProgress.remaining))) }} <span v-if="fullAIProgress.processed < 20">（样本较少，仅供参考）</span></p>
+        <p v-else>预计 Token 消耗：等待首批处理数据后估算</p>
       </div>
       <el-table :data="aiBatches" size="small" style="margin-bottom: 12px">
         <el-table-column prop="id" label="任务编号" width="95" />
