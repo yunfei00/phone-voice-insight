@@ -363,16 +363,16 @@ onMounted(async () => {
 }
 .result-summary {
   padding: 10px 14px;
-  color: #3e5876;
+  color: #96adc6;
   font-size: 14px;
-  background: #eef4fb;
+  background: #17334e;
   border-radius: 9px;
 }
 .filter-panel {
   padding: 18px;
   margin-bottom: 20px;
-  background: #fff;
-  border: 1px solid #e4e9f1;
+  background: #12283f;
+  border: 1px solid #29435c;
   border-radius: 14px;
   box-shadow: 0 4px 16px rgb(31 42 68 / 4%);
 }
@@ -396,7 +396,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #687386;
+  color: #96adc6;
   font-size: 13px;
 }
 .ordering .el-select {
@@ -412,8 +412,8 @@ onMounted(async () => {
 }
 .thread-card {
   padding: 22px 24px;
-  background: #fff;
-  border: 1px solid #e4e9f1;
+  background: #12283f;
+  border: 1px solid #29435c;
   border-radius: 14px;
   box-shadow: 0 5px 18px rgb(31 42 68 / 5%);
   transition:
@@ -422,7 +422,7 @@ onMounted(async () => {
     border-color 0.18s ease;
 }
 .thread-card:hover {
-  border-color: #cbd8e9;
+  border-color: #36536b;
   box-shadow: 0 10px 28px rgb(31 42 68 / 9%);
   transform: translateY(-2px);
 }
@@ -436,7 +436,7 @@ onMounted(async () => {
 .drawer-thread h2 {
   flex: 1;
   margin: 0;
-  color: #1c2940;
+  color: #edf5ff;
   font-size: 18px;
   line-height: 1.45;
 }
@@ -446,15 +446,15 @@ onMounted(async () => {
   height: 34px;
   flex: 0 0 auto;
   place-items: center;
-  color: #4779ad;
-  background: #f1f6fb;
+  color: #35b9f0;
+  background: #1a344c;
   border-radius: 9px;
 }
 .thread-content {
   display: -webkit-box;
   margin: 12px 0 0;
   overflow: hidden;
-  color: #596579;
+  color: #c9d8e7;
   line-height: 1.75;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
@@ -470,7 +470,7 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 18px;
   margin-top: 16px;
-  color: #8993a5;
+  color: #96adc6;
   font-size: 12px;
 }
 .time-row span {
@@ -485,7 +485,7 @@ onMounted(async () => {
   gap: 18px;
   padding-top: 16px;
   margin-top: 16px;
-  border-top: 1px solid #edf0f5;
+  border-top: 1px solid #29435c;
 }
 .metrics {
   display: flex;
@@ -496,20 +496,20 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #455268;
+  color: #d7e5f5;
   font-weight: 600;
 }
 .metrics .el-icon {
-  color: #7088a5;
+  color: #96adc6;
   font-size: 18px;
 }
 .metrics small {
-  color: #9099a9;
+  color: #96adc6;
   font-size: 11px;
   font-weight: 400;
 }
 .metrics b {
-  color: #2c6da8;
+  color: #35b9f0;
   font-size: 13px;
 }
 .card-actions {
@@ -518,7 +518,7 @@ onMounted(async () => {
   gap: 14px;
 }
 .source-product {
-  color: #7a8495;
+  color: #96adc6;
   font-size: 13px;
   white-space: nowrap;
 }
@@ -527,7 +527,7 @@ onMounted(async () => {
   margin-top: 20px;
 }
 .drawer-title {
-  color: #26364d;
+  color: #edf5ff;
   font-size: 18px;
   font-weight: 700;
 }
@@ -536,21 +536,21 @@ onMounted(async () => {
 }
 .drawer-thread {
   padding: 18px;
-  background: #f7f9fc;
-  border: 1px solid #e7ecf3;
+  background: #12283f;
+  border: 1px solid #29435c;
   border-radius: 12px;
 }
 .drawer-thread-heading a {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #3974ad;
+  color: #35b9f0;
   font-size: 13px;
   white-space: nowrap;
 }
 .drawer-thread p {
   margin: 12px 0;
-  color: #4f5d72;
+  color: #c9d8e7;
   line-height: 1.75;
   white-space: pre-wrap;
 }
@@ -558,7 +558,7 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 16px;
-  color: #7c8798;
+  color: #96adc6;
   font-size: 12px;
 }
 .reply-heading {
@@ -569,10 +569,10 @@ onMounted(async () => {
 }
 .reply-heading h3 {
   margin: 0;
-  color: #26364d;
+  color: #edf5ff;
 }
 .reply-heading span {
-  color: #8993a5;
+  color: #96adc6;
   font-size: 12px;
 }
 .reply-tree {

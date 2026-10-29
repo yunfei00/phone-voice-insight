@@ -102,8 +102,8 @@ const trendOption = computed<EChartsOption>(() => ({
       type: 'line',
       smooth: true,
       data: trend.value.map((item) => item.explicit_issues),
-      lineStyle: { color: '#e36f79' },
-      itemStyle: { color: '#e36f79' },
+      lineStyle: { color: '#ef8f97' },
+      itemStyle: { color: '#ef8f97' },
     },
   ],
 }))
@@ -128,7 +128,7 @@ const categoryOption = computed<EChartsOption>(() => ({
       type: 'bar',
       data: categories.value.map((item) => item.feedback_count),
       barMaxWidth: 18,
-      itemStyle: { color: '#42d6c6', borderRadius: [0, 8, 8, 0] },
+      itemStyle: { color: '#32d6c6', borderRadius: [0, 8, 8, 0] },
     },
   ],
 }))
@@ -549,8 +549,8 @@ onBeforeUnmount(() => {
 .severity {
   padding: 4px 7px;
   font-size: 10px;
-  background: #e36f7922;
-  border: 1px solid #e36f7955;
+  background: #ef8f9722;
+  border: 1px solid #ef8f9755;
   border-radius: 6px;
 }
 .dashboard-disclaimer {
