@@ -39,7 +39,11 @@ const rules: FormRules = {
   api_key: [
     {
       validator: (_rule, value: string, callback: (error?: Error) => void) => {
-        callback(form.provider === 'ollama' || (configured.value && maskedKey.value) || value ? undefined : new Error('首次配置必须填写 API Key'))
+        callback(
+          form.provider === 'ollama' || (configured.value && maskedKey.value) || value
+            ? undefined
+            : new Error('首次配置必须填写 API Key'),
+        )
       },
       trigger: 'blur',
     },
@@ -151,7 +155,14 @@ onMounted(loadConfiguration)
           </el-select>
         </el-form-item>
         <el-form-item label="API 地址" prop="base_url">
-          <el-input v-model="form.base_url" :placeholder="form.provider === 'ollama' ? 'http://host.docker.internal:11434' : 'https://api.deepseek.com'" />
+          <el-input
+            v-model="form.base_url"
+            :placeholder="
+              form.provider === 'ollama'
+                ? 'http://host.docker.internal:11434'
+                : 'https://api.deepseek.com'
+            "
+          />
         </el-form-item>
         <el-form-item v-if="form.provider !== 'ollama'" label="API Key" prop="api_key">
           <el-input
@@ -163,11 +174,23 @@ onMounted(loadConfiguration)
           />
         </el-form-item>
         <el-form-item label="模型名称" prop="model">
-          <el-select v-if="form.provider === 'ollama'" v-model="form.model" filterable allow-create default-first-option placeholder="选择已安装模型或输入模型名称">
+          <el-select
+            v-if="form.provider === 'ollama'"
+            v-model="form.model"
+            filterable
+            allow-create
+            default-first-option
+            placeholder="选择已安装模型或输入模型名称"
+          >
             <el-option v-for="name in ollamaModels" :key="name" :label="name" :value="name" />
           </el-select>
           <el-input v-else v-model="form.model" placeholder="例如 deepseek-flash" />
-          <el-button v-if="form.provider === 'ollama'" :loading="discovering" @click="discoverOllamaModels">保存并获取本地模型列表</el-button>
+          <el-button
+            v-if="form.provider === 'ollama'"
+            :loading="discovering"
+            @click="discoverOllamaModels"
+            >保存并获取本地模型列表</el-button
+          >
         </el-form-item>
         <div class="advanced-grid">
           <el-form-item label="思考模式">

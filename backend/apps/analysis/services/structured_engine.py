@@ -123,7 +123,11 @@ def _create_run(
         current = AnalysisRun.objects.filter(
             content=review, configuration_hash=configuration_hash, is_current=True
         ).first()
-        if current and not force and current.status in (StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED):
+        if (
+            current
+            and not force
+            and current.status in (StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED)
+        ):
             return current, False
         if current:
             current.is_current = False

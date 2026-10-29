@@ -1,7 +1,6 @@
 from typing import Any, cast
 
 import httpx
-
 from ai.providers import AIProviderError
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User as DjangoUser
@@ -206,7 +205,11 @@ class OllamaModelsView(APIView):
             response.raise_for_status()
             payload = response.json()
             models = sorted(
-                {item["name"] for item in payload.get("models", []) if isinstance(item, dict) and isinstance(item.get("name"), str)}
+                {
+                    item["name"]
+                    for item in payload.get("models", [])
+                    if isinstance(item, dict) and isinstance(item.get("name"), str)
+                }
             )
         except (httpx.HTTPError, ValueError, TypeError, KeyError):
             return Response({"error_code": "OLLAMA_UNREACHABLE"}, status=status.HTTP_502_BAD_GATEWAY)

@@ -89,7 +89,9 @@ async function startSample() {
       max_concurrency: 1,
       requests_per_minute: 10,
     })
-    ElMessage.success(`已提交真实分析任务 #${result.batch.id}，匹配 ${result.matched_content_ids.length} 条语料`)
+    ElMessage.success(
+      `已提交真实分析任务 #${result.batch.id}，匹配 ${result.matched_content_ids.length} 条语料`,
+    )
     await load()
   } catch (reason: unknown) {
     const detail = reason as { response?: { data?: { error_code?: string; detail?: string } } }
@@ -134,16 +136,35 @@ onMounted(async () => {
       <div class="filters">
         <strong>下一步：启动真实 AI 结构化分析</strong>
         <el-select v-model="selectedProduct" placeholder="先选择手机产品" @change="changeProduct">
-          <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" />
+          <el-option
+            v-for="product in products"
+            :key="product.id"
+            :label="product.name"
+            :value="product.id"
+          />
         </el-select>
         <el-input-number v-model="sampleSize" :min="1" :max="1000" :step="10" />
-        <el-button type="primary" :loading="starting" :disabled="!selectedProduct" @click="startSample">
+        <el-button
+          type="primary"
+          :loading="starting"
+          :disabled="!selectedProduct"
+          @click="startSample"
+        >
           开始分析（非模拟）
         </el-button>
-        <el-button type="success" :loading="startingAll" :disabled="!selectedProduct" @click="startAll">一键分析全部剩余数据</el-button>
+        <el-button
+          type="success"
+          :loading="startingAll"
+          :disabled="!selectedProduct"
+          @click="startAll"
+          >一键分析全部剩余数据</el-button
+        >
         <el-button @click="load">刷新结果与任务进度</el-button>
       </div>
-      <p>已完成的评论自动跳过；全量任务按每批 100 条持续执行。系统每 30 分钟检查新增有效评论并自动分析，失败记录不会无限重试。</p>
+      <p>
+        已完成的评论自动跳过；全量任务按每批 100 条持续执行。系统每 30
+        分钟检查新增有效评论并自动分析，失败记录不会无限重试。
+      </p>
     </el-card>
     <el-alert
       v-if="quality?.error_distribution?.length"
@@ -220,10 +241,7 @@ onMounted(async () => {
         <template #header>
           <div class="card-title">
             <strong>{{ item.original_title || `反馈 #${item.content}` }}</strong
-            ><span
-              >
-              {{ item.product_name }} · {{ item.source_name }}</span
-            >
+            ><span> {{ item.product_name }} · {{ item.source_name }}</span>
           </div>
         </template>
         <p class="original">{{ item.original_content }}</p>
@@ -297,7 +315,12 @@ onMounted(async () => {
         >
         <el-table-column prop="success_count" label="成功" width="85" />
         <el-table-column prop="failed_count" label="失败" width="85" />
-        <el-table-column prop="error_message" label="批次错误" min-width="230" show-overflow-tooltip />
+        <el-table-column
+          prop="error_message"
+          label="批次错误"
+          min-width="230"
+          show-overflow-tooltip
+        />
         <el-table-column prop="total_tokens" label="Token" width="100" />
       </el-table>
       <el-pagination
@@ -308,7 +331,6 @@ onMounted(async () => {
         @current-change="load"
       />
     </el-card>
-
   </section>
 </template>
 

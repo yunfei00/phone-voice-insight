@@ -11,9 +11,7 @@ def final_corpus_reviews() -> QuerySet[ReviewRecord]:
     A later rejection, uncertainty or error invalidates an earlier acceptance.
     """
     latest = (
-        GovernanceAIReview.objects.filter(quality_id=OuterRef("pk"))
-        .order_by("-created_at", "-pk")
-        .values("status")[:1]
+        GovernanceAIReview.objects.filter(quality_id=OuterRef("pk")).order_by("-created_at", "-pk").values("status")[:1]
     )
     quality_ids = (
         ReviewQuality.objects.filter(eligible_for_ai=True, is_official_content=False)

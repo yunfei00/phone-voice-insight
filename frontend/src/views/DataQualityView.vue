@@ -642,7 +642,11 @@ onUnmounted(() => {
             <el-statistic :title="metric.label" :value="metric.value" style="padding: 12px 0" />
           </el-col>
         </el-row>
-        <el-button type="primary" :disabled="!corpusSummary.final_eligible" @click="$router.push('/structured-analysis')">
+        <el-button
+          type="primary"
+          :disabled="!corpusSummary.final_eligible"
+          @click="$router.push('/structured-analysis')"
+        >
           下一步：进入 AI 结构化分析（{{ corpusSummary.final_eligible }} 条可分析）
         </el-button>
         <p>
