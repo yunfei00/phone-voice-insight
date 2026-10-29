@@ -25,8 +25,6 @@ import type {
 const starting = ref(false)
 const sampleSize = ref(20)
 const loading = ref(false)
-const submitting = ref(false)
-const batchSize = ref(20)
 const error = ref('')
 const items = ref<StructuredAnalysisV1[]>([])
 const count = ref(0)
@@ -93,29 +91,6 @@ async function startSample() {
     )
   } finally {
     starting.value = false
-  }
-}
-
-async function startAnalysis() {
-  if (!selectedProduct.value || submitting.value) {
-    ElMessage.warning('请先选择手机产品')
-    return
-  }
-  submitting.value = true
-  try {
-    const result = await createStructuredBatch({
-      product_id: selectedProduct.value,
-      max_items: batchSize.value,
-      dry_run: false,
-      max_concurrency: 1,
-      requests_per_minute: 10,
-    })
-    ElMessage.success(`已提交结构化分析任务 #${result.batch.id}，请在下方查看任务进度`)
-    await load()
-  } catch {
-    ElMessage.error('创建任务失败：请确认最终可分析语料大于 0、AI 模型已配置且后台任务服务正常')
-  } finally {
-    submitting.value = false
   }
 }
 
@@ -194,23 +169,6 @@ onMounted(async () => {
         <el-button @click="load">刷新结果与任务进度</el-button>
       </div>
       <p>建议先运行 20 条验证模型与标签结果。任务提交后在下方查看状态；成功后刷新查看观点和聚合统计。</p>
-    </el-card>
-    <el-card shadow="never">
-      <template #header><strong>下一步：启动 AI 结构化分析</strong></template>
-      <p>先在数据质量页面完成 AI 治理，再选择产品并启动任务。任务会从最终有效语料中提取观点、情感与问题分类。</p>
-      <div class="filters">
-        <el-select v-model="selectedProduct" placeholder="选择手机产品" @change="changeProduct">
-          <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" />
-        </el-select>
-        <el-select v-model="batchSize" style="width: 140px">
-          <el-option label="试运行 20 条" :value="20" />
-          <el-option label="分析 100 条" :value="100" />
-          <el-option label="分析 500 条" :value="500" />
-        </el-select>
-        <el-button type="primary" :loading="submitting" :disabled="!selectedProduct" @click="startAnalysis">开始 AI 结构化分析</el-button>
-        <el-button @click="load">刷新结果与进度</el-button>
-      </div>
-      <el-alert title="首次建议先运行 20 条；需要配置可用的 AI 模型和 Celery Worker。提交任务会实际调用模型并产生费用。" type="info" :closable="false" show-icon />
     </el-card>
     <div class="metric-grid">
       <el-card shadow="never"
