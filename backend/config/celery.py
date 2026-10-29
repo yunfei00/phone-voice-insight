@@ -22,6 +22,10 @@ app.conf.beat_schedule = {
         "task": "reconcile_automatic_voice_pipeline",
         "schedule": 300.0,
     },
+    "recover-stale-governance-ai-batches": {
+        "task": "recover_stale_governance_ai_batches",
+        "schedule": 60.0,
+    },
     "dashboard-beat-heartbeat": {
         "task": "record_dashboard_beat_heartbeat",
         "schedule": 60.0,
