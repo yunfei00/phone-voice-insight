@@ -183,11 +183,9 @@ def run_automatic_pipeline(product_id: int, source_id: int | None = None) -> Aut
                 ai_batch_id=ai_batch.id if ai_batch else None,
             )
         source = DataSource.objects.get(pk=resolved_source_id)
-        remaining_tokens = (
-            max(budget - _tokens_used_today(), 0)
-            if settings.AI_AUTOMATION_TOKEN_LIMIT_MODE == "LIMITED"
-            else None
-        )
+        remaining_tokens = None
+        if settings.AI_AUTOMATION_TOKEN_LIMIT_MODE == "LIMITED":
+            remaining_tokens = max(budget - _tokens_used_today(), 0)
         structured_batch = AnalysisBatch.objects.create(
             created_by_id=configuration.user_id,
             product=product,
