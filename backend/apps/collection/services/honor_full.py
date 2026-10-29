@@ -14,7 +14,6 @@ from collectors.honor_club.parser import (
     is_valid_thread_page,
     is_valid_topic_page,
 )
-from django.db.models import Q
 
 from apps.collection.models import CollectionDiscoveredThread, CollectionTask, DiscoveryStatus
 from apps.collection.services.orchestration import refresh_source_lease
