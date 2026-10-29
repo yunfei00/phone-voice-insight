@@ -86,10 +86,9 @@ def valid_qualities(params: Mapping[str, Any]) -> QuerySet[ReviewQuality]:
 
 def accepted_analyses(params: Mapping[str, Any]) -> QuerySet[StructuredAnalysis]:
     return StructuredAnalysis.objects.filter(
-        content__id__in=filtered_reviews(params).values("id"),
-        content__quality__eligible_for_ai=True,
-        content__quality__is_official_content=False,
-        content_id__in=final_corpus_reviews().values("pk"),
+        content_id__in=final_corpus_reviews().filter(
+            pk__in=filtered_reviews(params).values("pk")
+        ).values("pk"),
         run__is_current=True,
         run__status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
         schema_valid=True,
