@@ -288,6 +288,9 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
         values = params.validated_data
         product_id = values["product_id"]
         source_id = values.get("source_id")
+        user_id = request.user.pk
+        if user_id is None:
+            return Response({"detail": "用户身份无效"}, status=403)
         with transaction.atomic():
             product = Product.objects.select_for_update().filter(pk=product_id).first()
             if product is None:
@@ -306,7 +309,7 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
             task = GovernanceTask.objects.create(
                 product=product,
                 source_id=source_id,
-                requested_by_id=request.user.pk,
+                requested_by_id=user_id,
                 review_ids=ids,
                 total=len(ids),
             )
