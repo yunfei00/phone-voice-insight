@@ -170,6 +170,18 @@ onMounted(async () => {
       </div>
       <p>建议先运行 20 条验证模型与标签结果。任务提交后在下方查看状态；成功后刷新查看观点和聚合统计。</p>
     </el-card>
+    <el-alert
+      v-if="quality?.error_distribution?.length"
+      type="warning"
+      show-icon
+      :closable="false"
+      title="结构化分析失败原因统计（按错误码）"
+    >
+      <div v-for="item in quality.error_distribution" :key="item.error_code">
+        {{ item.error_code || 'UNKNOWN_ERROR' }}：{{ item.count }} 条
+      </div>
+      <p>如全部失败，请先检查模型连通性和后端 Worker 日志，不要反复批量提交。</p>
+    </el-alert>
     <div class="metric-grid">
       <el-card shadow="never"
         ><span>AI 已分析量</span><strong>{{ quality?.total_runs || 0 }}</strong></el-card
