@@ -89,6 +89,10 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
     try:
         provider = get_user_ai_provider(batch.requested_by)
         for quality_id in batch.quality_ids:
+            root_id = batch.root_batch_id or batch.id
+            if batch.automatic and GovernanceAIBatch.objects.filter(pk=root_id, stop_requested=True).exists():
+                batch.status = GovernanceAIBatch.Status.STOPPED
+                break
             try:
                 result: GovernanceAIReview | None = None
                 for attempt in range(min(max(max_attempts, 1), 3)):
@@ -134,7 +138,8 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
                     "updated_at",
                 )
             )
-        batch.status = GovernanceAIBatch.Status.PARTIAL if batch.failed else GovernanceAIBatch.Status.SUCCESS
+        if batch.status != GovernanceAIBatch.Status.STOPPED:
+            batch.status = GovernanceAIBatch.Status.PARTIAL if batch.failed else GovernanceAIBatch.Status.SUCCESS
     except Exception as exc:
         batch.status = GovernanceAIBatch.Status.FAILED
         batch.error_code = str(getattr(exc, "code", type(exc).__name__))[:80]
@@ -162,6 +167,9 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
         from apps.reviews.models import ReviewQuality
 
         with transaction.atomic():
+            root = GovernanceAIBatch.objects.select_for_update().get(pk=batch.root_batch_id or batch.id)
+            if root.stop_requested:
+                return {"batch_id": batch.id, "status": "STOPPED", "processed": batch.processed}
             product = batch.product.__class__.objects.select_for_update().get(pk=batch.product_id)
             reviewed = GovernanceAIReview.objects.values_list("quality_id", flat=True)
             pending = ReviewQuality.objects.filter(review__product=product)
@@ -173,7 +181,7 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
                 next_batch = GovernanceAIBatch.objects.create(
                     product=product, source_id=batch.source_id,
                     requested_by=batch.requested_by, automatic=True,
-                    quality_ids=ids, total=len(ids),
+                    root_batch=root, quality_ids=ids, total=len(ids),
                 )
         if next_batch is not None:
             try:
