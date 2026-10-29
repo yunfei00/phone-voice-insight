@@ -8,6 +8,7 @@ import {
   getSources,
   processGovernanceBatch,
   startAsyncGovernance,
+  startFullGovernance,
   getGovernanceTaskHistory,
   getGovernanceTaskStatus,
   retryGovernanceTask,
@@ -387,6 +388,25 @@ async function startBackgroundGovernance(): Promise<void> {
   }
 }
 
+async function startAllGovernance(): Promise<void> {
+  if (!selectedProduct.value) return
+  governanceBusy.value = true
+  try {
+    const result = await startFullGovernance({
+      product_id: selectedProduct.value,
+      source_id: selectedSource.value,
+    })
+    ElMessage.success(result.task ? `已提交全部 ${result.task.total} 条待治理数据` : '当前范围没有待治理数据')
+    await loadGovernanceTasks()
+    await loadData()
+    if (result.task) startTaskPolling()
+  } catch {
+    ElMessage.error('全量治理启动失败，请检查是否已有进行中的任务')
+  } finally {
+    governanceBusy.value = false
+  }
+}
+
 async function retryBackgroundGovernance(taskId: number): Promise<void> {
   try {
     await retryGovernanceTask(taskId)
@@ -633,6 +653,19 @@ onUnmounted(() => {
           </template>
         </el-popconfirm>
       </div>
+      <el-popconfirm
+        title="一键治理当前产品全部未处理数据？任务将在后台运行，不调用 AI，也不会修改原始记录。"
+        @confirm="startAllGovernance"
+      >
+        <template #reference>
+          <el-button
+            type="primary"
+            plain
+            :disabled="!selectedProduct || governanceBusy"
+            :loading="governanceBusy"
+          >一键治理全部待处理数据</el-button>
+        </template>
+      </el-popconfirm>
       <p v-if="preview">
         本次请求上限 {{ governanceLimit }} 条，实际选中
         {{ preview.total }} 条（其余已治理、正在处理或不符合筛选条件）；预计可用
