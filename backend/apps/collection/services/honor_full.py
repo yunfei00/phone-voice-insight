@@ -143,6 +143,11 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
     discovered = task.discovered_threads.count()
     success = task.discovered_threads.filter(status=DiscoveryStatus.SUCCESS).count()
     skipped = task.discovered_threads.filter(status=DiscoveryStatus.SKIPPED).count()
+    blocked = list(
+        task.discovered_threads.filter(status=DiscoveryStatus.BLOCKED_SKIPPED).values(
+            "thread_id", "thread_url", "attempts", "last_error"
+        )
+    )
     failed_items = list(
         task.discovered_threads.filter(status=DiscoveryStatus.FAILED).values_list("thread_id", flat=True)
     )
@@ -170,7 +175,7 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
     verified = (
         expected_pages > 0
         and scanned_pages == expected_pages
-        and discovered == success + skipped
+        and discovered == success + skipped + len(blocked)
         and not failed_items
         and pending == 0
     )
@@ -183,6 +188,9 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
         "discovered_threads": discovered,
         "product_matched_threads": success,
         "product_skipped_threads": skipped,
+        "access_blocked_skipped_threads": len(blocked),
+        "access_blocked_thread_details": blocked,
+        "accessible_scope_verified": verified,
         "thread_details_success": success,
         "thread_details_failed": len(failed_items),
         "reply_pages_scanned": reply_pages,
@@ -371,8 +379,15 @@ def run_honor_full_chunk(
                 item.last_error = ""
             except Exception as exc:
                 item.attempts += 1
-                item.status = DiscoveryStatus.FAILED
-                item.last_error = f"{getattr(exc, 'code', 'COLLECTION_ERROR')}: {exc}"
+                error_code = str(getattr(exc, "code", "COLLECTION_ERROR")).upper()
+                # Only explicit access-control responses qualify for a verified skip.
+                blocked_codes = {"HTTP_401", "HTTP_403", "AUTH_REQUIRED", "LOGIN_REQUIRED", "PERMISSION_DENIED", "ACCESS_DENIED"}
+                item.status = (
+                    DiscoveryStatus.BLOCKED_SKIPPED
+                    if error_code in blocked_codes and item.attempts >= max_attempts
+                    else DiscoveryStatus.FAILED
+                )
+                item.last_error = f"{error_code}: {exc}"
                 failed += 1
             item.save()
             if was_retry:
