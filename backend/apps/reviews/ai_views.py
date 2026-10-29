@@ -104,7 +104,7 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
             ).exists():
                 return Response({"detail": "该产品已有 AI 判断任务执行中"}, status=409)
             reviewed = GovernanceAIReview.objects.values_list("quality_id", flat=True)
-            rows = ReviewQuality.objects.filter(review__product=product)
+            rows = ReviewQuality.objects.filter(review__product=product, eligible_for_ai=True)
             if source_id is not None:
                 rows = rows.filter(review__source_id=source_id)
             remaining = rows.exclude(pk__in=reviewed)
