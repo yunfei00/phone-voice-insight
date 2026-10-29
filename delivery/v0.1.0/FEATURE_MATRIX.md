@@ -1,7 +1,9 @@
 # Phone Voice Insight V0.1.0 功能矩阵
 
-> 验收时间：2026-10-29（Asia/Shanghai）  
-> 基线：`origin/main@4a70143`  
+> 验收时间：2026-10-29（Asia/Shanghai）
+>
+> 基线：`origin/main@4a70143`
+>
 > 发布分支：`release/v0.1.0-acceptance`
 
 状态定义：PASS 为实际执行通过；FAIL 为执行失败；BLOCKED 为环境或外部依赖阻塞；NOT_IMPLEMENTED 为代码不存在；NOT_APPLICABLE 为本版本不适用。
