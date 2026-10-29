@@ -28,7 +28,11 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push, replace }),
 }))
 vi.mock('@/components/TechChart.vue', () => ({
-  default: { template: '<div class="chart-stub" />' },
+  default: {
+    emits: ['chart-click'],
+    template:
+      '<button class="chart-stub" @click="$emit(\'chart-click\', { name: \'2026-10-29\', dataIndex: 0 })" />',
+  },
 }))
 vi.mock('@/api', () => ({
   getProducts: vi.fn(),
@@ -256,6 +260,39 @@ describe('V1 Dashboard pages', () => {
     expect(container.textContent).toContain('100')
     expect(getDashboardOverview).toHaveBeenCalled()
     expect(container.textContent).toContain('全屏投屏')
+    app.unmount()
+  })
+  it('驾驶舱支持趋势、类别下钻和全屏状态同步', async () => {
+    const requestFullscreen = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(document.documentElement, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    })
+    const { app, container } = mount(DashboardView)
+    await flush()
+    const charts = container.querySelectorAll<HTMLButtonElement>('.chart-stub')
+    charts[0]?.click()
+    charts[1]?.click()
+    const fullscreen = Array.from(container.querySelectorAll('button')).find((item) =>
+      item.textContent?.includes('全屏投屏'),
+    )
+    fullscreen?.click()
+    await flush()
+    expect(push).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.objectContaining({ start_date: '2026-10-29' }) }),
+    )
+    expect(push).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.objectContaining({ category: 'NET' }) }),
+    )
+    expect(requestFullscreen).toHaveBeenCalledOnce()
+    expect(replace).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.objectContaining({ fullscreen: '1' }) }),
+    )
+    fullscreen?.click()
+    await flush()
+    expect(replace).toHaveBeenLastCalledWith(
+      expect.objectContaining({ query: expect.not.objectContaining({ fullscreen: '1' }) }),
+    )
     app.unmount()
   })
   it('驾驶舱 API 失败显示错误而不伪装成功', async () => {

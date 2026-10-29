@@ -189,11 +189,15 @@ function categoryClick(params: unknown): void {
 }
 
 async function toggleFullscreen(): Promise<void> {
-  if (!document.fullscreenElement) {
-    await document.documentElement.requestFullscreen?.()
+  if (!isFullscreen.value) {
+    try {
+      await document.documentElement.requestFullscreen?.()
+    } catch {
+      // Browsers can deny native fullscreen; projection layout remains available.
+    }
     isFullscreen.value = true
   } else {
-    await document.exitFullscreen?.()
+    if (document.fullscreenElement) await document.exitFullscreen?.()
     isFullscreen.value = false
   }
   await router.replace({
