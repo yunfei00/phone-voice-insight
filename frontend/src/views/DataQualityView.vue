@@ -318,7 +318,7 @@ async function loadAIReviews(): Promise<void> {
     if (!aiBatches.value.some((b) => b.status === 'PENDING' || b.status === 'RUNNING') && fullAIProgress.value?.status !== 'RUNNING')
       stopAIPolling()
   } catch {
-    ElMessage.error('AI 复核状态加载失败')
+    ElMessage.error('AI 判断状态加载失败')
   }
 }
 
@@ -357,11 +357,11 @@ async function startAIReview(): Promise<void> {
       source_id: selectedSource.value ?? null,
       limit: governanceLimit.value,
     })
-    ElMessage.success(`已提交 ${batch.total} 条 AI 复核数据`)
+    ElMessage.success(`已提交 ${batch.total} 条 AI 判断数据`)
     await loadAIReviews()
     startAIPolling()
   } catch {
-    ElMessage.error('AI 复核任务提交失败，请检查模型配置及后台服务')
+    ElMessage.error('AI 判断任务提交失败，请检查模型配置及后台服务')
   } finally {
     aiBusy.value = false
   }
@@ -607,7 +607,7 @@ onUnmounted(() => {
             { label: '规则排除', value: corpusSummary.rule_excluded },
             { label: 'AI 确认有效', value: corpusSummary.ai_accepted },
             { label: 'AI 排除', value: corpusSummary.ai_rejected },
-            { label: '待人工复核', value: corpusSummary.ai_uncertain },
+            { label: 'AI 无法判断（已跳过）', value: corpusSummary.ai_uncertain },
             { label: 'AI 技术失败', value: corpusSummary.ai_failed },
             { label: '尚未 AI 判断', value: corpusSummary.ai_unprocessed },
             { label: '最终可分析', value: corpusSummary.final_eligible },
@@ -615,7 +615,7 @@ onUnmounted(() => {
             <el-statistic :title="metric.label" :value="metric.value" style="padding: 12px 0" />
           </el-col>
         </el-row>
-        <p>统计按语料去重，取每条语料最新 AI 判断；最终可分析仅包括规则可用且最新 AI 结论为自动接受的数据。待复核和技术失败不进入分析。</p>
+        <p>统计按语料去重，取每条语料最新 AI 判断；最终可分析仅包括规则可用且最新 AI 结论为自动接受的数据。无法判断及技术失败的数据自动跳过，不进入分析；原始记录仍保留。</p>
       </div>
 
       <p>
@@ -637,7 +637,7 @@ onUnmounted(() => {
           >一键 AI 判断全部</el-button
         >
         <el-button type="danger" :disabled="!fullAIId || !fullAIProgress?.can_stop || stoppingFullAI" :loading="stoppingFullAI" @click="stopFullAIReview">停止全量任务</el-button>
-        <el-button @click="loadAIReviews">查看复核结果</el-button>
+        <el-button @click="loadAIReviews">查看 AI 判断结果</el-button>
         <span v-if="aiBatches.some((b) => b.status === 'RUNNING' || b.status === 'PENDING')"
           >每 3 秒自动更新</span
         >
@@ -645,7 +645,7 @@ onUnmounted(() => {
       <div v-if="fullAIProgress" class="panel" style="margin-bottom: 12px">
         <strong>全量进度：{{ fullAIProgress.processed }} / {{ fullAIProgress.total }}</strong>
         <el-progress :percentage="fullAIProgress.total ? Math.min(100, Math.round(fullAIProgress.processed / fullAIProgress.total * 100)) : 100" />
-        <p>状态：{{ fullAIProgress.status }} · 剩余：{{ fullAIProgress.remaining }} · 自动接受：{{ fullAIProgress.accepted }} · 自动排除：{{ fullAIProgress.rejected }} · 证据不足：{{ fullAIProgress.uncertain }} · 失败：{{ fullAIProgress.failed }}</p>
+        <p>状态：{{ fullAIProgress.status }} · 剩余：{{ fullAIProgress.remaining }} · 自动接受：{{ fullAIProgress.accepted }} · 自动排除：{{ fullAIProgress.rejected }} · 自动跳过：{{ fullAIProgress.uncertain }} · 失败：{{ fullAIProgress.failed }}</p>
         <p>Token 消耗（单位：tokens）：输入 {{ formatTokenCount(fullAIProgress.prompt_tokens) }} · 输出 {{ formatTokenCount(fullAIProgress.completion_tokens) }} · 累计 {{ formatTokenCount(fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) }}</p>
         <p v-if="fullAIProgress.processed > 0">预计总消耗：{{ formatTokenCount(Math.round((fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) / fullAIProgress.processed * fullAIProgress.total)) }} · 预计剩余：{{ formatTokenCount(Math.max(0, Math.round((fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) / fullAIProgress.processed * fullAIProgress.remaining))) }} <span v-if="fullAIProgress.processed < 20">（样本较少，仅供参考）</span></p>
         <p v-else>预计 Token 消耗：等待首批处理数据后估算</p>
@@ -660,7 +660,7 @@ onUnmounted(() => {
         </el-table-column>
         <el-table-column prop="accepted" label="自动接受" />
         <el-table-column prop="rejected" label="自动排除" />
-        <el-table-column prop="uncertain" label="证据不足" />
+        <el-table-column prop="uncertain" label="自动跳过" />
         <el-table-column prop="failed" label="技术错误" />
         <el-table-column
           prop="error_code"
@@ -704,13 +704,13 @@ onUnmounted(() => {
               : row.status === 'REJECTED'
                 ? '自动排除'
                 : row.status === 'UNCERTAIN'
-                  ? '证据不足，不进入分析'
+                  ? '无法判断，已自动跳过'
                   : row.status === 'ERROR'
-                    ? '技术错误，等待有限重试'
+                    ? '技术错误，自动重试后跳过'
                     : row.status === 'SUCCEEDED'
                       ? '历史：已通过'
                       : row.status === 'REVIEW_REQUIRED'
-                        ? '历史：待诊断'
+                        ? '历史：无法判断'
                         : row.status === 'FAILED'
                           ? '历史：失败'
                           : '等待执行'
