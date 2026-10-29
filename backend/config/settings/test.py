@@ -8,6 +8,7 @@ DATABASES = {
         "NAME": BASE_DIR / "test.sqlite3",  # noqa: F405
     }
 }
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 CELERY_TASK_ALWAYS_EAGER = True

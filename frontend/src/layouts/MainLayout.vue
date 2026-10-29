@@ -8,6 +8,7 @@ import {
   Fold,
   Iphone,
   ChatLineSquare,
+  ChatDotRound,
   List,
   Monitor,
   TrendCharts,
@@ -48,6 +49,7 @@ const mobileMenuOpen = ref(false)
 const sidebarCollapsed = ref(initialSidebarCollapsed())
 const baseNavigationItems = [
   { path: '/dashboard', label: '智能驾驶舱', icon: Monitor },
+  { path: '/ai-assistant', label: 'AI智能助手', icon: ChatDotRound },
   { path: '/comparison', label: '产品对比中心', icon: TrendCharts },
   { path: '/issues', label: '用户问题洞察', icon: Warning },
   { path: '/insight-reports', label: 'AI洞察报告', icon: Notebook },

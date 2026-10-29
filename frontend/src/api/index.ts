@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { AUTH_TOKEN_STORAGE_KEY } from '@/config/auth'
 import apiClient from './client'
 import type {
   AIConfiguration,
@@ -33,6 +34,12 @@ import type {
   StructuredBatch,
   StructuredQuality,
   StructuredAggregates,
+  AssistantConversation,
+  AssistantMessage,
+  AssistantModelList,
+  AssistantModelProfile,
+  AssistantModelProfilePayload,
+  AssistantStreamEvent,
   TaxonomyDefinition,
   DashboardFilters,
   DashboardOverview,
@@ -652,3 +659,128 @@ export const getInsightReport = async (id: number): Promise<InsightReport> =>
 
 export const getOperationsStatus = async (): Promise<OperationsStatus> =>
   (await apiClient.get<OperationsStatus>('/dashboard/operations/')).data
+
+export const getAssistantModels = async (): Promise<AssistantModelList> =>
+  (await apiClient.get<AssistantModelList>('/assistant/models/')).data
+
+export const createAssistantModel = async (
+  payload: AssistantModelProfilePayload,
+): Promise<AssistantModelProfile> =>
+  (await apiClient.post<AssistantModelProfile>('/assistant/models/', payload)).data
+
+export const updateAssistantModel = async (
+  id: number,
+  payload: Partial<AssistantModelProfilePayload>,
+): Promise<AssistantModelProfile> =>
+  (await apiClient.patch<AssistantModelProfile>(`/assistant/models/${id}/`, payload)).data
+
+export const deleteAssistantModel = async (id: number): Promise<void> => {
+  await apiClient.delete(`/assistant/models/${id}/`)
+}
+
+export const testAssistantModel = async (
+  id: number,
+): Promise<{ status: string; model: string; latency_ms: number }> =>
+  (
+    await apiClient.post<{ status: string; model: string; latency_ms: number }>(
+      `/assistant/models/${id}/test/`,
+    )
+  ).data
+
+export const getAssistantOllamaModels = async (id: number): Promise<string[]> =>
+  (await apiClient.get<{ models: string[] }>(`/assistant/models/${id}/ollama-models/`)).data.models
+
+export const getAssistantConversations = async (): Promise<AssistantConversation[]> => {
+  const response = await apiClient.get<PaginatedResponse<AssistantConversation>>(
+    '/assistant/conversations/',
+    { params: { page_size: 100 } },
+  )
+  return response.data.results
+}
+
+export const createAssistantConversation = async (payload: {
+  title?: string
+  model_profile?: number | null
+  use_default_model?: boolean
+  context?: Record<string, unknown>
+}): Promise<AssistantConversation> =>
+  (await apiClient.post<AssistantConversation>('/assistant/conversations/', payload)).data
+
+export const updateAssistantConversation = async (
+  id: string,
+  payload: Partial<
+    Pick<AssistantConversation, 'title' | 'model_profile' | 'use_default_model' | 'context'>
+  >,
+): Promise<AssistantConversation> =>
+  (await apiClient.patch<AssistantConversation>(`/assistant/conversations/${id}/`, payload)).data
+
+export const deleteAssistantConversation = async (id: string): Promise<void> => {
+  await apiClient.delete(`/assistant/conversations/${id}/`)
+}
+
+export const getAssistantMessages = async (id: string): Promise<AssistantMessage[]> =>
+  (await apiClient.get<{ results: AssistantMessage[] }>(`/assistant/conversations/${id}/messages/`))
+    .data.results
+
+export const cancelAssistantChat = async (
+  id: string,
+): Promise<{ status: string; request_id?: string }> =>
+  (
+    await apiClient.post<{ status: string; request_id?: string }>(
+      `/assistant/conversations/${id}/cancel/`,
+    )
+  ).data
+
+function assistantApiUrl(path: string): string {
+  const base = import.meta.env.DEV ? '/api/v1' : import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  return `${base}${path}`
+}
+
+export async function streamAssistantChat(
+  conversationId: string,
+  payload: {
+    request_id: string
+    content: string
+    product_id?: number
+    source_id?: number
+    start_date?: string
+    end_date?: string
+  },
+  onEvent: (event: AssistantStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+  const response = await fetch(
+    assistantApiUrl(`/assistant/conversations/${conversationId}/chat/`),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        ...(token ? { Authorization: `Token ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal,
+    },
+  )
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { detail?: string }
+    throw new Error(data.detail || `助手请求失败（HTTP ${response.status}）`)
+  }
+  if (!response.body) throw new Error('浏览器未提供流式响应。')
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+    const blocks = buffer.split('\n\n')
+    buffer = blocks.pop() || ''
+    for (const block of blocks) {
+      const line = block.split('\n').find((item) => item.startsWith('data:'))
+      if (!line) continue
+      onEvent(JSON.parse(line.slice(5).trim()) as AssistantStreamEvent)
+    }
+    if (done) break
+  }
+}
