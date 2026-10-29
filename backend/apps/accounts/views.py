@@ -192,7 +192,9 @@ class OllamaModelsView(APIView):
     def get(self, request: Request) -> Response:
         from urllib.parse import urlsplit
 
-        configuration = UserAIConfiguration.objects.filter(user=cast(DjangoUser, request.user), provider="ollama").first()
+        configuration = UserAIConfiguration.objects.filter(
+            user=cast(DjangoUser, request.user), provider="ollama"
+        ).first()
         if configuration is None:
             return Response({"error_code": "OLLAMA_NOT_CONFIGURED"}, status=status.HTTP_400_BAD_REQUEST)
         base_url = configuration.base_url.rstrip("/")
