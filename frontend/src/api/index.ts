@@ -1,3 +1,4 @@
+import axios from 'axios'
 import apiClient from './client'
 import type {
   AIConfiguration,
@@ -478,6 +479,62 @@ export const startGovernanceAIReview = async (payload: {
   limit: number
 }): Promise<{ id: number; total: number }> =>
   (await apiClient.post('/governance-ai/start/', payload)).data
+
+export const startFullGovernanceAIReview = async (payload: {
+  product_id: number
+  source_id?: number | null
+}): Promise<{ id?: number; total: number; automatic?: boolean; detail?: string }> =>
+  (await apiClient.post('/governance-ai/start-full/', payload)).data
+
+export interface AICorpusSummary {
+  total: number
+  rule_eligible: number
+  rule_excluded: number
+  ai_accepted: number
+  ai_rejected: number
+  ai_uncertain: number
+  ai_failed: number
+  ai_unprocessed: number
+  final_eligible: number
+}
+
+export const getAICorpusSummary = async (
+  product_id: number,
+  source_id?: number,
+): Promise<AICorpusSummary> =>
+  (await apiClient.get('/governance-ai/corpus-summary/', { params: { product_id, source_id } }))
+    .data
+
+export interface FullGovernanceAIProgress {
+  id: number
+  status: 'RUNNING' | 'STOPPING' | 'STOPPED' | 'COMPLETED'
+  can_stop: boolean
+  total: number
+  processed: number
+  remaining: number
+  failed: number
+  accepted: number
+  rejected: number
+  uncertain: number
+  prompt_tokens: number
+  completion_tokens: number
+}
+
+export const getFullGovernanceAIProgress = async (params: {
+  product_id: number
+  source_id?: number
+}): Promise<FullGovernanceAIProgress | null> => {
+  try {
+    return (await apiClient.get('/governance-ai/full-progress/', { params })).data
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) return null
+    throw error
+  }
+}
+
+export const stopFullGovernanceAI = async (id: number): Promise<void> => {
+  await apiClient.post('/governance-ai/stop-full/', { id })
+}
 
 export const getGovernanceAIHistory = async (params: {
   product_id?: number

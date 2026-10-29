@@ -1,6 +1,7 @@
 """AI-assisted governance endpoints."""
 
 from django.db import transaction
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
@@ -24,6 +25,40 @@ class GovernancePagination(PageNumberPagination):
 class GovernanceAIViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAdministrator]
     queryset = GovernanceAIBatch.objects.all()
+
+    @action(detail=False, methods=["get"], url_path="corpus-summary")
+    def corpus_summary(self, request: Request) -> Response:
+        """Unique quality rows with their latest AI decision, not batch counters."""
+        # Validate IDs before querying; avoid leaking cross-product totals.
+        try:
+            product_id = int(request.query_params["product_id"])
+            raw_source_id = request.query_params.get("source_id")
+            source_id = int(raw_source_id) if raw_source_id else None
+            if product_id < 1 or (source_id is not None and source_id < 1):
+                raise ValueError
+        except (KeyError, ValueError, TypeError):
+            return Response({"detail": "请选择有效产品和来源"}, status=400)
+        if not Product.objects.filter(pk=product_id).exists():
+            return Response({"detail": "产品不存在"}, status=404)
+        rows = ReviewQuality.objects.filter(review__product_id=product_id)
+        if source_id is not None:
+            rows = rows.filter(review__source_id=source_id)
+        latest = GovernanceAIReview.objects.filter(quality_id=OuterRef("pk")).order_by("-created_at", "-pk")
+        rows = rows.annotate(latest_ai_status=Subquery(latest.values("status")[:1]))
+        stats = rows.aggregate(
+            total=Count("pk"),
+            rule_eligible=Count("pk", filter=Q(eligible_for_ai=True)),
+            ai_accepted=Count("pk", filter=Q(latest_ai_status="ACCEPTED", eligible_for_ai=True)),
+            ai_rejected=Count("pk", filter=Q(latest_ai_status="REJECTED", eligible_for_ai=True)),
+            ai_uncertain=Count(
+                "pk", filter=Q(latest_ai_status__in=["UNCERTAIN", "REVIEW_REQUIRED"], eligible_for_ai=True)
+            ),
+            ai_failed=Count("pk", filter=Q(latest_ai_status__in=["ERROR", "FAILED"], eligible_for_ai=True)),
+            ai_unprocessed=Count("pk", filter=Q(latest_ai_status__isnull=True, eligible_for_ai=True)),
+        )
+        stats["final_eligible"] = stats["ai_accepted"]
+        stats["rule_excluded"] = stats["total"] - stats["rule_eligible"]
+        return Response(stats)
 
     @action(detail=False, methods=["post"])
     def start(self, request: Request) -> Response:
@@ -80,6 +115,132 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
             batch.save(update_fields=["status", "error_code", "updated_at"])
             return Response({"detail": "AI 任务提交失败"}, status=503)
         return Response({"id": batch.id, "total": batch.total}, status=202)
+
+    @action(detail=False, methods=["post"], url_path="start-full")
+    def start_full(self, request: Request) -> Response:
+        """Start bounded, sequential AI batches for the entire remaining scope."""
+
+        class Parameters(serializers.Serializer):
+            product_id = serializers.IntegerField(min_value=1)
+            source_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+
+        params = Parameters(data=request.data)
+        params.is_valid(raise_exception=True)
+        product_id = params.validated_data["product_id"]
+        source_id = params.validated_data.get("source_id")
+        user_id = request.user.pk
+        if user_id is None:
+            return Response({"detail": "用户身份无效"}, status=403)
+        with transaction.atomic():
+            product = Product.objects.select_for_update().filter(pk=product_id).first()
+            if product is None:
+                return Response({"detail": "产品不存在"}, status=404)
+            if GovernanceAIBatch.objects.filter(product=product, status__in=["PENDING", "RUNNING"]).exists():
+                return Response({"detail": "该产品已有 AI 判断任务执行中"}, status=409)
+            reviewed = GovernanceAIReview.objects.values_list("quality_id", flat=True)
+            rows = ReviewQuality.objects.filter(review__product=product, eligible_for_ai=True)
+            if source_id is not None:
+                rows = rows.filter(review__source_id=source_id)
+            remaining = rows.exclude(pk__in=reviewed)
+            scope_total = remaining.count()
+            ids = list(remaining.order_by("pk").values_list("pk", flat=True)[:100])
+            if not ids:
+                return Response({"detail": "没有待 AI 判断的数据", "total": 0}, status=200)
+            batch = GovernanceAIBatch.objects.create(
+                product=product,
+                source_id=source_id,
+                requested_by_id=user_id,
+                automatic=True,
+                quality_ids=ids,
+                total=len(ids),
+                scope_total=scope_total,
+            )
+        try:
+            job = process_governance_ai_batch.delay(batch.id)
+            batch.celery_task_id = job.id
+            batch.save(update_fields=["celery_task_id", "updated_at"])
+        except Exception:
+            batch.status = GovernanceAIBatch.Status.FAILED
+            batch.error_code = "TASK_DISPATCH_FAILED"
+            batch.save(update_fields=["status", "error_code", "updated_at"])
+            return Response({"detail": "AI 任务提交失败"}, status=503)
+        return Response({"id": batch.id, "total": batch.scope_total, "automatic": True}, status=202)
+
+    @action(detail=False, methods=["get"], url_path="full-progress")
+    def full_progress(self, request: Request) -> Response:
+        from django.db.models import Sum
+
+        roots = GovernanceAIBatch.objects.filter(automatic=True, root_batch__isnull=True)
+        product_id = request.query_params.get("product_id")
+        source_id = request.query_params.get("source_id")
+        if product_id:
+            try:
+                roots = roots.filter(product_id=int(product_id))
+                if source_id:
+                    roots = roots.filter(source_id=int(source_id))
+            except (ValueError, TypeError):
+                return Response({"detail": "无效产品或来源编号"}, status=400)
+        elif source_id:
+            return Response({"detail": "查询来源时必须指定产品"}, status=400)
+        if request.query_params.get("id"):
+            try:
+                roots = roots.filter(pk=int(request.query_params["id"]))
+            except (ValueError, TypeError):
+                return Response({"detail": "无效任务编号"}, status=400)
+        elif not product_id:
+            return Response({"detail": "必须指定任务编号或产品编号"}, status=400)
+        active_batches = GovernanceAIBatch.objects.filter(status__in=["PENDING", "RUNNING"], automatic=True)
+        active_roots = set(active_batches.exclude(root_batch__isnull=True).values_list("root_batch_id", flat=True))
+        active_roots.update(active_batches.filter(root_batch__isnull=True).values_list("id", flat=True))
+        root = roots.filter(pk__in=active_roots).order_by("-created_at", "-pk").first()
+        if root is None:
+            root = roots.order_by("-created_at", "-pk").first()
+        if root is None:
+            return Response({"detail": "当前范围暂无全量 AI 判断任务"}, status=404)
+        batches = GovernanceAIBatch.objects.filter(pk=root.pk) | GovernanceAIBatch.objects.filter(root_batch=root)
+        totals = batches.aggregate(
+            processed=Sum("processed"),
+            failed=Sum("failed"),
+            accepted=Sum("accepted"),
+            rejected=Sum("rejected"),
+            uncertain=Sum("uncertain"),
+            prompt_tokens=Sum("prompt_tokens"),
+            completion_tokens=Sum("completion_tokens"),
+        )
+        active = batches.filter(status__in=["PENDING", "RUNNING"]).exists()
+        status_label = (
+            "STOPPING"
+            if root.stop_requested and active
+            else ("STOPPED" if root.stop_requested else ("RUNNING" if active else "COMPLETED"))
+        )
+        return Response(
+            {
+                "id": root.pk,
+                "status": status_label,
+                "can_stop": active and not root.stop_requested,
+                "total": root.scope_total,
+                "remaining": max(0, root.scope_total - (totals["processed"] or 0)),
+                **{key: value or 0 for key, value in totals.items()},
+            }
+        )
+
+    @action(detail=False, methods=["post"], url_path="stop-full")
+    def stop_full(self, request: Request) -> Response:
+        try:
+            root_id = int(request.data.get("id", ""))
+        except (ValueError, TypeError):
+            return Response({"detail": "无效任务编号"}, status=400)
+        with transaction.atomic():
+            root = (
+                GovernanceAIBatch.objects.select_for_update()
+                .filter(pk=root_id, automatic=True, root_batch__isnull=True)
+                .first()
+            )
+            if root is None:
+                return Response({"detail": "全量任务不存在"}, status=404)
+            root.stop_requested = True
+            root.save(update_fields=["stop_requested", "updated_at"])
+        return Response({"id": root.pk, "stop_requested": True})
 
     @action(detail=False, methods=["post"])
     def confirm(self, request: Request) -> Response:
