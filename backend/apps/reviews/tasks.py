@@ -7,6 +7,7 @@ from typing import Any
 from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
+from django.db import transaction
 
 from apps.accounts.ai_service import get_user_ai_provider
 from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewRecord
@@ -79,16 +80,17 @@ def process_governance_batch(self: Any, governance_task_id: int) -> dict[str, An
 @shared_task(bind=True, name="process_governance_ai_batch")
 def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2) -> dict[str, Any]:
     """Run a bounded AI review batch; failures are durable and individually retryable."""
-    batch = GovernanceAIBatch.objects.select_related("requested_by").get(pk=batch_id)
-    if batch.status != GovernanceAIBatch.Status.PENDING:
-        return {"batch_id": batch.id, "status": batch.status}
-    batch.status = GovernanceAIBatch.Status.RUNNING
-    batch.started_at = timezone.now()
-    batch.celery_task_id = self.request.id or ""
-    batch.save(update_fields=("status", "started_at", "celery_task_id", "updated_at"))
+    with transaction.atomic():
+        batch = GovernanceAIBatch.objects.select_for_update().select_related("requested_by").get(pk=batch_id)
+        if batch.status != GovernanceAIBatch.Status.PENDING:
+            return {"batch_id": batch.id, "status": batch.status}
+        batch.status = GovernanceAIBatch.Status.RUNNING
+        batch.started_at = timezone.now()
+        batch.celery_task_id = self.request.id or ""
+        batch.save(update_fields=("status", "started_at", "celery_task_id", "updated_at"))
     try:
         provider = get_user_ai_provider(batch.requested_by)
-        for quality_id in batch.quality_ids:
+        for quality_id in batch.quality_ids[batch.processed:]:
             root_id = batch.root_batch_id or batch.id
             if batch.automatic and GovernanceAIBatch.objects.filter(pk=root_id, stop_requested=True).exists():
                 batch.status = GovernanceAIBatch.Status.STOPPED
