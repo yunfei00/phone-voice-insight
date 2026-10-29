@@ -180,7 +180,7 @@ class StructuredBatchViewSet(ViewSet):
         )
         latest = (
             AnalysisBatch.objects.filter(
-                created_by=request.user, product_id=product_id, prompt_version="structured_analysis_v1"
+                created_by=cast(User, request.user), product_id=product_id, prompt_version="structured_analysis_v1"
             )
             .order_by("-id")
             .first()
