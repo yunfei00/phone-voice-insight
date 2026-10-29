@@ -81,6 +81,50 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
             return Response({"detail": "AI 任务提交失败"}, status=503)
         return Response({"id": batch.id, "total": batch.total}, status=202)
 
+    @action(detail=False, methods=["post"], url_path="start-full")
+    def start_full(self, request: Request) -> Response:
+        """Start bounded, sequential AI batches for the entire remaining scope."""
+        class Parameters(serializers.Serializer):
+            product_id = serializers.IntegerField(min_value=1)
+            source_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+
+        params = Parameters(data=request.data)
+        params.is_valid(raise_exception=True)
+        product_id = params.validated_data["product_id"]
+        source_id = params.validated_data.get("source_id")
+        user_id = request.user.pk
+        if user_id is None:
+            return Response({"detail": "用户身份无效"}, status=403)
+        with transaction.atomic():
+            product = Product.objects.select_for_update().filter(pk=product_id).first()
+            if product is None:
+                return Response({"detail": "产品不存在"}, status=404)
+            if GovernanceAIBatch.objects.filter(
+                product=product, status__in=["PENDING", "RUNNING"]
+            ).exists():
+                return Response({"detail": "该产品已有 AI 判断任务执行中"}, status=409)
+            reviewed = GovernanceAIReview.objects.values_list("quality_id", flat=True)
+            rows = ReviewQuality.objects.filter(review__product=product)
+            if source_id is not None:
+                rows = rows.filter(review__source_id=source_id)
+            ids = list(rows.exclude(pk__in=reviewed).order_by("pk").values_list("pk", flat=True)[:100])
+            if not ids:
+                return Response({"detail": "没有待 AI 判断的数据", "total": 0}, status=200)
+            batch = GovernanceAIBatch.objects.create(
+                product=product, source_id=source_id, requested_by_id=user_id,
+                automatic=True, quality_ids=ids, total=len(ids),
+            )
+        try:
+            job = process_governance_ai_batch.delay(batch.id)
+            batch.celery_task_id = job.id
+            batch.save(update_fields=["celery_task_id", "updated_at"])
+        except Exception:
+            batch.status = GovernanceAIBatch.Status.FAILED
+            batch.error_code = "TASK_DISPATCH_FAILED"
+            batch.save(update_fields=["status", "error_code", "updated_at"])
+            return Response({"detail": "AI 任务提交失败"}, status=503)
+        return Response({"id": batch.id, "total": batch.total, "automatic": True}, status=202)
+
     @action(detail=False, methods=["post"])
     def confirm(self, request: Request) -> Response:
         class Parameters(serializers.Serializer):
