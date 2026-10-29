@@ -49,7 +49,7 @@ def _recoverable_full(target: SourceTarget) -> CollectionTask | None:
     if task is None or not task.last_checkpoint or not task.discovered_threads.exists():
         return None
     phase = str(task.last_checkpoint.get("phase", ""))
-    if phase not in {"discovery", "collection", "verification", "completed"}:
+    if phase not in {"discovery", "collection", "retry", "verification", "completed"}:
         return None
     return task
 

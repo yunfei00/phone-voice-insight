@@ -181,6 +181,25 @@ function taskProgress(target: CollectionTargetState): string {
   return `任务 #${task.id} · 新增 ${task.new_records} · 重复 ${task.duplicate_records} · 失败 ${task.failure_count}${location ? ' · ' + location : ''}`
 }
 
+function collectionPhase(task: CollectionTask): string {
+  const phase = String(task.last_checkpoint?.phase || '')
+  if (phase === 'discovery') return '正在扫描帖子列表'
+  if (phase === 'collection') return '正在采集帖子和回复'
+  if (phase === 'retry') return '正在重试失败帖子'
+  if (phase === 'verification') return '正在校验采集完整性'
+  if (phase === 'completed') return '采集处理已结束'
+  return task.status === 'PENDING' ? '等待调度' : '正在处理采集任务'
+}
+
+function discoveryProgress(task: CollectionTask): string {
+  const checkpoint = task.last_checkpoint || {}
+  const scanned = Number(checkpoint.scanned_topic_pages || 0)
+  const expected = Number(checkpoint.expected_topic_pages || 0)
+  return expected > 0
+    ? `列表扫描 ${scanned} / ${expected} 页`
+    : `已扫描 ${scanned} 页，正在确定总数`
+}
+
 function startPolling(): void {
   if (pollTimer) return
   pollTimer = setInterval(() => void loadTargets(true), 5000)
@@ -421,6 +440,10 @@ onUnmounted(stopPolling)
 
         <div v-if="target.active_task" class="live-progress">
           <strong>实时采集状态</strong>
+          <p v-if="activeTask(target)">
+            <strong>{{ collectionPhase(activeTask(target)!) }}</strong> ·
+            {{ discoveryProgress(activeTask(target)!) }}
+          </p>
           <p>{{ taskProgress(target) }}</p>
           <p>
             状态：{{ activeTask(target)?.status || target.active_task_status }} · 最近心跳：{{
@@ -659,6 +682,12 @@ onUnmounted(stopPolling)
           {{ triggerLabels[selectedTask.trigger_type] }} / {{ selectedTask.task_type }} /
           {{ selectedTask.status }}
         </el-descriptions-item>
+        <el-descriptions-item label="执行阶段">{{
+          collectionPhase(selectedTask)
+        }}</el-descriptions-item>
+        <el-descriptions-item label="发现进度">{{
+          discoveryProgress(selectedTask)
+        }}</el-descriptions-item>
         <el-descriptions-item label="统计">
           新增 {{ selectedTask.new_records }}，重复 {{ selectedTask.duplicate_records }}，失败
           {{ selectedTask.failure_count }}
@@ -681,9 +710,10 @@ onUnmounted(stopPolling)
 .live-progress {
   margin-top: 16px;
   padding: 14px;
-  border: 1px solid #dbeafe;
+  border: 1px solid var(--el-border-color);
   border-radius: 10px;
-  background: #eff6ff;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
 }
 .live-progress p {
   margin: 8px 0;
@@ -691,7 +721,7 @@ onUnmounted(stopPolling)
 }
 .refresh-time {
   margin-right: 12px;
-  color: #667085;
+  color: var(--el-text-color-regular);
   font-size: 12px;
 }
 .notice {
@@ -714,12 +744,12 @@ onUnmounted(stopPolling)
 .card-heading h2 {
   margin: 0 0 5px;
   font-size: 20px;
-  color: #172033;
+  color: var(--el-text-color-primary);
 }
 .card-heading p,
 .history-subtitle {
   margin: 0;
-  color: #667085;
+  color: var(--el-text-color-regular);
 }
 .state-block {
   display: flex;
@@ -729,18 +759,20 @@ onUnmounted(stopPolling)
   margin: 18px 0;
   padding: 14px 16px;
   border-radius: 10px;
-  background: #fff7ed;
-  color: #9a3412;
+  border: 1px solid var(--el-color-warning-light-5);
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
 }
 .state-block.verified {
-  background: #ecfdf3;
-  color: #166534;
+  border-color: var(--el-color-success-light-5);
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
 }
 .state-block small {
-  color: #667085;
+  color: var(--el-text-color-regular);
 }
 .state-label {
-  color: #667085;
+  color: var(--el-text-color-regular);
   margin-right: 4px;
 }
 .facts {
@@ -750,17 +782,17 @@ onUnmounted(stopPolling)
 }
 .facts div {
   padding: 12px 14px;
-  border: 1px solid #e9edf3;
+  border: 1px solid var(--el-border-color-lighter);
   border-radius: 10px;
 }
 .facts span {
   display: block;
   margin-bottom: 7px;
-  color: #667085;
+  color: var(--el-text-color-regular);
   font-size: 13px;
 }
 .facts strong {
-  color: #263244;
+  color: var(--el-text-color-primary);
 }
 .target-error {
   margin-top: 14px;

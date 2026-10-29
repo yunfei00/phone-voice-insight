@@ -14,7 +14,6 @@ from collectors.honor_club.parser import (
     is_valid_thread_page,
     is_valid_topic_page,
 )
-from django.db.models import Q
 
 from apps.collection.models import CollectionDiscoveredThread, CollectionTask, DiscoveryStatus
 from apps.collection.services.orchestration import refresh_source_lease
@@ -143,8 +142,18 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
     discovered = task.discovered_threads.count()
     success = task.discovered_threads.filter(status=DiscoveryStatus.SUCCESS).count()
     skipped = task.discovered_threads.filter(status=DiscoveryStatus.SKIPPED).count()
+    blocked = list(
+        task.discovered_threads.filter(status=DiscoveryStatus.BLOCKED_SKIPPED).values(
+            "thread_id", "thread_url", "attempts", "last_error"
+        )
+    )
     failed_items = list(
         task.discovered_threads.filter(status=DiscoveryStatus.FAILED).values_list("thread_id", flat=True)
+    )
+    failed_details = list(
+        task.discovered_threads.filter(status=DiscoveryStatus.FAILED).values(
+            "thread_id", "thread_url", "attempts", "last_error", "next_reply_page"
+        )
     )
     pending = task.discovered_threads.filter(status=DiscoveryStatus.PENDING).count()
     reply_pages = sum(task.discovered_threads.values_list("reply_pages_scanned", flat=True))
@@ -165,7 +174,7 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
     verified = (
         expected_pages > 0
         and scanned_pages == expected_pages
-        and discovered == success + skipped
+        and discovered == success + skipped + len(blocked)
         and not failed_items
         and pending == 0
     )
@@ -178,6 +187,9 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
         "discovered_threads": discovered,
         "product_matched_threads": success,
         "product_skipped_threads": skipped,
+        "access_blocked_skipped_threads": len(blocked),
+        "access_blocked_thread_details": blocked,
+        "accessible_scope_verified": verified,
         "thread_details_success": success,
         "thread_details_failed": len(failed_items),
         "reply_pages_scanned": reply_pages,
@@ -186,6 +198,7 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
         "reply_count_discrepancies": discrepancies,
         "retry_count": retry_count,
         "unresolved_thread_ids": failed_items,
+        "unresolved_thread_details": failed_details,
         "unresolved_pages": [],
         "completion_verified": verified,
         "verification_warnings": warnings,
@@ -324,14 +337,15 @@ def run_honor_full_chunk(
         if phase == "discovery":
             return FullChunkResult(checkpoint, inserted, duplicates, failed, True, False, {})
 
-    if phase == "collection":
-        max_attempts = _config_int(config, "full_thread_max_attempts", 3, 5)
+    if phase in ("collection", "retry"):
+        # Finish the first pass before retrying failed threads.
+        max_attempts = _config_int(config, "full_thread_max_attempts", 4, 5)
         chunk_size = _config_int(config, "full_chunk_threads", 20, 100)
-        candidates = list(
-            task.discovered_threads.filter(
-                Q(status=DiscoveryStatus.PENDING) | Q(status=DiscoveryStatus.FAILED, attempts__lt=max_attempts)
-            ).order_by("attempts", "topic_page", "position")[:chunk_size]
-        )
+        if phase == "collection":
+            candidates_query = task.discovered_threads.filter(status=DiscoveryStatus.PENDING)
+        else:
+            candidates_query = task.discovered_threads.filter(status=DiscoveryStatus.FAILED, attempts__lt=max_attempts)
+        candidates = list(candidates_query.order_by("attempts", "topic_page", "position")[:chunk_size])
         for item in candidates:
             check_collection_stop(task.id)
             checkpoint["current_thread_id"] = item.thread_id
@@ -362,18 +376,34 @@ def run_honor_full_chunk(
                 item.last_error = ""
             except Exception as exc:
                 item.attempts += 1
-                item.status = DiscoveryStatus.FAILED
-                item.last_error = f"{getattr(exc, 'code', 'COLLECTION_ERROR')}: {exc}"
+                error_code = str(getattr(exc, "code", "COLLECTION_ERROR")).upper()
+                # Only explicit access-control responses qualify for a verified skip.
+                blocked_codes = {
+                    "HTTP_401",
+                    "HTTP_403",
+                    "AUTH_REQUIRED",
+                    "LOGIN_REQUIRED",
+                    "LOGIN_WALL",
+                    "PERMISSION_DENIED",
+                    "ACCESS_DENIED",
+                    "BLOCKED_PERMISSION_PAGE",
+                }
+                item.status = (
+                    DiscoveryStatus.BLOCKED_SKIPPED
+                    if error_code in blocked_codes and item.attempts >= max_attempts
+                    else DiscoveryStatus.FAILED
+                )
+                item.last_error = f"{error_code}: {exc}"
                 failed += 1
             item.save()
             if was_retry:
                 retry_count += 1
             checkpoint["retry_count"] = retry_count
-        remaining = task.discovered_threads.filter(
-            Q(status=DiscoveryStatus.PENDING) | Q(status=DiscoveryStatus.FAILED, attempts__lt=max_attempts)
-        ).exists()
         checkpoint["current_thread_id"] = ""
-        if remaining:
+        if task.discovered_threads.filter(status=DiscoveryStatus.PENDING).exists():
+            return FullChunkResult(checkpoint, inserted, duplicates, failed, True, False, {})
+        if task.discovered_threads.filter(status=DiscoveryStatus.FAILED, attempts__lt=max_attempts).exists():
+            checkpoint["phase"] = "retry"
             return FullChunkResult(checkpoint, inserted, duplicates, failed, True, False, {})
         checkpoint["phase"] = "verification"
 
