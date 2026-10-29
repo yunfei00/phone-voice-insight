@@ -273,6 +273,57 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
         task.save(update_fields=("celery_task_id", "updated_at"))
         return Response({"task": self._task_data(task)}, status=202)
 
+    @action(detail=False, methods=("post",), url_path="start-full", permission_classes=[IsAdministrator])
+    def start_full(self, request: Request) -> Response:
+        """Start one durable, resumable-in-UI task for every ungoverned record in a product."""
+        params = GovernanceBatchRequestSerializer(
+            data={
+                "product_id": request.data.get("product_id"),
+                "source_id": request.data.get("source_id"),
+                "limit": 1,
+                "dry_run": False,
+            }
+        )
+        params.is_valid(raise_exception=True)
+        values = params.validated_data
+        product_id = values["product_id"]
+        source_id = values.get("source_id")
+        user_id = request.user.pk
+        if user_id is None:
+            return Response({"detail": "用户身份无效"}, status=403)
+        with transaction.atomic():
+            product = Product.objects.select_for_update().filter(pk=product_id).first()
+            if product is None:
+                return Response({"detail": "产品不存在"}, status=404)
+            active = GovernanceTask.objects.filter(
+                product_id=product_id,
+                status__in=(GovernanceTask.Status.PENDING, GovernanceTask.Status.RUNNING),
+            ).first()
+            if active:
+                return Response({"detail": "该产品已有进行中的治理任务", "task": self._task_data(active)}, status=409)
+            from apps.reviews.services.governance_selection import governance_candidates
+
+            ids = list(governance_candidates(product_id=product_id, source_id=source_id).values_list("id", flat=True))
+            if not ids:
+                return Response({"detail": "没有待治理的数据", "total": 0}, status=200)
+            task = GovernanceTask.objects.create(
+                product=product,
+                source_id=source_id,
+                requested_by_id=user_id,
+                review_ids=ids,
+                total=len(ids),
+            )
+        try:
+            queued = process_governance_batch.delay(task.id)
+        except Exception as exc:
+            task.status = GovernanceTask.Status.FAILED
+            task.error_message = type(exc).__name__
+            task.save(update_fields=("status", "error_message", "updated_at"))
+            return Response({"detail": "任务投递失败", "task": self._task_data(task)}, status=503)
+        task.celery_task_id = queued.id
+        task.save(update_fields=("celery_task_id", "updated_at"))
+        return Response({"task": self._task_data(task)}, status=202)
+
     @action(detail=False, methods=("get",), url_path="async-status", permission_classes=[IsAdministrator])
     def async_status(self, request: Request) -> Response:
         try:

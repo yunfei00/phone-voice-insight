@@ -408,6 +408,12 @@ export const startAsyncGovernance = async (payload: {
 }): Promise<{ task: GovernanceTaskInfo }> =>
   (await apiClient.post('/review-quality/start-async/', payload)).data
 
+export const startFullGovernance = async (payload: {
+  product_id: number
+  source_id?: number
+}): Promise<{ task?: GovernanceTaskInfo; total?: number; detail?: string }> =>
+  (await apiClient.post('/review-quality/start-full/', payload)).data
+
 export const getGovernanceTaskHistory = async (params: {
   product_id?: number
   page?: number
