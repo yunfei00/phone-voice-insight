@@ -323,8 +323,13 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
 
     @action(detail=False, methods=("get",), url_path="aggregates")
     def aggregates(self, request: Request) -> Response:
-        del request
-        analyses = self.get_queryset().filter(run__is_current=True)
+        analyses = self.get_queryset().filter(
+            run__is_current=True,
+            run__status=StructuredRunStatus.SUCCEEDED,
+            schema_valid=True,
+            review_required=False,
+            content_id__in=final_corpus_reviews().values("pk"),
+        )
         aspects = OpinionAspect.objects.filter(analysis__in=analyses)
         by_domain = list(aspects.values("aspect_code").annotate(count=Count("id")).order_by("-count"))
         by_topic = list(aspects.values("topic_code").annotate(count=Count("id")).order_by("-count"))
