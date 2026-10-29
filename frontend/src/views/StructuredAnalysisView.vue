@@ -61,8 +61,9 @@ async function load() {
     batches.value = batchResult.results
     batchCount.value = batchResult.count
     taxonomy.value ||= await getTaxonomy()
-    if (selectedProduct.value)
-      corpusProgress.value = await getStructuredCorpusProgress(selectedProduct.value)
+    corpusProgress.value = selectedProduct.value
+      ? await getStructuredCorpusProgress(selectedProduct.value)
+      : undefined
   } catch {
     error.value = '结构化分析数据加载失败，请稍后重试。'
   } finally {
@@ -71,7 +72,7 @@ async function load() {
 }
 
 async function startAll() {
-  if (!selectedProduct.value || startingAll.value) return
+  if (!selectedProduct.value || startingAll.value || corpusProgress.value?.active) return
   startingAll.value = true
   try {
     const result = await runAllStructuredAnalysis(selectedProduct.value)
@@ -170,7 +171,7 @@ onUnmounted(() => {
         <el-button
           type="primary"
           :loading="starting"
-          :disabled="!selectedProduct || corpusProgress?.active"
+          :disabled="!selectedProduct || startingAll || starting || corpusProgress?.active"
           @click="startSample"
         >
           开始分析（非模拟）
@@ -178,7 +179,7 @@ onUnmounted(() => {
         <el-button
           type="success"
           :loading="startingAll"
-          :disabled="!selectedProduct"
+          :disabled="!selectedProduct || startingAll || starting || corpusProgress?.active"
           @click="startAll"
           >一键分析全部剩余数据</el-button
         >
