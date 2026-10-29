@@ -276,12 +276,14 @@ class ReviewQualityViewSet(ReadOnlyModelViewSet):
     @action(detail=False, methods=("post",), url_path="start-full", permission_classes=[IsAdministrator])
     def start_full(self, request: Request) -> Response:
         """Start one durable, resumable-in-UI task for every ungoverned record in a product."""
-        params = GovernanceBatchRequestSerializer(data={
-            "product_id": request.data.get("product_id"),
-            "source_id": request.data.get("source_id"),
-            "limit": 1,
-            "dry_run": False,
-        })
+        params = GovernanceBatchRequestSerializer(
+            data={
+                "product_id": request.data.get("product_id"),
+                "source_id": request.data.get("source_id"),
+                "limit": 1,
+                "dry_run": False,
+            }
+        )
         params.is_valid(raise_exception=True)
         values = params.validated_data
         product_id = values["product_id"]
