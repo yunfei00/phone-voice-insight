@@ -43,7 +43,6 @@ def _config_int(config: dict[str, Any], key: str, default: int, maximum: int) ->
     return min(max(value, 1), maximum)
 
 
-
 def _raw_text(page: Any) -> str:
     return page.content.decode("utf-8", errors="replace") if isinstance(page.content, bytes) else page.content
 
@@ -346,9 +345,7 @@ def run_honor_full_chunk(
         if phase == "collection":
             candidates_query = task.discovered_threads.filter(status=DiscoveryStatus.PENDING)
         else:
-            candidates_query = task.discovered_threads.filter(
-                status=DiscoveryStatus.FAILED, attempts__lt=max_attempts
-            )
+            candidates_query = task.discovered_threads.filter(status=DiscoveryStatus.FAILED, attempts__lt=max_attempts)
         candidates = list(candidates_query.order_by("attempts", "topic_page", "position")[:chunk_size])
         for item in candidates:
             check_collection_stop(task.id)
@@ -406,9 +403,7 @@ def run_honor_full_chunk(
         checkpoint["current_thread_id"] = ""
         if task.discovered_threads.filter(status=DiscoveryStatus.PENDING).exists():
             return FullChunkResult(checkpoint, inserted, duplicates, failed, True, False, {})
-        if task.discovered_threads.filter(
-            status=DiscoveryStatus.FAILED, attempts__lt=max_attempts
-        ).exists():
+        if task.discovered_threads.filter(status=DiscoveryStatus.FAILED, attempts__lt=max_attempts).exists():
             checkpoint["phase"] = "retry"
             return FullChunkResult(checkpoint, inserted, duplicates, failed, True, False, {})
         checkpoint["phase"] = "verification"

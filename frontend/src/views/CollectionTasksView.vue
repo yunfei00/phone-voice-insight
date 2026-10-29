@@ -195,7 +195,9 @@ function discoveryProgress(task: CollectionTask): string {
   const checkpoint = task.last_checkpoint || {}
   const scanned = Number(checkpoint.scanned_topic_pages || 0)
   const expected = Number(checkpoint.expected_topic_pages || 0)
-  return expected > 0 ? `列表扫描 ${scanned} / ${expected} 页` : `已扫描 ${scanned} 页，正在确定总数`
+  return expected > 0
+    ? `列表扫描 ${scanned} / ${expected} 页`
+    : `已扫描 ${scanned} 页，正在确定总数`
 }
 
 function startPolling(): void {
@@ -680,8 +682,12 @@ onUnmounted(stopPolling)
           {{ triggerLabels[selectedTask.trigger_type] }} / {{ selectedTask.task_type }} /
           {{ selectedTask.status }}
         </el-descriptions-item>
-        <el-descriptions-item label="执行阶段">{{ collectionPhase(selectedTask) }}</el-descriptions-item>
-        <el-descriptions-item label="发现进度">{{ discoveryProgress(selectedTask) }}</el-descriptions-item>
+        <el-descriptions-item label="执行阶段">{{
+          collectionPhase(selectedTask)
+        }}</el-descriptions-item>
+        <el-descriptions-item label="发现进度">{{
+          discoveryProgress(selectedTask)
+        }}</el-descriptions-item>
         <el-descriptions-item label="统计">
           新增 {{ selectedTask.new_records }}，重复 {{ selectedTask.duplicate_records }}，失败
           {{ selectedTask.failure_count }}
