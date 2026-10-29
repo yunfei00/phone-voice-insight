@@ -2,7 +2,9 @@
 
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from django.core.management import call_command
@@ -26,6 +28,7 @@ from apps.reviews.services.experience_signal_detector import (
     is_non_phone_accessory_content,
 )
 from apps.reviews.services.governance_pipeline import (
+    GovernanceDecision,
     GovernanceProcessor,
     apply_manual_override,
     clear_manual_override,
@@ -660,6 +663,254 @@ def test_manual_governance_batch_requires_admin_and_defaults_to_preview(
     assert repeated.status_code == 200
     assert ReviewQuality.objects.count() == 1
     assert AnalysisCorpusItem.objects.count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("payload_factory", "expected_source"),
+    [
+        (lambda product, _source: {"product_id": product.id}, None),
+        (lambda product, _source: {"product_id": product.id, "source_id": None}, None),
+        (lambda product, source: {"product_id": product.id, "source_id": source.id}, "fixture"),
+    ],
+)
+def test_full_governance_accepts_missing_null_or_valid_source(
+    api_client: APIClient,
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+    monkeypatch: pytest.MonkeyPatch,
+    payload_factory: Callable[[Product, DataSource], dict[str, object]],
+    expected_source: str | None,
+) -> None:
+    from django.contrib.auth import get_user_model
+
+    from apps.reviews.models import GovernanceTask
+    from apps.reviews.tasks import process_governance_batch
+
+    review = make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id=f"honor_thread:full-source-{expected_source}",
+        content="荣耀Power2续航表现稳定",
+    )
+    admin = get_user_model().objects.create_superuser(
+        username=f"full_source_admin_{expected_source}", password="test-password-123"
+    )
+    api_client.force_authenticate(user=admin)
+    monkeypatch.setattr(
+        process_governance_batch,
+        "delay",
+        lambda task_id: SimpleNamespace(id=f"celery-{task_id}"),
+    )
+
+    payload = payload_factory(product, source)
+    response = api_client.post("/api/v1/review-quality/start-full/", payload, format="json")
+
+    assert response.status_code == 202
+    task = GovernanceTask.objects.get(pk=response.data["task"]["id"])
+    assert task.review_ids == [review.id]
+    assert task.source_id == (source.id if expected_source == "fixture" else None)
+    assert task.celery_task_id == f"celery-{task.id}"
+
+
+@pytest.mark.django_db
+def test_full_governance_rejects_invalid_source_and_missing_product(
+    api_client: APIClient,
+    product: Product,
+) -> None:
+    from django.contrib.auth import get_user_model
+
+    admin = get_user_model().objects.create_superuser(username="full_invalid_admin", password="test-password-123")
+    api_client.force_authenticate(user=admin)
+    url = "/api/v1/review-quality/start-full/"
+
+    invalid = api_client.post(url, {"product_id": product.id, "source_id": "not-an-id"}, format="json")
+    missing_product = api_client.post(url, {"product_id": 999999, "source_id": None}, format="json")
+
+    assert invalid.status_code == 400
+    assert "source_id" in invalid.data["detail"]
+    assert missing_product.status_code == 404
+    assert missing_product.data["detail"] == "产品不存在"
+
+
+@pytest.mark.django_db
+def test_full_governance_empty_and_active_task_are_explicit(
+    api_client: APIClient,
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+) -> None:
+    from django.contrib.auth import get_user_model
+
+    from apps.reviews.models import GovernanceTask
+
+    admin = get_user_model().objects.create_superuser(username="full_state_admin", password="test-password-123")
+    api_client.force_authenticate(user=admin)
+    url = "/api/v1/review-quality/start-full/"
+
+    empty = api_client.post(url, {"product_id": product.id, "source_id": None}, format="json")
+    assert empty.status_code == 200
+    assert empty.data == {"detail": "没有待治理的数据", "total": 0}
+
+    review = make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id="honor_thread:full-active",
+        content="荣耀Power2系统流畅",
+    )
+    active = GovernanceTask.objects.create(
+        product=product,
+        requested_by=admin,
+        review_ids=[review.id],
+        total=1,
+    )
+    conflict = api_client.post(url, {"product_id": product.id}, format="json")
+
+    assert conflict.status_code == 409
+    assert conflict.data["detail"] == "该产品已有进行中的治理任务"
+    assert conflict.data["task"]["id"] == active.id
+
+
+@pytest.mark.django_db
+def test_full_governance_does_not_repeat_already_governed_records(
+    api_client: APIClient,
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+) -> None:
+    from django.contrib.auth import get_user_model
+
+    review = make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id="honor_thread:full-governed",
+        content="荣耀Power2充电速度满意",
+    )
+    process_reviews(ReviewRecord.objects.filter(pk=review.id))
+    admin = get_user_model().objects.create_superuser(username="full_done_admin", password="test-password-123")
+    api_client.force_authenticate(user=admin)
+
+    response = api_client.post(
+        "/api/v1/review-quality/start-full/",
+        {"product_id": product.id, "source_id": None},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.data["total"] == 0
+
+
+@pytest.mark.django_db
+def test_full_governance_records_dispatch_failure(
+    api_client: APIClient,
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from django.contrib.auth import get_user_model
+
+    from apps.reviews.models import GovernanceTask
+    from apps.reviews.tasks import process_governance_batch
+
+    make_governance_review(
+        source=source,
+        source_target=source_target,
+        product=product,
+        external_id="honor_thread:dispatch-failure",
+        content="荣耀Power2偶发重启",
+    )
+    admin = get_user_model().objects.create_superuser(username="full_dispatch_admin", password="test-password-123")
+    api_client.force_authenticate(user=admin)
+
+    def fail_dispatch(_task_id: int) -> None:
+        raise RuntimeError("broker unavailable")
+
+    monkeypatch.setattr(process_governance_batch, "delay", fail_dispatch)
+    response = api_client.post(
+        "/api/v1/review-quality/start-full/",
+        {"product_id": product.id, "source_id": None},
+        format="json",
+    )
+
+    assert response.status_code == 503
+    task = GovernanceTask.objects.get(pk=response.data["task"]["id"])
+    assert task.status == GovernanceTask.Status.FAILED
+    assert task.error_message == "RuntimeError"
+
+
+@pytest.mark.django_db
+def test_governance_failure_is_recorded_and_retry_only_contains_failed_records(
+    api_client: APIClient,
+    source: DataSource,
+    source_target: SourceTarget,
+    product: Product,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from django.contrib.auth import get_user_model
+
+    from apps.reviews.models import GovernanceTask
+    from apps.reviews.tasks import process_governance_batch
+
+    reviews = [
+        make_governance_review(
+            source=source,
+            source_target=source_target,
+            product=product,
+            external_id=f"honor_thread:retry-{index}",
+            content=f"荣耀Power2体验记录{index}",
+        )
+        for index in range(2)
+    ]
+    admin = get_user_model().objects.create_superuser(username="full_retry_admin", password="test-password-123")
+    original = GovernanceTask.objects.create(
+        product=product,
+        requested_by=admin,
+        review_ids=[review.id for review in reviews],
+        total=2,
+    )
+    original_process = GovernanceProcessor.process
+
+    def fail_one(
+        processor: GovernanceProcessor,
+        review: ReviewRecord,
+        *,
+        persist: bool = True,
+        force: bool = False,
+    ) -> GovernanceDecision:
+        if review.id == reviews[1].id:
+            raise ValueError("invalid review")
+        return original_process(processor, review, persist=persist, force=force)
+
+    monkeypatch.setattr(GovernanceProcessor, "process", fail_one)
+    process_governance_batch(original.id)
+    original.refresh_from_db()
+
+    assert original.status == GovernanceTask.Status.PARTIAL
+    assert original.processed == 2
+    assert original.failed == 1
+    assert original.failures == [{"review_id": reviews[1].id, "error_type": "ValueError"}]
+
+    monkeypatch.setattr(
+        process_governance_batch,
+        "delay",
+        lambda task_id: SimpleNamespace(id=f"retry-{task_id}"),
+    )
+    api_client.force_authenticate(user=admin)
+    response = api_client.post(
+        "/api/v1/review-quality/retry-failed/",
+        {"task_id": original.id},
+        format="json",
+    )
+
+    assert response.status_code == 202
+    retry = GovernanceTask.objects.get(pk=response.data["task"]["id"])
+    assert retry.review_ids == [reviews[1].id]
+    assert retry.reprocess is True
 
 
 @pytest.mark.django_db

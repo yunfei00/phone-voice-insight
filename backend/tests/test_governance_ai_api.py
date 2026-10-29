@@ -26,6 +26,19 @@ def test_ai_start_rejects_invalid_limit(admin_user: Any) -> None:
 
 
 @pytest.mark.django_db
+def test_ai_start_accepts_null_source_filter(admin_user: Any) -> None:
+    request = APIRequestFactory().post(
+        "/api/v1/governance-ai/start/",
+        {"product_id": 999999, "source_id": None, "limit": 20},
+        format="json",
+    )
+    force_authenticate(request, user=admin_user)
+    response = GovernanceAIViewSet.as_view({"post": "start"})(request)
+    assert response.status_code == 404
+    assert response.data["detail"] == "产品不存在"
+
+
+@pytest.mark.django_db
 def test_ai_confirm_requires_pending_record(admin_user: Any) -> None:
     request = APIRequestFactory().post(
         "/api/v1/governance-ai/confirm/",

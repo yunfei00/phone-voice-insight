@@ -164,7 +164,7 @@ class ThreadTreeViewSet(ReadOnlyModelViewSet):
 
 class GovernanceBatchRequestSerializer(serializers.Serializer):
     product_id = serializers.IntegerField(min_value=1)
-    source_id = serializers.IntegerField(min_value=1, required=False)
+    source_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     limit = serializers.IntegerField(min_value=1, max_value=100, default=20)
     dry_run = serializers.BooleanField(default=True)
     reprocess = serializers.BooleanField(default=False)
