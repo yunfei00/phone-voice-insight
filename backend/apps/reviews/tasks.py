@@ -152,6 +152,38 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
     finally:
         batch.finished_at = timezone.now()
         batch.save(update_fields=("status", "error_code", "failed", "failure_ids", "finished_at", "updated_at"))
+    if batch.automatic and batch.status in (
+        GovernanceAIBatch.Status.SUCCESS, GovernanceAIBatch.Status.PARTIAL
+    ):
+        # Each continuation is bounded to 100 rows. Failed/uncertain AI results
+        # are not automatically charged again; explicit retry remains available.
+        from django.db import transaction
+
+        from apps.reviews.models import ReviewQuality
+
+        with transaction.atomic():
+            product = batch.product.__class__.objects.select_for_update().get(pk=batch.product_id)
+            reviewed = GovernanceAIReview.objects.values_list("quality_id", flat=True)
+            pending = ReviewQuality.objects.filter(review__product=product)
+            if batch.source_id is not None:
+                pending = pending.filter(review__source_id=batch.source_id)
+            ids = list(pending.exclude(pk__in=reviewed).order_by("pk").values_list("pk", flat=True)[:100])
+            next_batch = None
+            if ids:
+                next_batch = GovernanceAIBatch.objects.create(
+                    product=product, source_id=batch.source_id,
+                    requested_by=batch.requested_by, automatic=True,
+                    quality_ids=ids, total=len(ids),
+                )
+        if next_batch is not None:
+            try:
+                job = process_governance_ai_batch.delay(next_batch.id)
+                next_batch.celery_task_id = job.id
+                next_batch.save(update_fields=("celery_task_id", "updated_at"))
+            except Exception:
+                next_batch.status = GovernanceAIBatch.Status.FAILED
+                next_batch.error_code = "TASK_DISPATCH_FAILED"
+                next_batch.save(update_fields=("status", "error_code", "updated_at"))
     return {"batch_id": batch.id, "status": batch.status, "processed": batch.processed}
 
 
