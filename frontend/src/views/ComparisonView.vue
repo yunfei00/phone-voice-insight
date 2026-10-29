@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { EChartsOption } from 'echarts'
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { getDashboardComparison, getProducts } from '@/api'
 import DashboardFilters from '@/components/DashboardFilters.vue'
@@ -9,7 +9,12 @@ import TechChart from '@/components/TechChart.vue'
 import type { DashboardComparison, DashboardFilters as FilterValues, Product } from '@/types/api'
 
 const router = useRouter()
-const filters = ref<FilterValues>({})
+const route = useRoute()
+const filters = ref<FilterValues>({
+  source_id: route.query.source_id ? Number(route.query.source_id) : undefined,
+  start_date: String(route.query.start_date || ''),
+  end_date: String(route.query.end_date || ''),
+})
 const products = ref<Product[]>([])
 const leftId = ref<number>()
 const rightId = ref<number>()
@@ -68,6 +73,15 @@ async function load(): Promise<void> {
       left_product_id: leftId.value,
       right_product_id: rightId.value,
     })
+    await router.replace({
+      query: {
+        left_product_id: leftId.value,
+        right_product_id: rightId.value,
+        source_id: filters.value.source_id,
+        start_date: filters.value.start_date,
+        end_date: filters.value.end_date,
+      },
+    })
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : '产品对比加载失败'
   } finally {
@@ -77,12 +91,18 @@ async function load(): Promise<void> {
 
 onMounted(async () => {
   products.value = (await getProducts({ page_size: 100 })).results
-  leftId.value =
-    products.value.find((item) => item.name.replace(/\s/g, '') === '荣耀Power')?.id ||
-    products.value[0]?.id
-  rightId.value =
-    products.value.find((item) => item.name.replace(/\s/g, '') === '荣耀Power2')?.id ||
-    products.value.find((item) => item.id !== leftId.value)?.id
+  const requestedLeft = Number(route.query.left_product_id)
+  const requestedRight = Number(route.query.right_product_id)
+  leftId.value = products.value.some((item) => item.id === requestedLeft)
+    ? requestedLeft
+    : products.value.find((item) => item.name.replace(/\s/g, '') === '荣耀Power')?.id ||
+      products.value[0]?.id
+  rightId.value = products.value.some(
+    (item) => item.id === requestedRight && item.id !== leftId.value,
+  )
+    ? requestedRight
+    : products.value.find((item) => item.name.replace(/\s/g, '') === '荣耀Power2')?.id ||
+      products.value.find((item) => item.id !== leftId.value)?.id
   await load()
 })
 </script>
@@ -115,7 +135,7 @@ onMounted(async () => {
             :disabled="item.id === leftId"
         /></el-select>
       </div>
-      <DashboardFilters v-model="filters" compact @change="load" />
+      <DashboardFilters v-model="filters" compact :show-product="false" @change="load" />
     </section>
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
     <el-alert

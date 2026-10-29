@@ -175,7 +175,10 @@ class DashboardOperationsView(APIView):
 
         worker_status = "unknown"
         try:
-            replies = current_app.control.inspect(timeout=0.5).ping() or {}
+            # Celery inspect waits for a broadcast reply and can otherwise dominate the
+            # monitoring endpoint latency.  A short timeout is sufficient for the local
+            # worker health signal; "offline" remains distinct from business data health.
+            replies = current_app.control.inspect(timeout=0.2).ping() or {}
             worker_status = "online" if replies else "offline"
         except Exception:  # Celery inspection must never break monitoring API.
             worker_status = "offline"

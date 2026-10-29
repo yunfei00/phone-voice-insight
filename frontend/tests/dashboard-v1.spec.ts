@@ -1,5 +1,5 @@
 import ElementPlus from 'element-plus'
-import { createApp, nextTick } from 'vue'
+import { createApp, nextTick, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -14,6 +14,7 @@ import {
   getInsightReports,
   getOperationsStatus,
 } from '@/api'
+import DashboardFilters from '@/components/DashboardFilters.vue'
 import ComparisonView from '@/views/ComparisonView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import InsightReportsView from '@/views/InsightReportsView.vue'
@@ -269,6 +270,28 @@ describe('V1 Dashboard pages', () => {
     await flush()
     expect(getDashboardComparison).toHaveBeenCalled()
     expect(container.textContent).toContain('分母 50')
+    expect(
+      container.querySelectorAll('.compare-filters .dashboard-filters .el-select'),
+    ).toHaveLength(2)
+    expect(replace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({ left_product_id: 2, right_product_id: 1 }),
+      }),
+    )
+    app.unmount()
+  })
+  it('URL 自定义日期在筛选器中显示为自定义而非最近 30 天', async () => {
+    const wrapper = {
+      components: { DashboardFilters },
+      setup: () => ({
+        filters: ref({ start_date: '2026-01-01', end_date: '2026-10-29' }),
+      }),
+      template: '<DashboardFilters v-model="filters" />',
+    }
+    const { app, container } = mount(wrapper)
+    await flush()
+    expect(container.textContent).toContain('自定义')
+    expect(container.querySelector('.el-date-editor')).not.toBeNull()
     app.unmount()
   })
   it('问题列表加载且按需请求证据详情', async () => {

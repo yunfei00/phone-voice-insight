@@ -4,7 +4,10 @@ import { onMounted, ref, watch } from 'vue'
 import { getProducts, getSources } from '@/api'
 import type { DashboardFilters, DataSource, Product } from '@/types/api'
 
-const props = defineProps<{ modelValue: DashboardFilters; compact?: boolean }>()
+const props = withDefaults(
+  defineProps<{ modelValue: DashboardFilters; compact?: boolean; showProduct?: boolean }>(),
+  { compact: false, showProduct: true },
+)
 const emit = defineEmits<{
   'update:modelValue': [value: DashboardFilters]
   change: [value: DashboardFilters]
@@ -26,6 +29,14 @@ function dates(days: number): [Date, Date] {
   const start = new Date()
   start.setDate(end.getDate() - days + 1)
   return [start, end]
+}
+
+function inferPreset(start: string, end: string): string {
+  for (const days of [7, 30, 90]) {
+    const [expectedStart, expectedEnd] = dates(days)
+    if (start === iso(expectedStart) && end === iso(expectedEnd)) return String(days)
+  }
+  return 'custom'
 }
 
 function update(values: Partial<DashboardFilters>): void {
@@ -50,7 +61,10 @@ function applyDates(value: [Date, Date] | null): void {
 watch(
   () => [props.modelValue.start_date, props.modelValue.end_date],
   ([start, end]) => {
-    if (start && end) dateRange.value = [new Date(`${start}T00:00:00`), new Date(`${end}T00:00:00`)]
+    if (start && end) {
+      dateRange.value = [new Date(`${start}T00:00:00`), new Date(`${end}T00:00:00`)]
+      preset.value = inferPreset(start, end)
+    }
   },
   { immediate: true },
 )
@@ -69,6 +83,7 @@ onMounted(async () => {
 <template>
   <div class="dashboard-filters" :class="{ compact }">
     <el-select
+      v-if="showProduct"
       :model-value="modelValue.product_id"
       placeholder="全部产品"
       clearable

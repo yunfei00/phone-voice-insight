@@ -11,8 +11,8 @@ from ai.taxonomy import load_taxonomy
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
-from django.db.models import Case, Count, DateTimeField, Max, Min, Q, QuerySet, Value, When
-from django.db.models.functions import Coalesce, TruncDate
+from django.db.models import Case, Count, DateTimeField, F, Max, Min, Q, QuerySet, Value, When
+from django.db.models.functions import Coalesce, Lower, Replace, TruncDate
 from django.utils import timezone
 
 from apps.analysis.models import AnalysisRun, OpinionAspect, StructuredAnalysis, StructuredRunStatus
@@ -97,9 +97,28 @@ def accepted_analyses(params: Mapping[str, Any]) -> QuerySet[StructuredAnalysis]
 
 
 def issue_aspects(params: Mapping[str, Any]) -> QuerySet[OpinionAspect]:
-    queryset = OpinionAspect.objects.filter(
-        analysis_id__in=accepted_analyses(params).values("id"),
-        sentiment="NEGATIVE",
+    queryset = (
+        OpinionAspect.objects.annotate(
+            normalized_target_product=Replace(
+                Replace(Lower(Coalesce("target_product", Value(""))), Value(" "), Value("")),
+                Value("　"),
+                Value(""),
+            ),
+            normalized_content_product=Replace(
+                Replace(Lower("analysis__content__product__name"), Value(" "), Value("")),
+                Value("　"),
+                Value(""),
+            ),
+        )
+        .filter(
+            analysis_id__in=accepted_analyses(params).values("id"),
+            sentiment="NEGATIVE",
+        )
+        .filter(
+            Q(target_product__isnull=True)
+            | Q(target_product="")
+            | Q(normalized_target_product=F("normalized_content_product"))
+        )
     )
     if category := params.get("category"):
         queryset = queryset.filter(aspect_code=str(category))
@@ -134,22 +153,23 @@ def issue_rows(params: Mapping[str, Any]) -> list[dict[str, Any]]:
     previous_start = seven_days_ago - timedelta(days=7)
     grouped = list(
         issue_aspects(params)
+        .annotate(metric_time=Coalesce("analysis__content__published_at", "analysis__content__collected_at"))
         .values("analysis__content__product_id", "analysis__content__product__name", "aspect_code", "topic_code")
         .annotate(
             feedback_count=Count("analysis__content_id", distinct=True),
             recent_count=Count(
                 "analysis__content_id",
                 filter=Q(
-                    analysis__content__published_at__gte=seven_days_ago,
-                    analysis__content__published_at__lt=end,
+                    metric_time__gte=seven_days_ago,
+                    metric_time__lt=end,
                 ),
                 distinct=True,
             ),
             previous_count=Count(
                 "analysis__content_id",
                 filter=Q(
-                    analysis__content__published_at__gte=previous_start,
-                    analysis__content__published_at__lt=seven_days_ago,
+                    metric_time__gte=previous_start,
+                    metric_time__lt=seven_days_ago,
                 ),
                 distinct=True,
             ),
@@ -285,24 +305,55 @@ def product_summaries(params: Mapping[str, Any]) -> list[dict[str, Any]]:
     products = Product.objects.filter(is_active=True).order_by("name")
     if product_id := _integer(params, "product_id"):
         products = products.filter(pk=product_id)
-    rows = []
-    for product in products:
-        scoped = dict(params)
-        scoped["product_id"] = product.id
-        top = issue_rows(scoped)[:1]
-        data = overview(scoped)
-        rows.append(
-            {
-                "product_id": product.id,
-                "product_name": product.name,
-                "valid_feedback": data["valid_feedback"],
-                "ai_analyzed": data["ai_analyzed"],
-                "explicit_issue_feedback": data["explicit_issue_feedback"],
-                "top_issue": top[0]["name"] if top else None,
-                "latest_data_at": data["latest_data_at"],
-            }
-        )
-    return rows
+    product_rows = list(products)
+    product_ids = [item.id for item in product_rows]
+    if not product_ids:
+        return []
+
+    review_stats = {
+        row["product_id"]: row
+        for row in filtered_reviews(params)
+        .filter(product_id__in=product_ids)
+        .values("product_id")
+        .annotate(latest_data_at=Max("collected_at"))
+    }
+    valid_counts = {
+        row["review__product_id"]: row["count"]
+        for row in valid_qualities(params)
+        .filter(review__product_id__in=product_ids)
+        .values("review__product_id")
+        .annotate(count=Count("review_id", distinct=True))
+    }
+    analyzed_counts = {
+        row["content__product_id"]: row["count"]
+        for row in accepted_analyses(params)
+        .filter(content__product_id__in=product_ids)
+        .values("content__product_id")
+        .annotate(count=Count("content_id", distinct=True))
+    }
+    issue_counts = {
+        row["analysis__content__product_id"]: row["count"]
+        for row in issue_aspects(params)
+        .filter(analysis__content__product_id__in=product_ids)
+        .values("analysis__content__product_id")
+        .annotate(count=Count("analysis__content_id", distinct=True))
+    }
+    top_issues: dict[int, str] = {}
+    for row in issue_rows(params):
+        top_issues.setdefault(int(row["product_id"]), str(row["name"]))
+
+    return [
+        {
+            "product_id": product.id,
+            "product_name": product.name,
+            "valid_feedback": valid_counts.get(product.id, 0),
+            "ai_analyzed": analyzed_counts.get(product.id, 0),
+            "explicit_issue_feedback": issue_counts.get(product.id, 0),
+            "top_issue": top_issues.get(product.id),
+            "latest_data_at": review_stats.get(product.id, {}).get("latest_data_at"),
+        }
+        for product in product_rows
+    ]
 
 
 def comparison(params: Mapping[str, Any]) -> dict[str, Any]:

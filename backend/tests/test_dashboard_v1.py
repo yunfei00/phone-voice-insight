@@ -187,6 +187,47 @@ def test_multiple_aspects_do_not_duplicate_total_feedback(api_client, dashboard_
 
 
 @pytest.mark.django_db
+def test_compared_product_negative_is_not_misattributed(api_client, product, source, source_target):  # type: ignore[no-untyped-def]
+    review = create_issue(
+        product=product,
+        source=source,
+        target=source_target,
+        external_id="comparison-target",
+    )
+    OpinionAspect.objects.filter(analysis__content=review).update(
+        target_product="荣耀 X70",
+        compared_products=[product.name],
+        relation_type="COMPARED_WITH",
+    )
+
+    overview_response = api_client.get("/api/v1/dashboard/overview/")
+    category_response = api_client.get("/api/v1/dashboard/categories/")
+    issue_response = api_client.get("/api/v1/dashboard/issues/")
+
+    assert overview_response.data["ai_analyzed"] == 1
+    assert overview_response.data["explicit_issue_feedback"] == 0
+    assert category_response.data["results"] == []
+    assert issue_response.data["count"] == 0
+
+
+@pytest.mark.django_db
+def test_issue_recent_count_uses_collected_time_fallback(api_client, product, source, source_target):  # type: ignore[no-untyped-def]
+    review = create_issue(
+        product=product,
+        source=source,
+        target=source_target,
+        external_id="missing-published-at",
+    )
+    review.published_at = None
+    review.save(update_fields=("published_at", "updated_at"))
+
+    response = api_client.get("/api/v1/dashboard/issues/")
+
+    assert response.status_code == 200
+    assert response.data["results"][0]["recent_count"] == 1
+
+
+@pytest.mark.django_db
 def test_trends_and_categories_use_distinct_feedback(api_client, dashboard_data):  # type: ignore[no-untyped-def]
     trends_response = api_client.get("/api/v1/dashboard/trends/")
     categories_response = api_client.get("/api/v1/dashboard/categories/")
