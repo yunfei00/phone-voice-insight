@@ -4,6 +4,7 @@ import { onMounted, reactive, ref } from 'vue'
 
 import {
   createStructuredBatch,
+  runAllStructuredAnalysis,
   getProducts,
   getStructuredAggregates,
   getStructuredAnalyses,
@@ -23,6 +24,7 @@ import type {
 } from '@/types/api'
 
 const starting = ref(false)
+const startingAll = ref(false)
 const sampleSize = ref(20)
 const loading = ref(false)
 const error = ref('')
@@ -65,6 +67,20 @@ async function load() {
     error.value = '结构化分析数据加载失败，请稍后重试。'
   } finally {
     loading.value = false
+  }
+}
+
+async function startAll() {
+  if (!selectedProduct.value || startingAll.value) return
+  startingAll.value = true
+  try {
+    await runAllStructuredAnalysis(selectedProduct.value)
+    ElMessage.success('已启动剩余语料全量分析，将自动分批执行；已完成的评论不会重复分析')
+    await load()
+  } catch {
+    ElMessage.error('全量任务启动失败，请检查 AI 配置和 Celery Worker')
+  } finally {
+    startingAll.value = false
   }
 }
 
@@ -166,9 +182,10 @@ onMounted(async () => {
         <el-button type="primary" :loading="starting" :disabled="!selectedProduct" @click="startSample">
           开始分析（非模拟）
         </el-button>
+        <el-button type="success" :loading="startingAll" :disabled="!selectedProduct" @click="startAll">一键分析全部剩余数据</el-button>
         <el-button @click="load">刷新结果与任务进度</el-button>
       </div>
-      <p>建议先运行 20 条验证模型与标签结果。任务提交后在下方查看状态；成功后刷新查看观点和聚合统计。</p>
+      <p>已完成的评论自动跳过；全量任务按每批 100 条持续执行。系统每 30 分钟检查新增有效评论并自动分析，失败记录不会无限重试。</p>
     </el-card>
     <el-alert
       v-if="quality?.error_distribution?.length"
