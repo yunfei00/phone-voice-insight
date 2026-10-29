@@ -43,6 +43,7 @@ class DiscoveryStatus(models.TextChoices):
     PENDING = "PENDING", "待采集"
     SUCCESS = "SUCCESS", "成功"
     SKIPPED = "SKIPPED", "产品不匹配"
+    BLOCKED_SKIPPED = "BLOCKED_SKIPPED", "访问受限跳过"
     FAILED = "FAILED", "失败"
 
 
