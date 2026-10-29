@@ -32,8 +32,8 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
         # Validate IDs before querying; avoid leaking cross-product totals.
         try:
             product_id = int(request.query_params["product_id"])
-            source_id = request.query_params.get("source_id")
-            source_id = int(source_id) if source_id else None
+            raw_source_id = request.query_params.get("source_id")
+            source_id = int(raw_source_id) if raw_source_id else None
             if product_id < 1 or (source_id is not None and source_id < 1):
                 raise ValueError
         except (KeyError, ValueError, TypeError):
