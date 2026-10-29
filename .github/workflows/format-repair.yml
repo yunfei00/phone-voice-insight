@@ -3,8 +3,6 @@ on:
   push:
     branches:
       - feat/voice-structured-insights
-    paths:
-      - .github/workflows/format-repair.yml
 permissions:
   contents: write
 jobs:
