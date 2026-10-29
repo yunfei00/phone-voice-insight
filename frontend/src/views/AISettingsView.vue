@@ -90,9 +90,13 @@ async function saveConfiguration(): Promise<boolean> {
 
 async function discoverOllamaModels(): Promise<void> {
   if (form.provider !== 'ollama') return
-  if (!(await saveConfiguration())) return
+  if (!form.base_url) {
+    ElMessage.warning('请先填写 Ollama 服务地址')
+    return
+  }
   discovering.value = true
   try {
+    await savePersonalAIConfiguration({ ...form, api_key: undefined } as AIConfigurationPayload)
     ollamaModels.value = (await getOllamaModels()).models
     if (!ollamaModels.value.length) ElMessage.warning('Ollama 可访问，但没有已安装的模型')
   } catch {
