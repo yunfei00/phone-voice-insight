@@ -18,7 +18,8 @@ from django.utils import timezone
 from apps.analysis.models import AnalysisRun, OpinionAspect, StructuredAnalysis, StructuredRunStatus
 from apps.products.models import Product
 from apps.reports.models import AggregateReport, ReportStatus, ReportType
-from apps.reviews.models import GovernanceAIReview, ReviewQuality, ReviewRecord
+from apps.reviews.models import ReviewQuality, ReviewRecord
+from apps.reviews.services.final_corpus import final_corpus_reviews
 from apps.sources.models import DataSource
 
 SEVERITY_RANK = {"UNKNOWN": 0, "INFO": 1, "LOW": 2, "MEDIUM": 3, "HIGH": 4, "CRITICAL": 5}
@@ -88,7 +89,7 @@ def accepted_analyses(params: Mapping[str, Any]) -> QuerySet[StructuredAnalysis]
         content_id__in=filtered_reviews(params).values("id"),
         content__quality__eligible_for_ai=True,
         content__quality__is_official_content=False,
-        content__quality__ai_reviews__status=GovernanceAIReview.Status.ACCEPTED,
+        content_id__in=final_corpus_reviews().values("pk"),
         run__is_current=True,
         run__status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
         schema_valid=True,
