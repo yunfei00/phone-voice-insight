@@ -43,6 +43,9 @@ def _config_int(config: dict[str, Any], key: str, default: int, maximum: int) ->
     return min(max(value, 1), maximum)
 
 
+CONFIRMED_BLOCKED_HONOR_THREAD_IDS = frozenset({"30417234", "29949239"})
+
+
 def _raw_text(page: Any) -> str:
     return page.content.decode("utf-8", errors="replace") if isinstance(page.content, bytes) else page.content
 
@@ -352,6 +355,14 @@ def run_honor_full_chunk(
         for item in candidates:
             check_collection_stop(task.id)
             checkpoint["current_thread_id"] = item.thread_id
+            if (
+                source_target.source.code == "HONOR_CLUB"
+                and item.thread_id in CONFIRMED_BLOCKED_HONOR_THREAD_IDS
+            ):
+                item.status = DiscoveryStatus.BLOCKED_SKIPPED
+                item.last_error = "ADMIN_CONFIRMED_ACCESS_RESTRICTED: 管理员确认无访问权限"
+                item.save(update_fields=("status", "last_error", "updated_at"))
+                continue
             was_retry = item.status == DiscoveryStatus.FAILED
             try:
                 new_count, duplicate_count, _reply_pages, matched, completed = _collect_one_thread(
