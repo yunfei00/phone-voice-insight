@@ -110,3 +110,67 @@ def run_structured_analysis_batch_task(
     batch.finished_at = timezone.now()
     batch.save()
     return {"batch_id": batch.id, "status": batch.status, "success": batch.success_count, "failed": batch.failed_count}
+
+
+@shared_task(name="dispatch_pending_structured_reviews")
+def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: int | None = None) -> dict[str, int]:
+    """Queue one bounded chunk per invocation; Celery Beat can call this periodically.
+
+    Successful and failed current runs are excluded from automatic dispatch. Failures
+    require an explicit retry after configuration or model issues are resolved.
+    """
+    from django.contrib.auth.models import User
+    from django.core.cache import cache
+    from django.db.models import Q
+
+    from apps.analysis.models import AnalysisRun
+    from apps.products.models import Product
+    from apps.reviews.services.final_corpus import final_corpus_reviews
+
+    lock_key = f"structured-dispatch:{user_id or 'auto'}:{product_id or 'all'}"
+    if not cache.add(lock_key, "1", timeout=240):
+        return {"queued": 0, "locked": 1}
+    try:
+        users = User.objects.filter(pk=user_id) if user_id else User.objects.filter(
+            ai_configuration__is_active=True
+        ).order_by("pk")
+        for user in users:
+            try:
+                provider = get_user_ai_provider(user)
+            except Exception:
+                continue
+            active = AnalysisBatch.objects.filter(
+                created_by=user, prompt_version="structured_analysis_v1",
+                status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
+            )
+            if active.exists():
+                continue
+            completed = AnalysisRun.objects.filter(
+                is_current=True,
+                status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
+            ).values("content_id")
+            failed = AnalysisRun.objects.filter(
+                is_current=True, status=StructuredRunStatus.FAILED,
+                provider=provider.provider_name, model=provider.model,
+            ).values("content_id")
+            corpus = final_corpus_reviews().exclude(pk__in=completed).exclude(pk__in=failed)
+            if product_id is not None:
+                corpus = corpus.filter(product_id=product_id)
+            first = corpus.order_by("id").first()
+            if first is None:
+                continue
+            ids = list(corpus.filter(product_id=first.product_id, source_id=first.source_id)
+                       .order_by("id").values_list("id", flat=True)[:100])
+            batch = AnalysisBatch.objects.create(
+                created_by=user, product_id=first.product_id, source_id=first.source_id,
+                corpus_version="structured-v1", provider=provider.provider_name,
+                model_name=provider.model, prompt_version="structured_analysis_v1",
+                requested_count=len(ids), dry_run=False, max_concurrency=1,
+                requests_per_minute=10, status=AnalysisBatchStatus.PENDING,
+                total_tokens=0,
+            )
+            run_structured_analysis_batch_task.delay(batch.id, ids)
+            return {"queued": len(ids), "batch_id": batch.id}
+        return {"queued": 0}
+    finally:
+        cache.delete(lock_key)
