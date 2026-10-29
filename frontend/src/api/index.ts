@@ -343,9 +343,22 @@ export const getStructuredBatches = async (
 ): Promise<PaginatedResponse<StructuredBatch>> =>
   (await apiClient.get<PaginatedResponse<StructuredBatch>>('/structured-batches/', { params })).data
 
+export interface StructuredCorpusProgress {
+  total: number
+  completed: number
+  remaining: number
+  active: boolean
+  batch: StructuredBatch | null
+}
+
+export const getStructuredCorpusProgress = async (
+  productId: number,
+): Promise<StructuredCorpusProgress> =>
+  (await apiClient.get('/structured-batches/progress/', { params: { product_id: productId } })).data
+
 export const runAllStructuredAnalysis = async (
   productId: number,
-): Promise<{ status: string; celery_task_id: string }> =>
+): Promise<{ queued: number; batch_id?: number; celery_task_id?: string; error_code?: string }> =>
   (await apiClient.post('/structured-batches/run-all/', { product_id: productId })).data
 
 export const createStructuredBatch = async (payload: {
