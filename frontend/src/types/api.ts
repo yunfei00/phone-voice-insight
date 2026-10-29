@@ -865,3 +865,99 @@ export interface OperationsStatus {
   governance?: Record<string, number>
   analysis?: Record<string, number>
 }
+
+export type AssistantProvider = 'openai_compatible' | 'ollama' | 'fake'
+
+export interface AssistantModelProfile {
+  id: number
+  name: string
+  provider: AssistantProvider
+  base_url: string
+  model: string
+  api_key_configured: boolean
+  api_key_masked: string
+  thinking_mode: '' | 'enabled' | 'disabled'
+  temperature: string
+  timeout_seconds: number
+  max_output_tokens: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AssistantModelProfilePayload {
+  name: string
+  provider: AssistantProvider
+  base_url: string
+  model: string
+  api_key?: string
+  thinking_mode: '' | 'enabled' | 'disabled'
+  temperature: number
+  timeout_seconds: number
+  max_output_tokens: number
+  is_active: boolean
+}
+
+export interface AssistantModelList {
+  default_model: {
+    id: null
+    name: string
+    model: string
+    provider: string
+    configured: boolean
+  }
+  results: AssistantModelProfile[]
+}
+
+export type AssistantConversationStatus = 'IDLE' | 'RUNNING' | 'CANCELLED' | 'FAILED'
+
+export interface AssistantConversation {
+  id: string
+  title: string
+  model_profile: number | null
+  use_default_model: boolean
+  model_display: string
+  status: AssistantConversationStatus
+  context: Record<string, unknown>
+  last_message_at: string | null
+  message_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AssistantEvidenceItem {
+  review_id: number
+  title: string
+  content: string
+  source_url: string
+  published_at: string | null
+}
+
+export interface AssistantMessage {
+  id: string
+  role: 'USER' | 'ASSISTANT' | 'SYSTEM'
+  content: string
+  request_id: string | null
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'CANCELLED' | 'FAILED'
+  model_name_snapshot: string
+  provider_snapshot: string
+  evidence: AssistantEvidenceItem[]
+  prompt_tokens: number | null
+  completion_tokens: number | null
+  total_tokens: number | null
+  latency_ms: number | null
+  error_code: string
+  error_message: string
+  created_at: string
+}
+
+export interface AssistantStreamEvent {
+  type: 'start' | 'tool' | 'delta' | 'done' | 'cancelled' | 'error'
+  message_id?: string
+  content?: string
+  message?: string
+  code?: string
+  tool?: string
+  evidence?: AssistantEvidenceItem[]
+  model?: string
+}

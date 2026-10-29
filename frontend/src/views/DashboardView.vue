@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FullScreen, Refresh, SwitchButton } from '@element-plus/icons-vue'
+import { ChatDotRound, FullScreen, Refresh, SwitchButton } from '@element-plus/icons-vue'
 import type { EChartsOption } from 'echarts'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -234,6 +234,11 @@ onBeforeUnmount(() => {
         <p>全自动采集 · AI 智能识别 · 用户问题洞察</p>
       </div>
       <div class="hero-actions">
+        <el-button
+          :icon="ChatDotRound"
+          @click="router.push({ path: '/ai-assistant', query: { ...filters } })"
+          >向 AI 提问</el-button
+        >
         <el-button :icon="Refresh" :loading="loading" @click="load">手动刷新</el-button>
         <el-button
           :icon="isFullscreen ? SwitchButton : FullScreen"
