@@ -5,7 +5,6 @@ import { onMounted, reactive, ref } from 'vue'
 import {
   createStructuredBatch,
   getProducts,
-  createStructuredBatch,
   getStructuredAggregates,
   getStructuredAnalyses,
   getStructuredBatches,
