@@ -11,7 +11,6 @@ import {
   getStructuredBatches,
   getStructuredQuality,
   getTaxonomy,
-  reviewStructuredAnalysis,
 } from '@/api'
 import HighlightText from '@/components/HighlightText.vue'
 import type {
@@ -39,12 +38,7 @@ const batches = ref<StructuredBatch[]>([])
 const batchCount = ref(0)
 const page = ref(1)
 const batchPage = ref(1)
-const filters = reactive({ search: '', aspect_code: '', sentiment: '', review_required: '' })
-const reviewVisible = ref(false)
-const reviewTarget = ref<StructuredAnalysisV1>()
-const correctedJson = ref('')
-const reviewReason = ref('')
-
+const filters = reactive({ search: '', aspect_code: '', sentiment: '' })
 async function load() {
   loading.value = true
   error.value = ''
@@ -107,42 +101,6 @@ async function startSample() {
     )
   } finally {
     starting.value = false
-  }
-}
-
-function openReview(item: StructuredAnalysisV1) {
-  reviewTarget.value = item
-  correctedJson.value = JSON.stringify(
-    {
-      schema_version: item.schema_version,
-      taxonomy_version: item.taxonomy_version,
-      overall_sentiment: item.overall_sentiment,
-      language: item.language,
-      content_type: item.content_type,
-      relevance: item.relevance,
-      summary: item.summary,
-      model_mentions: item.model_mentions,
-      aspects: item.aspects.map((aspect) =>
-        Object.fromEntries(Object.entries(aspect).filter(([key]) => key !== 'id')),
-      ),
-    },
-    null,
-    2,
-  )
-  reviewReason.value = ''
-  reviewVisible.value = true
-}
-
-async function saveReview() {
-  if (!reviewTarget.value) return
-  try {
-    const payload = JSON.parse(correctedJson.value) as Record<string, unknown>
-    await reviewStructuredAnalysis(reviewTarget.value.id, payload, reviewReason.value)
-    ElMessage.success('复核结果已保存，修改前后版本均已留存')
-    reviewVisible.value = false
-    await load()
-  } catch {
-    ElMessage.error('复核内容无效或保存失败')
   }
 }
 
@@ -247,9 +205,6 @@ onMounted(async () => {
             :value="value"
           />
         </el-select>
-        <el-select v-model="filters.review_required" clearable placeholder="复核状态">
-          <el-option label="待复核" value="true" /><el-option label="已确认" value="false" />
-        </el-select>
         <el-button type="primary" @click="load">查询</el-button>
       </div>
     </el-card>
@@ -266,7 +221,7 @@ onMounted(async () => {
           <div class="card-title">
             <strong>{{ item.original_title || `反馈 #${item.content}` }}</strong
             ><span
-              ><el-tag v-if="item.review_required" type="warning">待复核</el-tag>
+              >
               {{ item.product_name }} · {{ item.source_name }}</span
             >
           </div>
@@ -304,7 +259,7 @@ onMounted(async () => {
           <span
             >{{ item.provider }} / {{ item.model }} · {{ item.prompt_version }} · Schema
             {{ item.schema_version }}</span
-          ><el-button @click="openReview(item)">人工复核</el-button>
+          >
         </footer>
       </el-card>
     </div>
@@ -353,23 +308,7 @@ onMounted(async () => {
         @current-change="load"
       />
     </el-card>
-    <el-dialog
-      v-model="reviewVisible"
-      title="人工复核（可修改、删除或补充观点）"
-      width="min(900px, 94vw)"
-    >
-      <el-alert
-        title="保存时会再次校验标签父子关系和原文证据，修改历史不会被覆盖。"
-        type="info"
-        :closable="false"
-      />
-      <el-input v-model="correctedJson" class="json-editor" type="textarea" :rows="20" />
-      <el-input v-model="reviewReason" placeholder="复核原因" />
-      <template #footer
-        ><el-button @click="reviewVisible = false">取消</el-button
-        ><el-button type="primary" @click="saveReview">校验并保存</el-button></template
-      >
-    </el-dialog>
+
   </section>
 </template>
 
