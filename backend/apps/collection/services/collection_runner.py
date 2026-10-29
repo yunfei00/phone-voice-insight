@@ -609,7 +609,12 @@ def run_collection(
             task.last_checkpoint = chunk.checkpoint
             task.verification_report = chunk.report
             task.completion_verified = chunk.verified
-            task.save()
+            # Never write the stale in-memory RUNNING status back over STOPPING.
+            task.save(update_fields=(
+                "success_count", "skipped_count", "failure_count", "new_records",
+                "duplicate_records", "new_threads", "last_checkpoint",
+                "verification_report", "completion_verified", "updated_at",
+            ))
             run.success_count = chunk.inserted
             run.skipped_count = chunk.duplicates
             run.failure_count = chunk.failed
@@ -643,6 +648,9 @@ def run_collection(
                 completion_verified=chunk.verified,
                 verification_report=chunk.report,
             )
+        except CollectionStopRequested:
+            _finish_stopped(task.id, run.id)
+            return CollectionSummary(0, 0, 0, 0, {}, [], completed=False)
         except Exception as exc:
             message = f"{exc.code}: {exc}" if isinstance(exc, CollectorError) else f"COLLECTION_ERROR: {exc}"
             logger.exception("full_collection_failed collection_task_id=%s", task.id)
