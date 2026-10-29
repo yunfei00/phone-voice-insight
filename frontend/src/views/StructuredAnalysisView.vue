@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import {
   createStructuredBatch,
   runAllStructuredAnalysis,
+  getStructuredCorpusProgress,
   getProducts,
   getStructuredAggregates,
   getStructuredAnalyses,
@@ -13,6 +14,7 @@ import {
   getTaxonomy,
 } from '@/api'
 import HighlightText from '@/components/HighlightText.vue'
+import type { StructuredCorpusProgress } from '@/api'
 import type {
   Product,
   StructuredAggregates,
@@ -24,6 +26,8 @@ import type {
 
 const starting = ref(false)
 const startingAll = ref(false)
+const corpusProgress = ref<StructuredCorpusProgress>()
+let refreshTimer: ReturnType<typeof setInterval> | undefined
 const sampleSize = ref(20)
 const loading = ref(false)
 const error = ref('')
@@ -57,6 +61,7 @@ async function load() {
     batches.value = batchResult.results
     batchCount.value = batchResult.count
     taxonomy.value ||= await getTaxonomy()
+    if (selectedProduct.value) corpusProgress.value = await getStructuredCorpusProgress(selectedProduct.value)
   } catch {
     error.value = '结构化分析数据加载失败，请稍后重试。'
   } finally {
@@ -68,11 +73,13 @@ async function startAll() {
   if (!selectedProduct.value || startingAll.value) return
   startingAll.value = true
   try {
-    await runAllStructuredAnalysis(selectedProduct.value)
-    ElMessage.success('已启动剩余语料全量分析，将自动分批执行；已完成的评论不会重复分析')
+    const result = await runAllStructuredAnalysis(selectedProduct.value)
+    ElMessage.success(result.batch_id ? `已创建批次 #${result.batch_id}，本批 ${result.queued} 条` : '没有待分析的有效评论')
     await load()
-  } catch {
-    ElMessage.error('全量任务启动失败，请检查 AI 配置和 Celery Worker')
+  } catch (reason: unknown) {
+    const detail = reason as { response?: { data?: { error_code?: string; batch_id?: number } } }
+    const code = detail.response?.data?.error_code
+    ElMessage.error(code === 'ANALYSIS_ALREADY_RUNNING' ? `批次 #${detail.response?.data?.batch_id} 正在执行` : code === 'AI_NOT_CONFIGURED' ? '请先配置 AI 模型' : '任务未成功启动，请检查 Worker')
   } finally {
     startingAll.value = false
   }
@@ -120,7 +127,9 @@ onMounted(async () => {
     ElMessage.warning('产品列表加载失败')
   }
   await load()
+  refreshTimer = setInterval(() => { if (!loading.value) void load() }, 5000)
 })
+onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 </script>
 
 <template>
@@ -130,7 +139,7 @@ onMounted(async () => {
         <h1>AI 结构化分析</h1>
         <p>自动治理后的有效反馈将无人值守进入结构化分析；证据不足和技术错误不会混入问题统计。</p>
       </div>
-      <el-tag effect="plain">Taxonomy {{ taxonomy?.taxonomy_version || '1.0.0' }}</el-tag>
+
     </header>
     <el-card shadow="never">
       <div class="filters">
@@ -147,7 +156,7 @@ onMounted(async () => {
         <el-button
           type="primary"
           :loading="starting"
-          :disabled="!selectedProduct"
+          :disabled="!selectedProduct || corpusProgress?.active"
           @click="startSample"
         >
           开始分析（非模拟）
@@ -166,18 +175,13 @@ onMounted(async () => {
         分钟检查新增有效评论并自动分析，失败记录不会无限重试。
       </p>
     </el-card>
-    <el-alert
-      v-if="quality?.error_distribution?.length"
-      type="warning"
-      show-icon
-      :closable="false"
-      title="结构化分析失败原因统计（按错误码）"
-    >
-      <div v-for="item in quality.error_distribution" :key="item.error_code">
-        {{ item.error_code || 'UNKNOWN_ERROR' }}：{{ item.count }} 条
-      </div>
-      <p>如全部失败，请先检查模型连通性和后端 Worker 日志，不要反复批量提交。</p>
-    </el-alert>
+    <el-card v-if="corpusProgress" shadow="never">
+      <template #header><strong>全量分析进度（每 5 秒更新）</strong></template>
+      <el-progress :percentage="corpusProgress.total ? Math.round(corpusProgress.completed / corpusProgress.total * 100) : 100" />
+      <p>有效语料 {{ corpusProgress.total }} · 已完成 {{ corpusProgress.completed }} · 剩余 {{ corpusProgress.remaining }}</p>
+      <p v-if="corpusProgress.batch">批次 #{{ corpusProgress.batch.id }} · {{ corpusProgress.batch.status }} · 本批 {{ corpusProgress.batch.success_count + corpusProgress.batch.failed_count + corpusProgress.batch.skipped_count }}/{{ corpusProgress.batch.requested_count }}</p>
+      <p v-if="corpusProgress.active">任务执行中，已禁止重复提交。</p>
+    </el-card>
     <div class="metric-grid">
       <el-card shadow="never"
         ><span>AI 已分析量</span><strong>{{ quality?.total_runs || 0 }}</strong></el-card
