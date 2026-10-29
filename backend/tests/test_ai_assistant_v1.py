@@ -262,6 +262,24 @@ def test_streaming_chat_is_persisted_and_idempotent(api_client: APIClient) -> No
 
 
 @override_settings(DEBUG=True, AI_ALLOW_FAKE_PROVIDER=True)
+def test_streaming_chat_accepts_event_stream_media_type(api_client: APIClient) -> None:
+    """The browser explicitly requests SSE; DRF must not reject it with 406."""
+
+    user = current_user(api_client)
+    profile = create_profile(user)
+    conversation = create_conversation(user, profile)
+    response = api_client.post(
+        f"/api/v1/assistant/conversations/{conversation.id}/chat/",
+        {"request_id": str(uuid.uuid4()), "content": "总结当前产品概况"},
+        format="json",
+        HTTP_ACCEPT="text/event-stream",
+    )
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("text/event-stream")
+    assert consume_sse(response)[-1]["type"] == "done"
+
+
+@override_settings(DEBUG=True, AI_ALLOW_FAKE_PROVIDER=True)
 def test_multi_turn_chat_keeps_history_and_model_snapshot(api_client: APIClient) -> None:
     user = current_user(api_client)
     profile = create_profile(user)

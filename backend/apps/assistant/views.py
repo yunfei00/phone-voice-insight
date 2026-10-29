@@ -16,6 +16,7 @@ from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -29,6 +30,7 @@ from apps.assistant.models import (
 )
 from apps.assistant.orchestrator import AssistantOrchestrator, prepare_chat, settings_from_profile
 from apps.assistant.providers import AssistantProviderClient
+from apps.assistant.renderers import EventStreamRenderer
 from apps.assistant.security import validate_ai_endpoint
 from apps.assistant.serializers import (
     AssistantChatRequestSerializer,
@@ -110,6 +112,7 @@ class AssistantConversationViewSet(viewsets.ModelViewSet):
             AssistantConversation.objects.filter(user=cast(DjangoUser, self.request.user))
             .select_related("model_profile")
             .annotate(message_count=Count("messages"))
+            .order_by("-last_message_at", "-updated_at")
         )
 
     @action(detail=True, methods=("get",))
@@ -122,6 +125,7 @@ class AssistantConversationViewSet(viewsets.ModelViewSet):
         detail=True,
         methods=("post",),
         throttle_classes=(AssistantChatThrottle,),
+        renderer_classes=(EventStreamRenderer, JSONRenderer),
     )
     def chat(self, request: Request, pk: str | None = None) -> Response | StreamingHttpResponse:  # noqa: ARG002
         conversation = self.get_object()
