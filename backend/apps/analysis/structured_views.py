@@ -101,6 +101,11 @@ class StructuredBatchViewSet(ViewSet):
             queryset = queryset.filter(published_at__gte=after)
         if before := values.get("published_at_before"):
             queryset = queryset.filter(published_at__lte=before)
+        completed_ids = AnalysisRun.objects.filter(
+            status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
+            is_current=True,
+        ).values("content_id")
+        queryset = queryset.exclude(id__in=completed_ids)
         content_ids = list(queryset.values_list("id", flat=True)[: values["max_items"]])
         first = queryset.first()
         if first is None:
