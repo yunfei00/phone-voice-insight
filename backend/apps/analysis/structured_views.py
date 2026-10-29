@@ -152,6 +152,39 @@ class StructuredBatchViewSet(ViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=False, methods=("get",), url_path="progress")
+    def progress(self, request: Request) -> Response:
+        raw_product = request.query_params.get("product_id")
+        try:
+            product_id = int(raw_product or "")
+            if product_id <= 0:
+                raise ValueError
+        except ValueError:
+            return Response({"error_code": "PRODUCT_REQUIRED"}, status=status.HTTP_400_BAD_REQUEST)
+        corpus = final_corpus_reviews().filter(product_id=product_id)
+        completed = AnalysisRun.objects.filter(
+            content_id__in=corpus.values("id"),
+            is_current=True,
+            status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
+        ).values("content_id")
+        remaining = corpus.exclude(id__in=completed).count()
+        active = AnalysisBatch.objects.filter(
+            created_by=request.user,
+            product_id=product_id,
+            prompt_version="structured_analysis_v1",
+            status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
+        ).order_by("-id").first()
+        latest = AnalysisBatch.objects.filter(
+            created_by=request.user, product_id=product_id, prompt_version="structured_analysis_v1"
+        ).order_by("-id").first()
+        return Response({
+            "total": corpus.count(),
+            "completed": corpus.filter(id__in=completed).count(),
+            "remaining": remaining,
+            "active": active is not None,
+            "batch": StructuredBatchSerializer(active or latest).data if (active or latest) else None,
+        })
+
     @action(detail=False, methods=("post",), url_path="run-all")
     def run_all(self, request: Request) -> Response:
         product_id = request.data.get("product_id")
