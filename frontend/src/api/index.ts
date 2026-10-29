@@ -343,6 +343,9 @@ export const getStructuredBatches = async (
 ): Promise<PaginatedResponse<StructuredBatch>> =>
   (await apiClient.get<PaginatedResponse<StructuredBatch>>('/structured-batches/', { params })).data
 
+export const runAllStructuredAnalysis = async (productId: number): Promise<{ status: string; celery_task_id: string }> =>
+  (await apiClient.post('/structured-batches/run-all/', { product_id: productId })).data
+
 export const createStructuredBatch = async (payload: {
   product_id?: number | null
   source_id?: number | null
