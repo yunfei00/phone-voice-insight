@@ -69,6 +69,7 @@ urlpatterns = [
     path("api/v1/auth/me/", me, name="me"),
     path("api/v1/auth/change-password/", change_password, name="change-password"),
     path("api/v1/ai-configuration/", UserAIConfigurationView.as_view(), name="ai-configuration"),
+    path("api/v1/ai-configuration/ollama-models/", OllamaModelsView.as_view(), name="ollama-models"),
     path("api/v1/ai-configuration/test/", UserAIConnectivityView.as_view(), name="ai-configuration-test"),
     path("api/v1/dashboard/overview/", DashboardOverviewView.as_view(), name="dashboard-overview"),
     path("api/v1/dashboard/trends/", DashboardTrendsView.as_view(), name="dashboard-trends"),
