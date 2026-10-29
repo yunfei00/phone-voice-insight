@@ -131,13 +131,28 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
     def full_progress(self, request: Request) -> Response:
         from django.db.models import Sum
 
-        try:
-            root_id = int(request.query_params.get("id", ""))
-        except (ValueError, TypeError):
-            return Response({"detail": "无效任务编号"}, status=400)
-        root = GovernanceAIBatch.objects.filter(pk=root_id, automatic=True, root_batch__isnull=True).first()
+        roots = GovernanceAIBatch.objects.filter(automatic=True, root_batch__isnull=True)
+        product_id = request.query_params.get("product_id")
+        source_id = request.query_params.get("source_id")
+        if product_id:
+            try:
+                roots = roots.filter(product_id=int(product_id))
+                if source_id:
+                    roots = roots.filter(source_id=int(source_id))
+            except (ValueError, TypeError):
+                return Response({"detail": "无效产品或来源编号"}, status=400)
+        elif source_id:
+            return Response({"detail": "查询来源时必须指定产品"}, status=400)
+        if request.query_params.get("id"):
+            try:
+                roots = roots.filter(pk=int(request.query_params["id"]))
+            except (ValueError, TypeError):
+                return Response({"detail": "无效任务编号"}, status=400)
+        elif not product_id:
+            return Response({"detail": "必须指定任务编号或产品编号"}, status=400)
+        root = roots.order_by("-created_at", "-pk").first()
         if root is None:
-            return Response({"detail": "全量任务不存在"}, status=404)
+            return Response({"detail": "当前范围暂无全量 AI 判断任务"}, status=404)
         batches = GovernanceAIBatch.objects.filter(pk=root.pk) | GovernanceAIBatch.objects.filter(root_batch=root)
         totals = batches.aggregate(processed=Sum("processed"), failed=Sum("failed"),
                                    accepted=Sum("accepted"), rejected=Sum("rejected"),
