@@ -254,6 +254,9 @@ export const getAnalysisSummary = async (): Promise<AnalysisSummary> =>
 export const getAIConfiguration = async (): Promise<AIConfiguration> =>
   (await apiClient.get<AIConfiguration>('/analysis-batches/configuration/')).data
 
+export const getOllamaModels = async (): Promise<{ models: string[] }> =>
+  (await apiClient.get<{ models: string[] }>('/ai-configuration/ollama-models/')).data
+
 export const getPersonalAIConfiguration = async (): Promise<PersonalAIConfiguration> =>
   (await apiClient.get<PersonalAIConfiguration>('/ai-configuration/')).data
 
