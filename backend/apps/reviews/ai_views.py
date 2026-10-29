@@ -150,7 +150,12 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
                 return Response({"detail": "无效任务编号"}, status=400)
         elif not product_id:
             return Response({"detail": "必须指定任务编号或产品编号"}, status=400)
-        root = roots.order_by("-created_at", "-pk").first()
+        active_batches = GovernanceAIBatch.objects.filter(status__in=["PENDING", "RUNNING"], automatic=True)
+        active_roots = set(active_batches.exclude(root_batch__isnull=True).values_list("root_batch_id", flat=True))
+        active_roots.update(active_batches.filter(root_batch__isnull=True).values_list("id", flat=True))
+        root = roots.filter(pk__in=active_roots).order_by("-created_at", "-pk").first()
+        if root is None:
+            root = roots.order_by("-created_at", "-pk").first()
         if root is None:
             return Response({"detail": "当前范围暂无全量 AI 判断任务"}, status=404)
         batches = GovernanceAIBatch.objects.filter(pk=root.pk) | GovernanceAIBatch.objects.filter(root_batch=root)
@@ -159,8 +164,8 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
                                    uncertain=Sum("uncertain"), prompt_tokens=Sum("prompt_tokens"),
                                    completion_tokens=Sum("completion_tokens"))
         active = batches.filter(status__in=["PENDING", "RUNNING"]).exists()
-        status_label = "STOPPED" if root.stop_requested and not active else ("RUNNING" if active else "COMPLETED")
-        return Response({"id": root.pk, "status": status_label, "total": root.scope_total,
+        status_label = "STOPPING" if root.stop_requested and active else ("STOPPED" if root.stop_requested else ("RUNNING" if active else "COMPLETED"))
+        return Response({"id": root.pk, "status": status_label, "can_stop": active and not root.stop_requested, "total": root.scope_total,
                          "remaining": max(0, root.scope_total - (totals["processed"] or 0)),
                          **{key: value or 0 for key, value in totals.items()}})
 
