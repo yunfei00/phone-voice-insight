@@ -33,6 +33,23 @@ const error = ref('')
 const drawer = ref(false)
 const detail = ref<DashboardIssueDetail>()
 const detailLoading = ref(false)
+const severityLabels: Record<string, string> = {
+  CRITICAL: '严重', HIGH: '高', MEDIUM: '中', LOW: '低', INFO: '提示',
+}
+function severityLabel(value: string): string {
+  return severityLabels[value] || value
+}
+function findTaxonomyName(code: string, tags: TaxonomyTag[]): string | undefined {
+  for (const tag of tags) {
+    if (tag.tag_id === code) return tag.name
+    const child = findTaxonomyName(code, tag.children || [])
+    if (child) return child
+  }
+  return undefined
+}
+function categoryLabel(code: string): string {
+  return findTaxonomyName(code, domains.value) || code
+}
 
 async function load(): Promise<void> {
   loading.value = true
@@ -84,7 +101,7 @@ onMounted(async () => {
   <div class="dashboard-page">
     <div class="page-header">
       <div>
-        <p class="eyebrow">ISSUE INTELLIGENCE</p>
+        <p class="eyebrow">问题洞察</p>
         <h1 class="page-title">用户问题洞察</h1>
         <p class="page-description">仅展示治理 ACCEPTED 且通过结构化证据校验的明确问题</p>
       </div>
@@ -110,7 +127,7 @@ onMounted(async () => {
           ><el-option
             v-for="item in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']"
             :key="item"
-            :label="item"
+            :label="severityLabel(item)"
             :value="item" /></el-select
         ><el-select v-model="ordering" @change="load"
           ><el-option label="反馈最多" value="-feedback_count" /><el-option
@@ -134,7 +151,7 @@ onMounted(async () => {
           prop="product_name"
           label="产品"
           min-width="130"
-        /><el-table-column prop="topic_code" label="分类" min-width="150" /><el-table-column
+        /><el-table-column label="分类" min-width="150"><template #default="{ row }">{{ categoryLabel(row.topic_code) }}</template></el-table-column><el-table-column
           prop="feedback_count"
           label="关联反馈"
           width="95"
@@ -149,7 +166,7 @@ onMounted(async () => {
             ><el-tag
               :type="row.severity === 'CRITICAL' || row.severity === 'HIGH' ? 'danger' : 'warning'"
               effect="dark"
-              >{{ row.severity }}</el-tag
+              >{{ severityLabel(row.severity) }}</el-tag
             ></template
           ></el-table-column
         ><el-table-column label="最近出现" min-width="160"
@@ -171,7 +188,7 @@ onMounted(async () => {
     <el-drawer v-model="drawer" size="min(720px, 94vw)" class="issue-drawer"
       ><template #header
         ><div>
-          <small>ISSUE EVIDENCE</small>
+          <small>问题证据</small>
           <h2>{{ detail?.name || '问题详情' }}</h2>
         </div></template
       >
@@ -184,7 +201,7 @@ onMounted(async () => {
             ><span
               >近 7 天<strong>{{ detail.recent_count }}</strong></span
             ><span
-              >严重程度<strong>{{ detail.severity }}</strong></span
+              >严重程度<strong>{{ severityLabel(detail.severity) }}</strong></span
             ><span
               >最近出现<strong>{{ format(detail.last_seen) }}</strong></span
             >
@@ -192,7 +209,7 @@ onMounted(async () => {
           <h3>典型原始证据</h3>
           <article v-for="item in detail.evidence" :key="item.id" class="evidence-card">
             <div>
-              <el-tag size="small">{{ item.severity }}</el-tag
+              <el-tag size="small">{{ severityLabel(item.severity) }}</el-tag
               ><time>{{
                 format(item.analysis__content__published_at || item.analysis__content__collected_at)
               }}</time>
