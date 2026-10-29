@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "apps.reviews",
     "apps.analysis",
     "apps.reports",
+    "apps.assistant",
 ]
 
 MIDDLEWARE = [
@@ -126,6 +127,7 @@ REST_FRAMEWORK = {
     ],
     "EXCEPTION_HANDLER": "apps.common.exceptions.api_exception_handler",
     "PAGE_SIZE": 20,
+    "DEFAULT_THROTTLE_RATES": {"assistant_chat": "10/min"},
 }
 
 SPECTACULAR_SETTINGS = {
@@ -148,6 +150,12 @@ REDIS_HOST = env("REDIS_HOST", "localhost")
 REDIS_PORT = int(env("REDIS_PORT", "6379"))
 REDIS_DB = int(env("REDIS_DB", "0"))
 REDIS_URL = env("REDIS_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}")
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+}
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", REDIS_URL)
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", f"redis://{REDIS_HOST}:{REDIS_PORT}/1")
 CELERY_TASK_TRACK_STARTED = True
@@ -178,6 +186,11 @@ if AI_AUTOMATION_TOKEN_LIMIT_MODE not in {"LIMITED", "UNLIMITED"}:
 AI_AUTOMATION_REQUESTS_PER_MINUTE = min(max(int(env("AI_AUTOMATION_REQUESTS_PER_MINUTE", "6")), 1), 60)
 AI_LIVE_ACCEPTANCE_ENABLED = env_bool("AI_LIVE_ACCEPTANCE_ENABLED", False)
 AI_LIVE_ACCEPTANCE_MAX_ITEMS = min(max(int(env("AI_LIVE_ACCEPTANCE_MAX_ITEMS", "10")), 1), 10)
+ASSISTANT_AI_PRIVATE_HOST_ALLOWLIST = [
+    item.strip().lower() for item in env("ASSISTANT_AI_PRIVATE_HOST_ALLOWLIST", "").split(",") if item.strip()
+]
+ASSISTANT_MAX_MESSAGES_PER_CONVERSATION = min(max(int(env("ASSISTANT_MAX_MESSAGES_PER_CONVERSATION", "200")), 20), 1000)
+ASSISTANT_MAX_EXECUTION_SECONDS = min(max(int(env("ASSISTANT_MAX_EXECUTION_SECONDS", "180")), 30), 300)
 DASHBOARD_WATCH_MIN_COUNT = max(int(env("DASHBOARD_WATCH_MIN_COUNT", "5")), 1)
 DASHBOARD_WATCH_GROWTH_PERCENT = max(int(env("DASHBOARD_WATCH_GROWTH_PERCENT", "50")), 0)
 DASHBOARD_COMPARISON_MIN_SAMPLE = max(int(env("DASHBOARD_COMPARISON_MIN_SAMPLE", "30")), 1)
