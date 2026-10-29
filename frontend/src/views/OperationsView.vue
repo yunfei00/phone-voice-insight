@@ -32,6 +32,42 @@ function label(key: string): string {
     }[key] || key
   )
 }
+function metricLabel(key: string): string {
+  return (
+    {
+      running: '运行中',
+      waiting: '等待中',
+      recent_success: '历史成功',
+      recent_failed: '历史失败',
+      active_leases: '有效来源租约',
+      pending: '待治理',
+      eligible: '可分析语料',
+      rejected: '已拒绝',
+      uncertain: '不确定',
+      errors: '错误',
+      running_batches: '运行中批次',
+      ai_governance_running: 'AI 治理运行中',
+      successful: '结构化成功',
+      failed: '结构化失败',
+    }[key] || key
+  )
+}
+function statusLabel(value: string): string {
+  return (
+    {
+      online: '在线',
+      offline: '离线',
+      stale: '心跳过期',
+      unknown: '未知',
+      idle: '空闲',
+      running: '运行中',
+      normal: '正常',
+      no_success_record: '暂无成功记录',
+      enabled: '已启用',
+      disabled: '未启用',
+    }[value] || value
+  )
+}
 function format(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString('zh-CN') : '暂无'
 }
@@ -58,10 +94,10 @@ onBeforeUnmount(() => window.clearInterval(timer))
       v-if="data"
       ><section class="status-banner" :class="data.business_status.ai_automation">
         <div>
-          <span>采集状态</span><strong>{{ data.business_status.collection }}</strong>
+          <span>采集状态</span><strong>{{ statusLabel(data.business_status.collection) }}</strong>
         </div>
         <div>
-          <span>数据更新</span><strong>{{ data.business_status.data_update }}</strong>
+          <span>数据更新</span><strong>{{ statusLabel(data.business_status.data_update) }}</strong>
         </div>
         <div>
           <span>AI 自动化</span><strong>{{ data.business_status.ai_message }}</strong>
@@ -75,7 +111,7 @@ onBeforeUnmount(() => window.clearInterval(timer))
           <span class="health-dot" :class="value" />
           <div>
             <small>{{ label(key) }}</small
-            ><strong>{{ value }}</strong>
+            ><strong>{{ statusLabel(value) }}</strong>
           </div>
         </article>
       </section>
@@ -96,7 +132,7 @@ onBeforeUnmount(() => window.clearInterval(timer))
           <h2>采集监控</h2>
           <dl>
             <template v-for="(value, key) in data.collection" :key="key"
-              ><dt>{{ key }}</dt>
+              ><dt>{{ metricLabel(String(key)) }}</dt>
               <dd>{{ value }}</dd></template
             >
           </dl>
@@ -105,7 +141,7 @@ onBeforeUnmount(() => window.clearInterval(timer))
           <h2>治理监控</h2>
           <dl>
             <template v-for="(value, key) in data.governance" :key="key"
-              ><dt>{{ key }}</dt>
+              ><dt>{{ metricLabel(String(key)) }}</dt>
               <dd>{{ value }}</dd></template
             >
           </dl>
@@ -114,7 +150,7 @@ onBeforeUnmount(() => window.clearInterval(timer))
           <h2>AI 分析监控</h2>
           <dl>
             <template v-for="(value, key) in data.analysis" :key="key"
-              ><dt>{{ key }}</dt>
+              ><dt>{{ metricLabel(String(key)) }}</dt>
               <dd>{{ value }}</dd></template
             >
           </dl>

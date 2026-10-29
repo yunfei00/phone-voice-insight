@@ -319,6 +319,8 @@ describe('V1 Dashboard pages', () => {
     const { app, container } = mount(OperationsView)
     await flush()
     expect(container.textContent).toContain('自动分析未启用')
+    expect(container.textContent).toContain('结构化成功')
+    expect(container.textContent).not.toContain('running_batches')
     expect(container.textContent?.toLowerCase()).not.toContain('api_key')
     app.unmount()
   })
