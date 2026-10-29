@@ -396,7 +396,9 @@ async function startAllGovernance(): Promise<void> {
       product_id: selectedProduct.value,
       source_id: selectedSource.value,
     })
-    ElMessage.success(result.task ? `已提交全部 ${result.task.total} 条待治理数据` : '当前范围没有待治理数据')
+    ElMessage.success(
+      result.task ? `已提交全部 ${result.task.total} 条待治理数据` : '当前范围没有待治理数据',
+    )
     await loadGovernanceTasks()
     await loadData()
     if (result.task) startTaskPolling()
@@ -663,7 +665,8 @@ onUnmounted(() => {
             plain
             :disabled="!selectedProduct || governanceBusy"
             :loading="governanceBusy"
-          >一键治理全部待处理数据</el-button>
+            >一键治理全部待处理数据</el-button
+          >
         </template>
       </el-popconfirm>
       <p v-if="preview">
