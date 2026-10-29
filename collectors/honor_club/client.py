@@ -209,6 +209,12 @@ class HonorClubClient:
         if "<title>登录" in response.text and "threadlist" not in response.text:
             raise CollectorError("荣耀俱乐部出现登录墙", code="LOGIN_WALL")
         if "<title>提示信息" in response.text or 'id="messagetext"' in response.text:
+            permission_markers = (
+                "没有权限", "无权访问", "无访问权限", "权限不足", "需要登录",
+                "请先登录", "登录后", "无权查看", "无法访问该帖子",
+            )
+            if any(marker in response.text for marker in permission_markers):
+                raise CollectorError("荣耀俱乐部帖子需要登录或无访问权限", code="BLOCKED_PERMISSION_PAGE")
             raise CollectorError("荣耀俱乐部返回提示/阻断页面", code="BLOCKED_INFO_PAGE", retryable=True)
 
         return HonorHttpResponse(
