@@ -499,8 +499,17 @@ export interface FullGovernanceAIProgress {
   completion_tokens: number
 }
 
-export const getFullGovernanceAIProgress = async (id: number): Promise<FullGovernanceAIProgress> =>
-  (await apiClient.get('/governance-ai/full-progress/', { params: { id } })).data
+export const getFullGovernanceAIProgress = async (params: {
+  product_id: number
+  source_id?: number
+}): Promise<FullGovernanceAIProgress | null> => {
+  try {
+    return (await apiClient.get('/governance-ai/full-progress/', { params })).data
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) return null
+    throw error
+  }
+}
 
 export const stopFullGovernanceAI = async (id: number): Promise<void> => {
   await apiClient.post('/governance-ai/stop-full/', { id })
