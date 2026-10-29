@@ -170,7 +170,7 @@ class StructuredBatchViewSet(ViewSet):
         remaining = corpus.exclude(id__in=completed).count()
         active = (
             AnalysisBatch.objects.filter(
-                created_by=request.user,
+                created_by=cast(User, request.user),
                 product_id=product_id,
                 prompt_version="structured_analysis_v1",
                 status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
