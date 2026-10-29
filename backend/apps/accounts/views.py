@@ -193,7 +193,10 @@ class OllamaModelsView(APIView):
     def get(self, request: Request) -> Response:
         from urllib.parse import urlsplit
 
-        base_url = str(request.query_params.get("base_url", "")).rstrip("/")
+        configuration = UserAIConfiguration.objects.filter(user=request.user, provider="ollama").first()
+        if configuration is None:
+            return Response({"error_code": "OLLAMA_NOT_CONFIGURED"}, status=status.HTTP_400_BAD_REQUEST)
+        base_url = configuration.base_url.rstrip("/")
         parsed = urlsplit(base_url)
         if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
             return Response({"error_code": "INVALID_OLLAMA_URL"}, status=status.HTTP_400_BAD_REQUEST)
