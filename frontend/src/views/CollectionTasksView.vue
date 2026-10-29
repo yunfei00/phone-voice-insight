@@ -438,7 +438,10 @@ onUnmounted(stopPolling)
 
         <div v-if="target.active_task" class="live-progress">
           <strong>实时采集状态</strong>
-          <p v-if="activeTask(target)"><strong>{{ collectionPhase(activeTask(target)!) }}</strong> · {{ discoveryProgress(activeTask(target)!) }}</p>
+          <p v-if="activeTask(target)">
+            <strong>{{ collectionPhase(activeTask(target)!) }}</strong> ·
+            {{ discoveryProgress(activeTask(target)!) }}
+          </p>
           <p>{{ taskProgress(target) }}</p>
           <p>
             状态：{{ activeTask(target)?.status || target.active_task_status }} · 最近心跳：{{
