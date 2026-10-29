@@ -832,8 +832,8 @@ onUnmounted(() => {
 .metric-card,
 .breakdown > div {
   padding: 18px;
-  background: #fff;
-  border: 1px solid #e7eaf0;
+  background: #12283f;
+  border: 1px solid #29435c;
   border-radius: 12px;
 }
 
@@ -841,10 +841,11 @@ onUnmounted(() => {
 .breakdown span,
 .breakdown small {
   display: block;
-  color: #6b7280;
+  color: #96adc6;
 }
 
 .metric-card strong {
+  color: #edf5ff;
   display: block;
   margin-top: 10px;
   font-size: 28px;
@@ -861,6 +862,7 @@ onUnmounted(() => {
 }
 
 .breakdown strong {
+  color: #32d6c6;
   display: block;
   margin: 6px 0;
   font-size: 20px;
