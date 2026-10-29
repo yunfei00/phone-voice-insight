@@ -313,6 +313,7 @@ onMounted(async () => {
         >
         <el-table-column prop="success_count" label="成功" width="85" />
         <el-table-column prop="failed_count" label="失败" width="85" />
+        <el-table-column prop="error_message" label="批次错误" min-width="230" show-overflow-tooltip />
         <el-table-column prop="total_tokens" label="Token" width="100" />
       </el-table>
       <el-pagination
