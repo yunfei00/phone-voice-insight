@@ -486,6 +486,21 @@ export const startFullGovernanceAIReview = async (payload: {
 }): Promise<{ id?: number; total: number; automatic?: boolean; detail?: string }> =>
   (await apiClient.post('/governance-ai/start-full/', payload)).data
 
+export interface AICorpusSummary {
+  total: number
+  rule_eligible: number
+  rule_excluded: number
+  ai_accepted: number
+  ai_rejected: number
+  ai_uncertain: number
+  ai_failed: number
+  ai_unprocessed: number
+  final_eligible: number
+}
+
+export const getAICorpusSummary = async (product_id: number, source_id?: number): Promise<AICorpusSummary> =>
+  (await apiClient.get('/governance-ai/corpus-summary/', { params: { product_id, source_id } })).data
+
 export interface FullGovernanceAIProgress {
   id: number
   status: 'RUNNING' | 'STOPPING' | 'STOPPED' | 'COMPLETED'
