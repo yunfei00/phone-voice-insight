@@ -38,6 +38,7 @@ from apps.analysis.structured_serializers import (
 from apps.analysis.tasks import run_structured_analysis_batch_task
 from apps.products.models import Product
 from apps.reviews.models import ReviewRecord
+from apps.reviews.services.final_corpus import final_corpus_reviews
 from apps.sources.models import DataSource
 
 
@@ -89,7 +90,7 @@ class StructuredBatchViewSet(ViewSet):
         serializer = StructuredBatchCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
-        queryset = ReviewRecord.objects.select_related("product", "source").order_by("id")
+        queryset = final_corpus_reviews().select_related("product", "source").order_by("id")
         if ids := values.get("content_ids"):
             queryset = queryset.filter(id__in=ids)
         if product_id := values.get("product_id"):
