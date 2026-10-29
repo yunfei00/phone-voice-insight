@@ -35,7 +35,7 @@ from apps.analysis.structured_serializers import (
     StructuredBatchCreateSerializer,
     StructuredBatchSerializer,
 )
-from apps.analysis.tasks import run_structured_analysis_batch_task
+from apps.analysis.tasks import dispatch_pending_structured_reviews, run_structured_analysis_batch_task
 from apps.products.models import Product
 from apps.reviews.models import ReviewRecord
 from apps.reviews.services.final_corpus import final_corpus_reviews
@@ -151,6 +151,14 @@ class StructuredBatchViewSet(ViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=False, methods=("post",), url_path="run-all")
+    def run_all(self, request: Request) -> Response:
+        product_id = request.data.get("product_id")
+        if not isinstance(product_id, int) or product_id <= 0:
+            return Response({"error_code": "PRODUCT_REQUIRED"}, status=status.HTTP_400_BAD_REQUEST)
+        task = dispatch_pending_structured_reviews.delay(request.user.pk, product_id)
+        return Response({"status": "QUEUED", "celery_task_id": task.id}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=("post",))
     def cancel(self, _request: Request, pk: str | None = None) -> Response:
