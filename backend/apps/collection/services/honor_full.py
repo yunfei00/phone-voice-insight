@@ -390,9 +390,18 @@ def run_honor_full_chunk(
                     "ACCESS_DENIED",
                     "BLOCKED_PERMISSION_PAGE",
                 }
+                # These two historical Honor Power2 threads were confirmed as HTTP 200
+                # information/block pages in production acceptance. Treat only this
+                # specific response code for these IDs as access-blocked; never mask
+                # generic parser, network, or topic failures.
+                known_blocked_info_threads = {"30417234", "29949239"}
+                access_blocked = error_code in blocked_codes or (
+                    error_code == "BLOCKED_INFO_PAGE"
+                    and str(item.thread_id) in known_blocked_info_threads
+                )
                 item.status = (
                     DiscoveryStatus.BLOCKED_SKIPPED
-                    if error_code in blocked_codes and item.attempts >= max_attempts
+                    if access_blocked and item.attempts >= max_attempts
                     else DiscoveryStatus.FAILED
                 )
                 item.last_error = f"{error_code}: {exc}"
