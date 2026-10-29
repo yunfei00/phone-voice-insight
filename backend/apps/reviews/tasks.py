@@ -164,8 +164,6 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
     ):
         # Each continuation is bounded to 100 rows. Failed/uncertain AI results
         # are not automatically charged again; explicit retry remains available.
-        from django.db import transaction
-
         from apps.reviews.models import ReviewQuality
 
         with transaction.atomic():
