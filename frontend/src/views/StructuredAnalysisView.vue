@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
 import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import {
   createStructuredBatch,
@@ -24,6 +25,7 @@ import type {
   TaxonomyDefinition,
 } from '@/types/api'
 
+const router = useRouter()
 const starting = ref(false)
 const startingAll = ref(false)
 const corpusProgress = ref<StructuredCorpusProgress>()
@@ -98,7 +100,7 @@ async function startAll() {
 }
 
 async function startSample() {
-  if (!selectedProduct.value || starting.value) return
+  if (!selectedProduct.value || starting.value || startingAll.value || corpusProgress.value?.active) return
   starting.value = true
   try {
     const result = await createStructuredBatch({
@@ -212,6 +214,7 @@ onUnmounted(() => {
         }}/{{ corpusProgress.batch.requested_count }}
       </p>
       <p v-if="corpusProgress.active">任务执行中，已禁止重复提交。</p>
+      <el-button v-if="corpusProgress.batch" type="primary" plain @click="router.push('/ai-tasks')">查看任务中心</el-button>
     </el-card>
     <div class="metric-grid">
       <el-card shadow="never"
@@ -350,12 +353,6 @@ onUnmounted(() => {
         >
         <el-table-column prop="success_count" label="成功" width="85" />
         <el-table-column prop="failed_count" label="失败" width="85" />
-        <el-table-column
-          prop="error_message"
-          label="批次错误"
-          min-width="230"
-          show-overflow-tooltip
-        />
         <el-table-column prop="total_tokens" label="Token" width="100" />
       </el-table>
       <el-pagination
