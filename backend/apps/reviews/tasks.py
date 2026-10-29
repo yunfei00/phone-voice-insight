@@ -90,7 +90,7 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
         batch.save(update_fields=("status", "started_at", "celery_task_id", "updated_at"))
     try:
         provider = get_user_ai_provider(batch.requested_by)
-        for quality_id in batch.quality_ids[batch.processed:]:
+        for quality_id in batch.quality_ids[batch.processed :]:
             root_id = batch.root_batch_id or batch.id
             if batch.automatic and GovernanceAIBatch.objects.filter(pk=root_id, stop_requested=True).exists():
                 batch.status = GovernanceAIBatch.Status.STOPPED
@@ -159,9 +159,7 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
     finally:
         batch.finished_at = timezone.now()
         batch.save(update_fields=("status", "error_code", "failed", "failure_ids", "finished_at", "updated_at"))
-    if batch.automatic and batch.status in (
-        GovernanceAIBatch.Status.SUCCESS, GovernanceAIBatch.Status.PARTIAL
-    ):
+    if batch.automatic and batch.status in (GovernanceAIBatch.Status.SUCCESS, GovernanceAIBatch.Status.PARTIAL):
         # Each continuation is bounded to 100 rows. Failed/uncertain AI results
         # are not automatically charged again; explicit retry remains available.
         from apps.reviews.models import ReviewQuality
@@ -179,9 +177,13 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
             next_batch = None
             if ids:
                 next_batch = GovernanceAIBatch.objects.create(
-                    product=product, source_id=batch.source_id,
-                    requested_by=batch.requested_by, automatic=True,
-                    root_batch=root, quality_ids=ids, total=len(ids),
+                    product=product,
+                    source_id=batch.source_id,
+                    requested_by=batch.requested_by,
+                    automatic=True,
+                    root_batch=root,
+                    quality_ids=ids,
+                    total=len(ids),
                 )
         if next_batch is not None:
             try:

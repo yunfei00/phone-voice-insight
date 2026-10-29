@@ -386,7 +386,9 @@ class GovernanceAIBatch(TimeStampedModel):
         FAILED = "FAILED", "失败"
         STOPPED = "STOPPED", "已停止"
 
-    root_batch = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="continuations")
+    root_batch = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.PROTECT, related_name="continuations"
+    )
     scope_total = models.PositiveIntegerField(default=0)
     stop_requested = models.BooleanField(default=False)
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="governance_ai_batches")
