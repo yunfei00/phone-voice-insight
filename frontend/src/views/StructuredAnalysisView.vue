@@ -61,7 +61,8 @@ async function load() {
     batches.value = batchResult.results
     batchCount.value = batchResult.count
     taxonomy.value ||= await getTaxonomy()
-    if (selectedProduct.value) corpusProgress.value = await getStructuredCorpusProgress(selectedProduct.value)
+    if (selectedProduct.value)
+      corpusProgress.value = await getStructuredCorpusProgress(selectedProduct.value)
   } catch {
     error.value = '结构化分析数据加载失败，请稍后重试。'
   } finally {
@@ -74,12 +75,22 @@ async function startAll() {
   startingAll.value = true
   try {
     const result = await runAllStructuredAnalysis(selectedProduct.value)
-    ElMessage.success(result.batch_id ? `已创建批次 #${result.batch_id}，本批 ${result.queued} 条` : '没有待分析的有效评论')
+    ElMessage.success(
+      result.batch_id
+        ? `已创建批次 #${result.batch_id}，本批 ${result.queued} 条`
+        : '没有待分析的有效评论',
+    )
     await load()
   } catch (reason: unknown) {
     const detail = reason as { response?: { data?: { error_code?: string; batch_id?: number } } }
     const code = detail.response?.data?.error_code
-    ElMessage.error(code === 'ANALYSIS_ALREADY_RUNNING' ? `批次 #${detail.response?.data?.batch_id} 正在执行` : code === 'AI_NOT_CONFIGURED' ? '请先配置 AI 模型' : '任务未成功启动，请检查 Worker')
+    ElMessage.error(
+      code === 'ANALYSIS_ALREADY_RUNNING'
+        ? `批次 #${detail.response?.data?.batch_id} 正在执行`
+        : code === 'AI_NOT_CONFIGURED'
+          ? '请先配置 AI 模型'
+          : '任务未成功启动，请检查 Worker',
+    )
   } finally {
     startingAll.value = false
   }
@@ -127,9 +138,13 @@ onMounted(async () => {
     ElMessage.warning('产品列表加载失败')
   }
   await load()
-  refreshTimer = setInterval(() => { if (!loading.value) void load() }, 5000)
+  refreshTimer = setInterval(() => {
+    if (!loading.value) void load()
+  }, 5000)
 })
-onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+})
 </script>
 
 <template>
@@ -139,7 +154,6 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
         <h1>AI 结构化分析</h1>
         <p>自动治理后的有效反馈将无人值守进入结构化分析；证据不足和技术错误不会混入问题统计。</p>
       </div>
-
     </header>
     <el-card shadow="never">
       <div class="filters">
@@ -177,9 +191,25 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
     </el-card>
     <el-card v-if="corpusProgress" shadow="never">
       <template #header><strong>全量分析进度（每 5 秒更新）</strong></template>
-      <el-progress :percentage="corpusProgress.total ? Math.round(corpusProgress.completed / corpusProgress.total * 100) : 100" />
-      <p>有效语料 {{ corpusProgress.total }} · 已完成 {{ corpusProgress.completed }} · 剩余 {{ corpusProgress.remaining }}</p>
-      <p v-if="corpusProgress.batch">批次 #{{ corpusProgress.batch.id }} · {{ corpusProgress.batch.status }} · 本批 {{ corpusProgress.batch.success_count + corpusProgress.batch.failed_count + corpusProgress.batch.skipped_count }}/{{ corpusProgress.batch.requested_count }}</p>
+      <el-progress
+        :percentage="
+          corpusProgress.total
+            ? Math.round((corpusProgress.completed / corpusProgress.total) * 100)
+            : 100
+        "
+      />
+      <p>
+        有效语料 {{ corpusProgress.total }} · 已完成 {{ corpusProgress.completed }} · 剩余
+        {{ corpusProgress.remaining }}
+      </p>
+      <p v-if="corpusProgress.batch">
+        批次 #{{ corpusProgress.batch.id }} · {{ corpusProgress.batch.status }} · 本批
+        {{
+          corpusProgress.batch.success_count +
+          corpusProgress.batch.failed_count +
+          corpusProgress.batch.skipped_count
+        }}/{{ corpusProgress.batch.requested_count }}
+      </p>
       <p v-if="corpusProgress.active">任务执行中，已禁止重复提交。</p>
     </el-card>
     <div class="metric-grid">

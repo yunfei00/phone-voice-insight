@@ -168,22 +168,32 @@ class StructuredBatchViewSet(ViewSet):
             status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
         ).values("content_id")
         remaining = corpus.exclude(id__in=completed).count()
-        active = AnalysisBatch.objects.filter(
-            created_by=request.user,
-            product_id=product_id,
-            prompt_version="structured_analysis_v1",
-            status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
-        ).order_by("-id").first()
-        latest = AnalysisBatch.objects.filter(
-            created_by=request.user, product_id=product_id, prompt_version="structured_analysis_v1"
-        ).order_by("-id").first()
-        return Response({
-            "total": corpus.count(),
-            "completed": corpus.filter(id__in=completed).count(),
-            "remaining": remaining,
-            "active": active is not None,
-            "batch": StructuredBatchSerializer(active or latest).data if (active or latest) else None,
-        })
+        active = (
+            AnalysisBatch.objects.filter(
+                created_by=request.user,
+                product_id=product_id,
+                prompt_version="structured_analysis_v1",
+                status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
+            )
+            .order_by("-id")
+            .first()
+        )
+        latest = (
+            AnalysisBatch.objects.filter(
+                created_by=request.user, product_id=product_id, prompt_version="structured_analysis_v1"
+            )
+            .order_by("-id")
+            .first()
+        )
+        return Response(
+            {
+                "total": corpus.count(),
+                "completed": corpus.filter(id__in=completed).count(),
+                "remaining": remaining,
+                "active": active is not None,
+                "batch": StructuredBatchSerializer(active or latest).data if (active or latest) else None,
+            }
+        )
 
     @action(detail=False, methods=("post",), url_path="run-all")
     def run_all(self, request: Request) -> Response:
