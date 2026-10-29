@@ -324,14 +324,17 @@ def run_honor_full_chunk(
         if phase == "discovery":
             return FullChunkResult(checkpoint, inserted, duplicates, failed, True, False, {})
 
-    if phase == "collection":
-        max_attempts = _config_int(config, "full_thread_max_attempts", 3, 5)
+    if phase in ("collection", "retry"):
+        # Finish the first pass before retrying failed threads.
+        max_attempts = _config_int(config, "full_thread_max_attempts", 4, 5)
         chunk_size = _config_int(config, "full_chunk_threads", 20, 100)
-        candidates = list(
-            task.discovered_threads.filter(
-                Q(status=DiscoveryStatus.PENDING) | Q(status=DiscoveryStatus.FAILED, attempts__lt=max_attempts)
-            ).order_by("attempts", "topic_page", "position")[:chunk_size]
-        )
+        if phase == "collection":
+            candidates_query = task.discovered_threads.filter(status=DiscoveryStatus.PENDING)
+        else:
+            candidates_query = task.discovered_threads.filter(
+                status=DiscoveryStatus.FAILED, attempts__lt=max_attempts
+            )
+        candidates = list(candidates_query.order_by("attempts", "topic_page", "position")[:chunk_size])
         for item in candidates:
             check_collection_stop(task.id)
             checkpoint["current_thread_id"] = item.thread_id
@@ -369,11 +372,13 @@ def run_honor_full_chunk(
             if was_retry:
                 retry_count += 1
             checkpoint["retry_count"] = retry_count
-        remaining = task.discovered_threads.filter(
-            Q(status=DiscoveryStatus.PENDING) | Q(status=DiscoveryStatus.FAILED, attempts__lt=max_attempts)
-        ).exists()
         checkpoint["current_thread_id"] = ""
-        if remaining:
+        if task.discovered_threads.filter(status=DiscoveryStatus.PENDING).exists():
+            return FullChunkResult(checkpoint, inserted, duplicates, failed, True, False, {})
+        if task.discovered_threads.filter(
+            status=DiscoveryStatus.FAILED, attempts__lt=max_attempts
+        ).exists():
+            checkpoint["phase"] = "retry"
             return FullChunkResult(checkpoint, inserted, duplicates, failed, True, False, {})
         checkpoint["phase"] = "verification"
 
