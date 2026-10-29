@@ -6,8 +6,8 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 from rest_framework.routers import DefaultRouter
 
 from apps.accounts.views import (
-    UserAIConfigurationView,
     OllamaModelsView,
+    UserAIConfigurationView,
     UserAIConnectivityView,
     UserViewSet,
     change_password,
