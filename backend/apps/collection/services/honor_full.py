@@ -146,6 +146,11 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
     failed_items = list(
         task.discovered_threads.filter(status=DiscoveryStatus.FAILED).values_list("thread_id", flat=True)
     )
+    failed_details = list(
+        task.discovered_threads.filter(status=DiscoveryStatus.FAILED).values(
+            "thread_id", "thread_url", "attempts", "last_error", "next_reply_page"
+        )
+    )
     pending = task.discovered_threads.filter(status=DiscoveryStatus.PENDING).count()
     reply_pages = sum(task.discovered_threads.values_list("reply_pages_scanned", flat=True))
     source_replies = sum(
@@ -186,6 +191,7 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
         "reply_count_discrepancies": discrepancies,
         "retry_count": retry_count,
         "unresolved_thread_ids": failed_items,
+        "unresolved_thread_details": failed_details,
         "unresolved_pages": [],
         "completion_verified": verified,
         "verification_warnings": warnings,
