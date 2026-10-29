@@ -109,6 +109,7 @@ def run_structured_analysis_batch_task(
         batch.status = AnalysisBatchStatus.PARTIAL if batch.failed_count else AnalysisBatchStatus.SUCCESS
     batch.finished_at = timezone.now()
     batch.save()
+    dispatch_pending_structured_reviews.delay(batch.created_by_id, batch.product_id)
     return {"batch_id": batch.id, "status": batch.status, "success": batch.success_count, "failed": batch.failed_count}
 
 
@@ -121,10 +122,8 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
     """
     from django.contrib.auth.models import User
     from django.core.cache import cache
-    from django.db.models import Q
 
     from apps.analysis.models import AnalysisRun
-    from apps.products.models import Product
     from apps.reviews.services.final_corpus import final_corpus_reviews
 
     lock_key = f"structured-dispatch:{user_id or 'auto'}:{product_id or 'all'}"
