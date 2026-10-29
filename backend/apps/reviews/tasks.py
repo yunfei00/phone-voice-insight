@@ -213,13 +213,30 @@ def recover_stale_governance_ai_batches(stale_seconds: int = 300) -> dict[str, i
         status__in=[GovernanceAIBatch.Status.PENDING, GovernanceAIBatch.Status.RUNNING],
         updated_at__lt=cutoff,
     ).order_by("id")[:100]
+    # A stop request is durable even when all workers are offline. Resolve
+    # abandoned batches first; otherwise a restart can leave STOPPING forever.
+    stopped = 0
+    for candidate in candidates:
+        root_id = candidate.root_batch_id or candidate.id
+        if not GovernanceAIBatch.objects.filter(pk=root_id, stop_requested=True).exists():
+            continue
+        with transaction.atomic():
+            batch = GovernanceAIBatch.objects.select_for_update().get(pk=candidate.pk)
+            if batch.status not in [GovernanceAIBatch.Status.PENDING, GovernanceAIBatch.Status.RUNNING]:
+                continue
+            if batch.updated_at >= cutoff:
+                continue
+            batch.status = GovernanceAIBatch.Status.STOPPED
+            batch.finished_at = timezone.now()
+            batch.save(update_fields=["status", "finished_at", "updated_at"])
+            stopped += 1
     try:
         inspector = current_app.control.inspect(timeout=3)
         active = inspector.active()
         reserved = inspector.reserved()
         scheduled = inspector.scheduled()
         if active is None or reserved is None or scheduled is None:
-            return {"recovered": 0, "skipped": candidates.count()}
+            return {"recovered": 0, "stopped": stopped, "skipped": candidates.count()}
         live_ids = set()
         for collection in (active, reserved, scheduled):
             for entries in collection.values():
@@ -228,7 +245,7 @@ def recover_stale_governance_ai_batches(stale_seconds: int = 300) -> dict[str, i
                     if task_id:
                         live_ids.add(task_id)
     except Exception:
-        return {"recovered": 0, "skipped": candidates.count()}
+        return {"recovered": 0, "stopped": stopped, "skipped": candidates.count()}
     recovered = 0
     for candidate in candidates:
         if candidate.celery_task_id and candidate.celery_task_id in live_ids:
@@ -256,7 +273,7 @@ def recover_stale_governance_ai_batches(stale_seconds: int = 300) -> dict[str, i
             GovernanceAIBatch.objects.filter(pk=batch.id, status="PENDING").update(
                 status="FAILED", error_code="RECOVERY_DISPATCH_FAILED"
             )
-    return {"recovered": recovered, "skipped": 0}
+    return {"recovered": recovered, "stopped": stopped, "skipped": 0}
 
 
 @shared_task(name="run_automatic_voice_pipeline", autoretry_for=(), max_retries=0)
