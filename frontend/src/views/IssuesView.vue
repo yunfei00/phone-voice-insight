@@ -34,7 +34,11 @@ const drawer = ref(false)
 const detail = ref<DashboardIssueDetail>()
 const detailLoading = ref(false)
 const severityLabels: Record<string, string> = {
-  CRITICAL: '严重', HIGH: '高', MEDIUM: '中', LOW: '低', INFO: '提示',
+  CRITICAL: '严重',
+  HIGH: '高',
+  MEDIUM: '中',
+  LOW: '低',
+  INFO: '提示',
 }
 function severityLabel(value: string): string {
   return severityLabels[value] || value
@@ -151,13 +155,15 @@ onMounted(async () => {
           prop="product_name"
           label="产品"
           min-width="130"
-        /><el-table-column label="分类" min-width="150"><template #default="{ row }">{{ categoryLabel(row.topic_code) }}</template></el-table-column><el-table-column
-          prop="feedback_count"
-          label="关联反馈"
-          width="95"
-        /><el-table-column prop="recent_count" label="近 7 天" width="90" /><el-table-column
-          label="环比"
+        /><el-table-column label="分类" min-width="150"
+          ><template #default="{ row }">{{
+            categoryLabel(row.topic_code)
+          }}</template></el-table-column
+        ><el-table-column prop="feedback_count" label="关联反馈" width="95" /><el-table-column
+          prop="recent_count"
+          label="近 7 天"
           width="90"
+        /><el-table-column label="环比" width="90"
           ><template #default="{ row }">{{
             row.is_new ? '新出现' : row.growth_rate === null ? '—' : `${row.growth_rate}%`
           }}</template></el-table-column

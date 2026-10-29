@@ -126,7 +126,9 @@ onUnmounted(() => {
         label="机型"
       /><el-table-column prop="status" label="状态" /><el-table-column label="进度"
         ><template #default="{ row }"
-          >{{ row.success_count + row.failed_count + row.skipped_count }}/{{ row.requested_count }}</template
+          >{{ row.success_count + row.failed_count + row.skipped_count }}/{{
+            row.requested_count
+          }}</template
         ></el-table-column
       ><el-table-column label="模式"
         ><template #default="{ row }"

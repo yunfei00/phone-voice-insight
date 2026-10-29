@@ -100,7 +100,8 @@ async function startAll() {
 }
 
 async function startSample() {
-  if (!selectedProduct.value || starting.value || startingAll.value || corpusProgress.value?.active) return
+  if (!selectedProduct.value || starting.value || startingAll.value || corpusProgress.value?.active)
+    return
   starting.value = true
   try {
     const result = await createStructuredBatch({
@@ -214,7 +215,9 @@ onUnmounted(() => {
         }}/{{ corpusProgress.batch.requested_count }}
       </p>
       <p v-if="corpusProgress.active">任务执行中，已禁止重复提交。</p>
-      <el-button v-if="corpusProgress.batch" type="primary" plain @click="router.push('/ai-tasks')">查看任务中心</el-button>
+      <el-button v-if="corpusProgress.batch" type="primary" plain @click="router.push('/ai-tasks')"
+        >查看任务中心</el-button
+      >
     </el-card>
     <div class="metric-grid">
       <el-card shadow="never"

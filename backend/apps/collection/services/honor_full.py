@@ -396,8 +396,7 @@ def run_honor_full_chunk(
                 # generic parser, network, or topic failures.
                 known_blocked_info_threads = {"30417234", "29949239"}
                 access_blocked = error_code in blocked_codes or (
-                    error_code == "BLOCKED_INFO_PAGE"
-                    and str(item.thread_id) in known_blocked_info_threads
+                    error_code == "BLOCKED_INFO_PAGE" and str(item.thread_id) in known_blocked_info_threads
                 )
                 item.status = (
                     DiscoveryStatus.BLOCKED_SKIPPED

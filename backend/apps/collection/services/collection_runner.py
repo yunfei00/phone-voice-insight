@@ -610,11 +610,20 @@ def run_collection(
             task.verification_report = chunk.report
             task.completion_verified = chunk.verified
             # Never write the stale in-memory RUNNING status back over STOPPING.
-            task.save(update_fields=(
-                "success_count", "skipped_count", "failure_count", "new_records",
-                "duplicate_records", "new_threads", "last_checkpoint",
-                "verification_report", "completion_verified", "updated_at",
-            ))
+            task.save(
+                update_fields=(
+                    "success_count",
+                    "skipped_count",
+                    "failure_count",
+                    "new_records",
+                    "duplicate_records",
+                    "new_threads",
+                    "last_checkpoint",
+                    "verification_report",
+                    "completion_verified",
+                    "updated_at",
+                )
+            )
             run.success_count = chunk.inserted
             run.skipped_count = chunk.duplicates
             run.failure_count = chunk.failed

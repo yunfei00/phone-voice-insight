@@ -693,9 +693,19 @@ onUnmounted(stopPolling)
           {{ selectedTask.failure_count }}
         </el-descriptions-item>
         <el-descriptions-item label="无权限帖子（不计为采集失败）">
-          <template v-if="Array.isArray(selectedTask.verification_report?.access_blocked_thread_details) && selectedTask.verification_report.access_blocked_thread_details.length">
-            <div v-for="thread in selectedTask.verification_report.access_blocked_thread_details" :key="String(thread.thread_id)">
-              <a :href="String(thread.thread_url)" target="_blank" rel="noopener noreferrer">帖子 {{ thread.thread_id }}</a>
+          <template
+            v-if="
+              Array.isArray(selectedTask.verification_report?.access_blocked_thread_details) &&
+              selectedTask.verification_report.access_blocked_thread_details.length
+            "
+          >
+            <div
+              v-for="thread in selectedTask.verification_report.access_blocked_thread_details"
+              :key="String(thread.thread_id)"
+            >
+              <a :href="String(thread.thread_url)" target="_blank" rel="noopener noreferrer"
+                >帖子 {{ thread.thread_id }}</a
+              >
               · {{ thread.last_error || '访问受限' }}
             </div>
           </template>
