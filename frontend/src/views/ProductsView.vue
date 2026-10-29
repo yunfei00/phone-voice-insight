@@ -320,13 +320,6 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
             <el-tag v-else type="warning">待验证</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="采集状态" width="120"
-          ><template #default="{ row }"
-            ><el-tag :type="collectionStatus(row).type">{{
-              collectionStatus(row).text
-            }}</el-tag></template
-          ></el-table-column
-        >
         <el-table-column label="采集状态" width="130">
           <template #default="{ row }"
             ><el-tag :type="collectionStatus(row).type">{{
