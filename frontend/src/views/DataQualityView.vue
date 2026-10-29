@@ -300,7 +300,16 @@ async function loadAIReviews(): Promise<void> {
       aiResultTotal.value = 0
       aiResults.value = []
     }
-    if (fullAIId.value) fullAIProgress.value = await getFullGovernanceAIProgress(fullAIId.value)
+    if (selectedProduct.value) {
+      fullAIProgress.value = await getFullGovernanceAIProgress({
+        product_id: selectedProduct.value,
+        source_id: selectedSource.value,
+      })
+      fullAIId.value = fullAIProgress.value?.id ?? null
+    } else {
+      fullAIProgress.value = null
+      fullAIId.value = null
+    }
     if (!aiBatches.value.some((b) => b.status === 'PENDING' || b.status === 'RUNNING') && fullAIProgress.value?.status !== 'RUNNING')
       stopAIPolling()
   } catch {
@@ -482,7 +491,7 @@ onMounted(async () => {
   if (auth.isAdmin) {
     await loadGovernanceTasks()
     await loadAIReviews()
-    if (aiBatches.value.some((b) => b.status === 'PENDING' || b.status === 'RUNNING'))
+    if (aiBatches.value.some((b) => b.status === 'PENDING' || b.status === 'RUNNING') || fullAIProgress.value?.status === 'RUNNING')
       startAIPolling()
     if (
       governanceTasks.value.some((task) => task.status === 'RUNNING' || task.status === 'PENDING')
@@ -497,6 +506,8 @@ async function changeScope(): Promise<void> {
   aiBatchPage.value = 1
   aiResultPage.value = 1
   await Promise.all([loadData(), loadGovernanceTasks(), loadAIReviews()])
+  if (aiBatches.value.some((b) => b.status === 'PENDING' || b.status === 'RUNNING') || fullAIProgress.value?.status === 'RUNNING')
+    startAIPolling()
 }
 onUnmounted(() => {
   stopTaskPolling()
