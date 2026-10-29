@@ -174,7 +174,7 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
                 return {"batch_id": batch.id, "status": "STOPPED", "processed": batch.processed}
             product = batch.product.__class__.objects.select_for_update().get(pk=batch.product_id)
             reviewed = GovernanceAIReview.objects.values_list("quality_id", flat=True)
-            pending = ReviewQuality.objects.filter(review__product=product)
+            pending = ReviewQuality.objects.filter(review__product=product, eligible_for_ai=True)
             if batch.source_id is not None:
                 pending = pending.filter(review__source_id=batch.source_id)
             ids = list(pending.exclude(pk__in=reviewed).order_by("pk").values_list("pk", flat=True)[:100])
