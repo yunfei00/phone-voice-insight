@@ -18,6 +18,7 @@ import {
   stopFullGovernanceAI,
   getGovernanceAIHistory,
   getGovernanceAIResults,
+  getAICorpusSummary,
   retryGovernanceAIBatch,
 } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -29,7 +30,7 @@ import type {
   ExclusionReason,
   ReviewQuality,
 } from '@/types/api'
-import type { GovernanceTaskInfo, GovernanceAIBatchInfo, GovernanceAIResultInfo, FullGovernanceAIProgress } from '@/api'
+import type { GovernanceTaskInfo, GovernanceAIBatchInfo, GovernanceAIResultInfo, FullGovernanceAIProgress, AICorpusSummary } from '@/api'
 
 const emptySummary = (): DataQualitySummary => ({
   total: 0,
@@ -71,6 +72,7 @@ const governanceTasks = ref<GovernanceTaskInfo[]>([])
 const taskLoading = ref(false)
 const aiBusy = ref(false)
 const fullAIProgress = ref<FullGovernanceAIProgress | null>(null)
+const corpusSummary = ref<AICorpusSummary | null>(null)
 const fullAIId = ref<number | null>(null)
 const stoppingFullAI = ref(false)
 const aiBatches = ref<GovernanceAIBatchInfo[]>([])
@@ -290,6 +292,7 @@ async function loadAIReviews(): Promise<void> {
     aiBatchTotal.value = history.count
     aiBatches.value = history.results
     if (selectedProduct.value) {
+      corpusSummary.value = await getAICorpusSummary(selectedProduct.value, selectedSource.value)
       const results = await getGovernanceAIResults(selectedProduct.value, {
         page: aiResultPage.value,
         page_size: 10,
@@ -300,6 +303,7 @@ async function loadAIReviews(): Promise<void> {
     } else {
       aiResultTotal.value = 0
       aiResults.value = []
+      corpusSummary.value = null
     }
     if (selectedProduct.value) {
       fullAIProgress.value = await getFullGovernanceAIProgress({
@@ -594,6 +598,26 @@ onUnmounted(() => {
 
     <section v-if="auth.isAdmin" class="panel governance-actions">
       <h3>AI 自动判断与自动决策</h3>
+      <div v-if="corpusSummary" class="panel" style="margin-bottom: 16px">
+        <h4>最终有效语料统计（当前产品及来源）</h4>
+        <el-row :gutter="12">
+          <el-col v-for="metric in [
+            { label: '已治理总量', value: corpusSummary.total },
+            { label: '规则可用', value: corpusSummary.rule_eligible },
+            { label: '规则排除', value: corpusSummary.rule_excluded },
+            { label: 'AI 确认有效', value: corpusSummary.ai_accepted },
+            { label: 'AI 排除', value: corpusSummary.ai_rejected },
+            { label: '待人工复核', value: corpusSummary.ai_uncertain },
+            { label: 'AI 技术失败', value: corpusSummary.ai_failed },
+            { label: '尚未 AI 判断', value: corpusSummary.ai_unprocessed },
+            { label: '最终可分析', value: corpusSummary.final_eligible },
+          ]" :key="metric.label" :xs="12" :sm="8" :md="6">
+            <el-statistic :title="metric.label" :value="metric.value" style="padding: 12px 0" />
+          </el-col>
+        </el-row>
+        <p>统计按语料去重，取每条语料最新 AI 判断；最终可分析仅包括规则可用且最新 AI 结论为自动接受的数据。待复核和技术失败不进入分析。</p>
+      </div>
+
       <p>
         系统自动接受明确有效反馈、排除无效内容；证据不足标记为不确定且不进入分析，技术错误仅有限重试。
       </p>
