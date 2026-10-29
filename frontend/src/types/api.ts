@@ -684,6 +684,7 @@ export interface StructuredQuality {
   review_required: number
   human_evaluation_status: 'NOT_EVALUATED'
   accuracy_metrics: null
+  error_distribution?: { error_code: string; count: number }[]
 }
 
 export interface StructuredAggregateItem {
