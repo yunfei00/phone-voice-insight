@@ -254,6 +254,9 @@ export const getAnalysisSummary = async (): Promise<AnalysisSummary> =>
 export const getAIConfiguration = async (): Promise<AIConfiguration> =>
   (await apiClient.get<AIConfiguration>('/analysis-batches/configuration/')).data
 
+export const getOllamaModels = async (): Promise<{ models: string[] }> =>
+  (await apiClient.get<{ models: string[] }>('/ai-configuration/ollama-models/')).data
+
 export const getPersonalAIConfiguration = async (): Promise<PersonalAIConfiguration> =>
   (await apiClient.get<PersonalAIConfiguration>('/ai-configuration/')).data
 
@@ -339,6 +342,24 @@ export const getStructuredBatches = async (
   params: PageParams = {},
 ): Promise<PaginatedResponse<StructuredBatch>> =>
   (await apiClient.get<PaginatedResponse<StructuredBatch>>('/structured-batches/', { params })).data
+
+export interface StructuredCorpusProgress {
+  total: number
+  completed: number
+  remaining: number
+  active: boolean
+  batch: StructuredBatch | null
+}
+
+export const getStructuredCorpusProgress = async (
+  productId: number,
+): Promise<StructuredCorpusProgress> =>
+  (await apiClient.get('/structured-batches/progress/', { params: { product_id: productId } })).data
+
+export const runAllStructuredAnalysis = async (
+  productId: number,
+): Promise<{ queued: number; batch_id?: number; celery_task_id?: string; error_code?: string }> =>
+  (await apiClient.post('/structured-batches/run-all/', { product_id: productId })).data
 
 export const createStructuredBatch = async (payload: {
   product_id?: number | null

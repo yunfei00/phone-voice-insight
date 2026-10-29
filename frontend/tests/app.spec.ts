@@ -4,7 +4,6 @@ import { createApp, nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from '@/App.vue'
-import { CURRENT_PHASE_LABEL } from '@/config/project'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
 import { pinia } from '@/stores/pinia'
@@ -247,11 +246,11 @@ describe('App', () => {
   })
 
   it.each(['/dashboard', '/analysis', '/data-quality'])(
-    '%s 的全局 Header 显示统一项目阶段',
+    '%s 的全局 Header 不再显示开发阶段',
     async (path) => {
       const { app, container } = await mountApp(path)
 
-      expect(container.querySelector('.phase-label')?.textContent).toBe(CURRENT_PHASE_LABEL)
+      expect(container.querySelector('.phase-label')).toBeNull()
 
       app.unmount()
     },

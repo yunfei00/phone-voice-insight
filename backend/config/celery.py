@@ -26,6 +26,14 @@ app.conf.beat_schedule = {
         "task": "recover_stale_governance_ai_batches",
         "schedule": 60.0,
     },
+    "dispatch-pending-structured-reviews": {
+        "task": "dispatch_pending_structured_reviews",
+        "schedule": 1800.0,
+    },
+    "recover-stale-structured-batches": {
+        "task": "recover_stale_structured_batches",
+        "schedule": 300.0,
+    },
     "dashboard-beat-heartbeat": {
         "task": "record_dashboard_beat_heartbeat",
         "schedule": 60.0,

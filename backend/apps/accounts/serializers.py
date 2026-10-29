@@ -143,9 +143,16 @@ class UserAIConfigurationSerializer(serializers.ModelSerializer):
 
             if not settings.DEBUG and not settings.AI_ALLOW_FAKE_PROVIDER:
                 raise serializers.ValidationError({"provider": "生产环境不允许使用测试 Provider。"})
+        elif provider == AIProviderName.OLLAMA:
+            if not base_url:
+                raise serializers.ValidationError({"base_url": "请输入 Ollama 服务地址。"})
         elif not base_url or not has_key:
             raise serializers.ValidationError("请完整填写 API 地址和 API Key。")
-        if attrs.get("is_active", getattr(instance, "is_active", True)) and not model:
+        if (
+            attrs.get("is_active", getattr(instance, "is_active", True))
+            and not model
+            and provider != AIProviderName.OLLAMA
+        ):
             raise serializers.ValidationError({"model": "启用配置时必须填写模型名称。"})
         return attrs
 

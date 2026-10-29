@@ -14,7 +14,13 @@ from apps.analysis.models import (
     StructuredRunStatus,
 )
 from apps.analysis.services.structured_engine import analyze_content
-from apps.reviews.models import AuthorRole, RecordType, ReviewRecord
+from apps.reviews.models import (
+    AuthorRole,
+    GovernanceAIReview,
+    RecordType,
+    ReviewQuality,
+    ReviewRecord,
+)
 
 
 class StructuredProvider(AIProvider):
@@ -190,8 +196,28 @@ def test_review_correction_replaces_aspects_and_keeps_history(api_client, review
     assert AnalysisReviewRecord.objects.filter(analysis=run.structured_analysis).count() == 1
 
 
+def accept_for_final_corpus(review: ReviewRecord) -> None:
+    quality, _ = ReviewQuality.objects.update_or_create(
+        review=review,
+        defaults={
+            "eligible_for_ai": True,
+            "is_official_content": False,
+            "processor_version": "test",
+            "processed_at": timezone.now(),
+        },
+    )
+    GovernanceAIReview.objects.create(
+        quality=quality,
+        status=GovernanceAIReview.Status.ACCEPTED,
+        rule_eligible=True,
+        ai_eligible=True,
+        input_hash="a" * 64,
+    )
+
+
 @pytest.mark.django_db
 def test_aggregate_counts_are_deterministic(api_client, review):  # type: ignore[no-untyped-def]
+    accept_for_final_corpus(review)
     analyze_content(review.id, StructuredProvider())
     response = api_client.get("/api/v1/structured-analyses/aggregates/")
     assert response.status_code == 200
@@ -205,6 +231,7 @@ def test_aggregate_counts_are_deterministic(api_client, review):  # type: ignore
 
 @pytest.mark.django_db
 def test_batch_defaults_to_dry_run_and_does_not_call_ai(api_client, review):  # type: ignore[no-untyped-def]
+    accept_for_final_corpus(review)
     response = api_client.post("/api/v1/structured-batches/", {"content_ids": [review.id]}, format="json")
     assert response.status_code == 201
     assert response.data["dry_run"] is True

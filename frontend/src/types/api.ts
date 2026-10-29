@@ -585,7 +585,7 @@ export interface AIConfiguration extends PersonalAIConfiguration {
 }
 
 export interface AIConfigurationPayload {
-  provider: 'openai_compatible'
+  provider: 'openai_compatible' | 'ollama'
   base_url: string
   api_key?: string
   model: string
@@ -684,6 +684,7 @@ export interface StructuredQuality {
   review_required: number
   human_evaluation_status: 'NOT_EVALUATED'
   accuracy_metrics: null
+  error_distribution?: { error_code: string; count: number }[]
 }
 
 export interface StructuredAggregateItem {

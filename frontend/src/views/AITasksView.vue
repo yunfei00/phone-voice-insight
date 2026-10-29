@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import {
   cancelStructuredBatch,
   createStructuredBatch,
@@ -13,6 +13,8 @@ import {
 } from '@/api'
 import type { DataSource, Product, StructuredBatch } from '@/types/api'
 const loading = ref(false)
+const submitting = ref(false)
+let refreshTimer: ReturnType<typeof setInterval> | undefined
 const error = ref('')
 const batches = ref<StructuredBatch[]>([])
 const products = ref<Product[]>([])
@@ -46,12 +48,16 @@ async function load() {
   }
 }
 async function create() {
+  if (submitting.value) return
+  submitting.value = true
   try {
     await createStructuredBatch(form)
     ElMessage.success(form.dry_run ? '预估完成，未调用模型' : '任务已提交')
     await load()
   } catch {
     ElMessage.error('创建任务失败，请检查筛选条件或 AI 配置')
+  } finally {
+    submitting.value = false
   }
 }
 async function cancel(id: number) {
@@ -78,7 +84,15 @@ async function retry(id: number) {
     ElMessage.warning('该任务没有可重试的失败项目')
   }
 }
-onMounted(load)
+onMounted(() => {
+  void load()
+  refreshTimer = setInterval(() => {
+    if (!loading.value) void load()
+  }, 5000)
+})
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+})
 </script>
 <template>
   <section class="tasks">
@@ -95,7 +109,7 @@ onMounted(load)
         ><el-input-number v-model="form.max_items" :min="1" :max="1000" /><el-switch
           v-model="form.dry_run"
           active-text="仅预估（推荐）"
-        /><el-button type="primary" @click="create">{{
+        /><el-button type="primary" :loading="submitting" :disabled="submitting" @click="create">{{
           form.dry_run ? '执行预估' : '提交真实任务'
         }}</el-button>
       </div>
@@ -112,7 +126,9 @@ onMounted(load)
         label="机型"
       /><el-table-column prop="status" label="状态" /><el-table-column label="进度"
         ><template #default="{ row }"
-          >{{ row.success_count + row.failed_count }}/{{ row.requested_count }}</template
+          >{{ row.success_count + row.failed_count + row.skipped_count }}/{{
+            row.requested_count
+          }}</template
         ></el-table-column
       ><el-table-column label="模式"
         ><template #default="{ row }"

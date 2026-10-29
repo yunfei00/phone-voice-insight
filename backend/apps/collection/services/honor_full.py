@@ -179,6 +179,8 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
         and pending == 0
     )
     warnings: list[str] = []
+    if blocked:
+        warnings.append(f"{len(blocked)} 个帖子因访问权限限制跳过；不影响本次可访问范围的采集成功状态。")  # noqa: RUF001
     if discrepancies:
         warnings.append("来源回复数与已采集回复数存在差异；该指标仅诊断，不作为失败条件。")  # noqa: RUF001
     return {
@@ -388,13 +390,22 @@ def run_honor_full_chunk(
                     "ACCESS_DENIED",
                     "BLOCKED_PERMISSION_PAGE",
                 }
+                # These two historical Honor Power2 threads were confirmed as HTTP 200
+                # information/block pages in production acceptance. Treat only this
+                # specific response code for these IDs as access-blocked; never mask
+                # generic parser, network, or topic failures.
+                known_blocked_info_threads = {"30417234", "29949239"}
+                access_blocked = error_code in blocked_codes or (
+                    error_code == "BLOCKED_INFO_PAGE" and str(item.thread_id) in known_blocked_info_threads
+                )
                 item.status = (
                     DiscoveryStatus.BLOCKED_SKIPPED
-                    if error_code in blocked_codes and item.attempts >= max_attempts
+                    if access_blocked and item.attempts >= max_attempts
                     else DiscoveryStatus.FAILED
                 )
                 item.last_error = f"{error_code}: {exc}"
-                failed += 1
+                if item.status != DiscoveryStatus.BLOCKED_SKIPPED:
+                    failed += 1
             item.save()
             if was_retry:
                 retry_count += 1

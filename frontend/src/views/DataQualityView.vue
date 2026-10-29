@@ -642,6 +642,13 @@ onUnmounted(() => {
             <el-statistic :title="metric.label" :value="metric.value" style="padding: 12px 0" />
           </el-col>
         </el-row>
+        <el-button
+          type="primary"
+          :disabled="!corpusSummary.final_eligible"
+          @click="$router.push('/structured-analysis')"
+        >
+          下一步：进入 AI 结构化分析（{{ corpusSummary.final_eligible }} 条可分析）
+        </el-button>
         <p>
           统计按语料去重，取每条语料最新 AI 判断；最终可分析仅包括规则可用且最新 AI
           结论为自动接受的数据。无法判断及技术失败的数据自动跳过，不进入分析；原始记录仍保留。

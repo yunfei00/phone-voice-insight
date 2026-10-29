@@ -35,9 +35,10 @@ from apps.analysis.structured_serializers import (
     StructuredBatchCreateSerializer,
     StructuredBatchSerializer,
 )
-from apps.analysis.tasks import run_structured_analysis_batch_task
+from apps.analysis.tasks import dispatch_pending_structured_reviews, run_structured_analysis_batch_task
 from apps.products.models import Product
 from apps.reviews.models import ReviewRecord
+from apps.reviews.services.final_corpus import final_corpus_reviews
 from apps.sources.models import DataSource
 
 
@@ -89,7 +90,7 @@ class StructuredBatchViewSet(ViewSet):
         serializer = StructuredBatchCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
-        queryset = ReviewRecord.objects.select_related("product", "source").order_by("id")
+        queryset = final_corpus_reviews().select_related("product", "source").order_by("id")
         if ids := values.get("content_ids"):
             queryset = queryset.filter(id__in=ids)
         if product_id := values.get("product_id"):
@@ -100,6 +101,11 @@ class StructuredBatchViewSet(ViewSet):
             queryset = queryset.filter(published_at__gte=after)
         if before := values.get("published_at_before"):
             queryset = queryset.filter(published_at__lte=before)
+        completed_ids = AnalysisRun.objects.filter(
+            status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
+            is_current=True,
+        ).values("content_id")
+        queryset = queryset.exclude(id__in=completed_ids)
         content_ids = list(queryset.values_list("id", flat=True)[: values["max_items"]])
         first = queryset.first()
         if first is None:
@@ -145,6 +151,66 @@ class StructuredBatchViewSet(ViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=False, methods=("get",), url_path="progress")
+    def progress(self, request: Request) -> Response:
+        raw_product = request.query_params.get("product_id")
+        try:
+            product_id = int(raw_product or "")
+            if product_id <= 0:
+                raise ValueError
+        except ValueError:
+            return Response({"error_code": "PRODUCT_REQUIRED"}, status=status.HTTP_400_BAD_REQUEST)
+        corpus = final_corpus_reviews().filter(product_id=product_id)
+        completed = AnalysisRun.objects.filter(
+            content_id__in=corpus.values("id"),
+            is_current=True,
+            status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
+        ).values("content_id")
+        remaining = corpus.exclude(id__in=completed).count()
+        active = (
+            AnalysisBatch.objects.filter(
+                created_by=cast(User, request.user),
+                product_id=product_id,
+                prompt_version="structured_analysis_v1",
+                status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
+            )
+            .order_by("-id")
+            .first()
+        )
+        latest = (
+            AnalysisBatch.objects.filter(
+                created_by=cast(User, request.user), product_id=product_id, prompt_version="structured_analysis_v1"
+            )
+            .order_by("-id")
+            .first()
+        )
+        return Response(
+            {
+                "total": corpus.count(),
+                "completed": corpus.filter(id__in=completed).count(),
+                "remaining": remaining,
+                "active": active is not None,
+                "batch": StructuredBatchSerializer(active or latest).data if (active or latest) else None,
+            }
+        )
+
+    @action(detail=False, methods=("post",), url_path="run-all")
+    def run_all(self, request: Request) -> Response:
+        product_id = request.data.get("product_id")
+        if not isinstance(product_id, int) or product_id <= 0:
+            return Response({"error_code": "PRODUCT_REQUIRED"}, status=status.HTTP_400_BAD_REQUEST)
+        result = dispatch_pending_structured_reviews(request.user.pk, product_id)
+        if result.get("locked"):
+            return Response({"error_code": "DISPATCH_BUSY"}, status=status.HTTP_409_CONFLICT)
+        if result.get("active_batch_id"):
+            return Response(
+                {"error_code": "ANALYSIS_ALREADY_RUNNING", "batch_id": result["active_batch_id"]},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if result.get("error_code"):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_202_ACCEPTED if result.get("batch_id") else status.HTTP_200_OK)
 
     @action(detail=True, methods=("post",))
     def cancel(self, _request: Request, pk: str | None = None) -> Response:
@@ -323,7 +389,13 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
     @action(detail=False, methods=("get",), url_path="aggregates")
     def aggregates(self, request: Request) -> Response:
         del request
-        analyses = self.get_queryset().filter(run__is_current=True)
+        analyses = self.get_queryset().filter(
+            run__is_current=True,
+            run__status=StructuredRunStatus.SUCCEEDED,
+            schema_valid=True,
+            review_required=False,
+            content_id__in=final_corpus_reviews().values("pk"),
+        )
         aspects = OpinionAspect.objects.filter(analysis__in=analyses)
         by_domain = list(aspects.values("aspect_code").annotate(count=Count("id")).order_by("-count"))
         by_topic = list(aspects.values("topic_code").annotate(count=Count("id")).order_by("-count"))

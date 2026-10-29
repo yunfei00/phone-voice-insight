@@ -43,12 +43,24 @@ def get_ai_provider(configuration: AIProviderSettings | None = None) -> AIProvid
         if not settings.DEBUG and not settings.AI_ALLOW_FAKE_PROVIDER:
             raise AIProviderError("AI_FAKE_PROVIDER_FORBIDDEN", "Fake provider is disabled in production")
         return FakeAIProvider(model=config.model or "fake-review-v1")
-    if provider == "openai_compatible":
+    if provider in {"openai_compatible", "ollama"}:
         thinking_mode = config.thinking_mode.strip().lower()
         if thinking_mode not in {"", "enabled", "disabled"}:
             raise AIProviderError(
                 "AI_CONFIGURATION_INVALID",
                 "AI_THINKING_MODE must be empty, enabled, or disabled",
+            )
+        if provider == "ollama":
+            if not config.base_url or not config.model:
+                raise AIProviderError("AI_NOT_CONFIGURED", "Ollama URL and model are required")
+            return OpenAICompatibleProvider(
+                base_url=config.base_url.rstrip("/") + ("" if config.base_url.rstrip("/").endswith("/v1") else "/v1"),
+                api_key=config.api_key or "ollama",
+                model=config.model,
+                timeout_seconds=config.timeout_seconds,
+                temperature=config.temperature,
+                max_output_tokens=config.max_output_tokens,
+                thinking_mode="",
             )
         missing = [
             name

@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import {
+  createStructuredBatch,
+  runAllStructuredAnalysis,
+  getStructuredCorpusProgress,
   getProducts,
   getStructuredAggregates,
   getStructuredAnalyses,
   getStructuredBatches,
   getStructuredQuality,
   getTaxonomy,
-  reviewStructuredAnalysis,
 } from '@/api'
 import HighlightText from '@/components/HighlightText.vue'
+import type { StructuredCorpusProgress } from '@/api'
 import type {
   Product,
   StructuredAggregates,
@@ -21,6 +25,12 @@ import type {
   TaxonomyDefinition,
 } from '@/types/api'
 
+const router = useRouter()
+const starting = ref(false)
+const startingAll = ref(false)
+const corpusProgress = ref<StructuredCorpusProgress>()
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+const sampleSize = ref(20)
 const loading = ref(false)
 const error = ref('')
 const items = ref<StructuredAnalysisV1[]>([])
@@ -34,12 +44,7 @@ const batches = ref<StructuredBatch[]>([])
 const batchCount = ref(0)
 const page = ref(1)
 const batchPage = ref(1)
-const filters = reactive({ search: '', aspect_code: '', sentiment: '', review_required: '' })
-const reviewVisible = ref(false)
-const reviewTarget = ref<StructuredAnalysisV1>()
-const correctedJson = ref('')
-const reviewReason = ref('')
-
+const filters = reactive({ search: '', aspect_code: '', sentiment: '' })
 async function load() {
   loading.value = true
   error.value = ''
@@ -58,6 +63,9 @@ async function load() {
     batches.value = batchResult.results
     batchCount.value = batchResult.count
     taxonomy.value ||= await getTaxonomy()
+    corpusProgress.value = selectedProduct.value
+      ? await getStructuredCorpusProgress(selectedProduct.value)
+      : undefined
   } catch {
     error.value = '结构化分析数据加载失败，请稍后重试。'
   } finally {
@@ -65,39 +73,58 @@ async function load() {
   }
 }
 
-function openReview(item: StructuredAnalysisV1) {
-  reviewTarget.value = item
-  correctedJson.value = JSON.stringify(
-    {
-      schema_version: item.schema_version,
-      taxonomy_version: item.taxonomy_version,
-      overall_sentiment: item.overall_sentiment,
-      language: item.language,
-      content_type: item.content_type,
-      relevance: item.relevance,
-      summary: item.summary,
-      model_mentions: item.model_mentions,
-      aspects: item.aspects.map((aspect) =>
-        Object.fromEntries(Object.entries(aspect).filter(([key]) => key !== 'id')),
-      ),
-    },
-    null,
-    2,
-  )
-  reviewReason.value = ''
-  reviewVisible.value = true
+async function startAll() {
+  if (!selectedProduct.value || startingAll.value || corpusProgress.value?.active) return
+  startingAll.value = true
+  try {
+    const result = await runAllStructuredAnalysis(selectedProduct.value)
+    ElMessage.success(
+      result.batch_id
+        ? `已创建批次 #${result.batch_id}，本批 ${result.queued} 条`
+        : '没有待分析的有效评论',
+    )
+    await load()
+  } catch (reason: unknown) {
+    const detail = reason as { response?: { data?: { error_code?: string; batch_id?: number } } }
+    const code = detail.response?.data?.error_code
+    ElMessage.error(
+      code === 'ANALYSIS_ALREADY_RUNNING'
+        ? `批次 #${detail.response?.data?.batch_id} 正在执行`
+        : code === 'AI_NOT_CONFIGURED'
+          ? '请先配置 AI 模型'
+          : '任务未成功启动，请检查 Worker',
+    )
+  } finally {
+    startingAll.value = false
+  }
 }
 
-async function saveReview() {
-  if (!reviewTarget.value) return
+async function startSample() {
+  if (!selectedProduct.value || starting.value || startingAll.value || corpusProgress.value?.active)
+    return
+  starting.value = true
   try {
-    const payload = JSON.parse(correctedJson.value) as Record<string, unknown>
-    await reviewStructuredAnalysis(reviewTarget.value.id, payload, reviewReason.value)
-    ElMessage.success('复核结果已保存，修改前后版本均已留存')
-    reviewVisible.value = false
+    const result = await createStructuredBatch({
+      product_id: selectedProduct.value,
+      max_items: sampleSize.value,
+      dry_run: false,
+      max_concurrency: 1,
+      requests_per_minute: 10,
+    })
+    ElMessage.success(
+      `已提交真实分析任务 #${result.batch.id}，匹配 ${result.matched_content_ids.length} 条语料`,
+    )
     await load()
-  } catch {
-    ElMessage.error('复核内容无效或保存失败')
+  } catch (reason: unknown) {
+    const detail = reason as { response?: { data?: { error_code?: string; detail?: string } } }
+    const code = detail.response?.data?.error_code
+    ElMessage.error(
+      code === 'NO_CONTENT_MATCHED'
+        ? '没有可分析的最终有效语料，请先在数据质量页面完成 AI 治理'
+        : detail.response?.data?.detail || '任务创建失败，请检查 AI 配置和后台任务服务',
+    )
+  } finally {
+    starting.value = false
   }
 }
 
@@ -115,6 +142,12 @@ onMounted(async () => {
     ElMessage.warning('产品列表加载失败')
   }
   await load()
+  refreshTimer = setInterval(() => {
+    if (!loading.value) void load()
+  }, 5000)
+})
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 
@@ -125,8 +158,67 @@ onMounted(async () => {
         <h1>AI 结构化分析</h1>
         <p>自动治理后的有效反馈将无人值守进入结构化分析；证据不足和技术错误不会混入问题统计。</p>
       </div>
-      <el-tag effect="plain">Taxonomy {{ taxonomy?.taxonomy_version || '1.0.0' }}</el-tag>
     </header>
+    <el-card shadow="never">
+      <div class="filters">
+        <strong>下一步：启动真实 AI 结构化分析</strong>
+        <el-select v-model="selectedProduct" placeholder="先选择手机产品" @change="changeProduct">
+          <el-option
+            v-for="product in products"
+            :key="product.id"
+            :label="product.name"
+            :value="product.id"
+          />
+        </el-select>
+        <el-input-number v-model="sampleSize" :min="1" :max="1000" :step="10" />
+        <el-button
+          type="primary"
+          :loading="starting"
+          :disabled="!selectedProduct || startingAll || starting || corpusProgress?.active"
+          @click="startSample"
+        >
+          开始分析（非模拟）
+        </el-button>
+        <el-button
+          type="success"
+          :loading="startingAll"
+          :disabled="!selectedProduct || startingAll || starting || corpusProgress?.active"
+          @click="startAll"
+          >一键分析全部剩余数据</el-button
+        >
+        <el-button @click="load">刷新结果与任务进度</el-button>
+      </div>
+      <p>
+        已完成的评论自动跳过；全量任务按每批 100 条持续执行。系统每 30
+        分钟检查新增有效评论并自动分析，失败记录不会无限重试。
+      </p>
+    </el-card>
+    <el-card v-if="corpusProgress" shadow="never">
+      <template #header><strong>全量分析进度（每 5 秒更新）</strong></template>
+      <el-progress
+        :percentage="
+          corpusProgress.total
+            ? Math.round((corpusProgress.completed / corpusProgress.total) * 100)
+            : 100
+        "
+      />
+      <p>
+        有效语料 {{ corpusProgress.total }} · 已完成 {{ corpusProgress.completed }} · 剩余
+        {{ corpusProgress.remaining }}
+      </p>
+      <p v-if="corpusProgress.batch">
+        批次 #{{ corpusProgress.batch.id }} · {{ corpusProgress.batch.status }} · 本批
+        {{
+          corpusProgress.batch.success_count +
+          corpusProgress.batch.failed_count +
+          corpusProgress.batch.skipped_count
+        }}/{{ corpusProgress.batch.requested_count }}
+      </p>
+      <p v-if="corpusProgress.active">任务执行中，已禁止重复提交。</p>
+      <el-button v-if="corpusProgress.batch" type="primary" plain @click="router.push('/ai-tasks')"
+        >查看任务中心</el-button
+      >
+    </el-card>
     <div class="metric-grid">
       <el-card shadow="never"
         ><span>AI 已分析量</span><strong>{{ quality?.total_runs || 0 }}</strong></el-card
@@ -175,9 +267,6 @@ onMounted(async () => {
             :value="value"
           />
         </el-select>
-        <el-select v-model="filters.review_required" clearable placeholder="复核状态">
-          <el-option label="待复核" value="true" /><el-option label="已确认" value="false" />
-        </el-select>
         <el-button type="primary" @click="load">查询</el-button>
       </div>
     </el-card>
@@ -193,10 +282,7 @@ onMounted(async () => {
         <template #header>
           <div class="card-title">
             <strong>{{ item.original_title || `反馈 #${item.content}` }}</strong
-            ><span
-              ><el-tag v-if="item.review_required" type="warning">待复核</el-tag>
-              {{ item.product_name }} · {{ item.source_name }}</span
-            >
+            ><span> {{ item.product_name }} · {{ item.source_name }}</span>
           </div>
         </template>
         <p class="original">{{ item.original_content }}</p>
@@ -232,7 +318,7 @@ onMounted(async () => {
           <span
             >{{ item.provider }} / {{ item.model }} · {{ item.prompt_version }} · Schema
             {{ item.schema_version }}</span
-          ><el-button @click="openReview(item)">人工复核</el-button>
+          >
         </footer>
       </el-card>
     </div>
@@ -280,23 +366,6 @@ onMounted(async () => {
         @current-change="load"
       />
     </el-card>
-    <el-dialog
-      v-model="reviewVisible"
-      title="人工复核（可修改、删除或补充观点）"
-      width="min(900px, 94vw)"
-    >
-      <el-alert
-        title="保存时会再次校验标签父子关系和原文证据，修改历史不会被覆盖。"
-        type="info"
-        :closable="false"
-      />
-      <el-input v-model="correctedJson" class="json-editor" type="textarea" :rows="20" />
-      <el-input v-model="reviewReason" placeholder="复核原因" />
-      <template #footer
-        ><el-button @click="reviewVisible = false">取消</el-button
-        ><el-button type="primary" @click="saveReview">校验并保存</el-button></template
-      >
-    </el-dialog>
   </section>
 </template>
 

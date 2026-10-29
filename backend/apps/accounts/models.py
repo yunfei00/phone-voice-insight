@@ -25,6 +25,7 @@ class UserProfile(models.Model):
 
 class AIProviderName(models.TextChoices):
     OPENAI_COMPATIBLE = "openai_compatible", "OpenAI 兼容接口"
+    OLLAMA = "ollama", "本地 Ollama"
     FAKE = "fake", "测试 Provider"
 
 
@@ -81,6 +82,8 @@ class UserAIConfiguration(models.Model):
             return False
         if self.provider == AIProviderName.FAKE:
             return True
+        if self.provider == AIProviderName.OLLAMA:
+            return bool(self.base_url)
         return bool(self.base_url and self.api_key_ciphertext)
 
     def set_api_key(self, api_key: str) -> None:
