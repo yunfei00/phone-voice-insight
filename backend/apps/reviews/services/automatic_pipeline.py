@@ -126,7 +126,7 @@ def run_automatic_pipeline(product_id: int, source_id: int | None = None) -> Aut
         return AutomaticPipelineResult(status="AI_NOT_CONFIGURED", product_id=product_id)
     budget = int(settings.AI_AUTOMATION_DAILY_TOKEN_BUDGET)
     used_tokens = _tokens_used_today()
-    if budget <= 0 or used_tokens >= budget:
+    if settings.AI_AUTOMATION_TOKEN_LIMIT_MODE == "LIMITED" and (budget <= 0 or used_tokens >= budget):
         return AutomaticPipelineResult(status="DAILY_BUDGET_EXCEEDED", product_id=product_id)
 
     product = Product.objects.get(pk=product_id)
@@ -183,7 +183,9 @@ def run_automatic_pipeline(product_id: int, source_id: int | None = None) -> Aut
                 ai_batch_id=ai_batch.id if ai_batch else None,
             )
         source = DataSource.objects.get(pk=resolved_source_id)
-        remaining_tokens = max(budget - _tokens_used_today(), 0)
+        remaining_tokens = None
+        if settings.AI_AUTOMATION_TOKEN_LIMIT_MODE == "LIMITED":
+            remaining_tokens = max(budget - _tokens_used_today(), 0)
         structured_batch = AnalysisBatch.objects.create(
             created_by_id=configuration.user_id,
             product=product,

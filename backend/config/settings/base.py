@@ -170,6 +170,11 @@ AI_AUTOMATION_ENABLED = env_bool("AI_AUTOMATION_ENABLED", False)
 AI_AUTOMATION_BATCH_SIZE = min(max(int(env("AI_AUTOMATION_BATCH_SIZE", "10")), 1), 50)
 AI_AUTOMATION_MAX_ATTEMPTS = min(max(int(env("AI_AUTOMATION_MAX_ATTEMPTS", "2")), 1), 3)
 AI_AUTOMATION_DAILY_TOKEN_BUDGET = max(int(env("AI_AUTOMATION_DAILY_TOKEN_BUDGET", "100000")), 0)
+# UNLIMITED removes the daily token ceiling only; retries, timeouts and rate limits remain active.
+# Keep LIMITED as the safe default, especially for paid cloud providers.
+AI_AUTOMATION_TOKEN_LIMIT_MODE = env("AI_AUTOMATION_TOKEN_LIMIT_MODE", "LIMITED").strip().upper()
+if AI_AUTOMATION_TOKEN_LIMIT_MODE not in {"LIMITED", "UNLIMITED"}:
+    raise ValueError("AI_AUTOMATION_TOKEN_LIMIT_MODE must be LIMITED or UNLIMITED")
 AI_AUTOMATION_REQUESTS_PER_MINUTE = min(max(int(env("AI_AUTOMATION_REQUESTS_PER_MINUTE", "6")), 1), 60)
 AI_LIVE_ACCEPTANCE_ENABLED = env_bool("AI_LIVE_ACCEPTANCE_ENABLED", False)
 AI_LIVE_ACCEPTANCE_MAX_ITEMS = min(max(int(env("AI_LIVE_ACCEPTANCE_MAX_ITEMS", "10")), 1), 10)
