@@ -29,3 +29,12 @@ class RoleBasedAccessPermission(BasePermission):
 class IsAdministrator(BasePermission):
     def has_permission(self, request: Request, view: object) -> bool:  # noqa: ARG002
         return bool(request.user and request.user.is_authenticated and get_user_role(request.user) == UserRole.ADMIN)
+
+
+class IsAnalystOrAdministrator(BasePermission):
+    def has_permission(self, request: Request, view: object) -> bool:  # noqa: ARG002
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and get_user_role(request.user) in {UserRole.ADMIN, UserRole.ANALYST}
+        )

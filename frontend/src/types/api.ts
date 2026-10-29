@@ -715,3 +715,152 @@ export interface StructuredBatch extends AnalysisBatch {
   actual_cost: string
   review_required_count: number
 }
+
+export interface DashboardFilters {
+  product_id?: number
+  source_id?: number
+  start_date?: string
+  end_date?: string
+}
+
+export interface DashboardIssue {
+  id: string
+  product_id: number
+  product_name: string
+  category: string
+  topic_code: string
+  name: string
+  feedback_count: number
+  recent_count: number
+  previous_count: number
+  growth_rate: number | null
+  is_new: boolean
+  severity: string
+  first_seen: string | null
+  last_seen: string | null
+}
+
+export interface DashboardOverview {
+  filters: { start_date: string; end_date: string }
+  raw_feedback: number
+  valid_feedback: number
+  ai_analyzed: number
+  explicit_issue_feedback: number
+  watch_issue_count: number
+  latest_data_at: string | null
+  published_time_fallback_count: number
+  disclaimer: string
+  watchlist: DashboardIssue[]
+}
+
+export interface DashboardTrend {
+  date: string
+  valid_feedback: number
+  explicit_issues: number
+}
+
+export interface DashboardCategory {
+  code: string
+  name: string
+  feedback_count: number
+  analyzed_denominator: number
+  ratio: number | null
+}
+
+export interface DashboardProductSummary {
+  product_id: number
+  product_name: string
+  valid_feedback: number
+  ai_analyzed: number
+  explicit_issue_feedback: number
+  top_issue: string | null
+  latest_data_at: string | null
+}
+
+export interface DashboardComparisonSide extends DashboardOverview {
+  product_id: number
+  product_name: string
+  negative_ratio: number | null
+  ratio_denominator: number
+  sample_sufficient: boolean
+  top_issues: DashboardIssue[]
+}
+
+export interface DashboardComparison {
+  left: DashboardComparisonSide
+  right: DashboardComparisonSide
+  minimum_sample: number
+  reliable: boolean
+  reliability_message: string | null
+  categories: Array<{
+    code: string
+    name: string
+    left: DashboardCategory
+    right: DashboardCategory
+  }>
+}
+
+export interface DashboardEvidence {
+  id: number
+  analysis__content_id: number
+  analysis__content__title: string
+  analysis__content__content: string
+  analysis__content__source_url: string
+  analysis__content__published_at: string | null
+  analysis__content__collected_at: string
+  analysis__summary: string
+  evidence_text: string
+  confidence: string
+  severity: string
+}
+
+export interface DashboardIssueDetail extends DashboardIssue {
+  summary: string
+  trend: DashboardTrend[]
+  evidence: DashboardEvidence[]
+}
+
+export interface InsightReport {
+  id: number
+  report_type: 'DAILY' | 'WEEKLY'
+  title: string
+  product_id: number | null
+  product_name: string
+  source_id: number | null
+  source_name: string
+  period_start: string
+  period_end: string
+  generated_at: string | null
+  data_cutoff: string | null
+  status: 'PENDING' | 'READY' | 'FAILED'
+  error_message: string
+  snapshot?: {
+    overview: DashboardOverview
+    top_issues: DashboardIssue[]
+    watchlist: DashboardIssue[]
+    coverage: Record<string, string | number | null>
+    data_insufficient: boolean
+    disclaimer: string
+  }
+}
+
+export interface OperationsStatus {
+  role_scope: 'full' | 'summary'
+  business_status: {
+    collection: string
+    data_update: string
+    ai_automation: 'enabled' | 'disabled'
+    ai_message: string
+  }
+  system: Record<string, string>
+  latest: { collection_at: string | null; analysis_at: string | null }
+  ai: {
+    today_tokens: number
+    daily_budget: number
+    budget_ratio: number | null
+    budget_exhausted: boolean
+  }
+  collection?: Record<string, number>
+  governance?: Record<string, number>
+  analysis?: Record<string, number>
+}

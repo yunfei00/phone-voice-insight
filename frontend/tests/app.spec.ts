@@ -18,6 +18,20 @@ vi.mock('@/api', () => ({
   }),
   getProducts: vi.fn().mockResolvedValue({ count: 1, results: [] }),
   getSources: vi.fn().mockResolvedValue({ count: 2, results: [] }),
+  getDashboardOverview: vi.fn().mockResolvedValue({
+    raw_feedback: 0,
+    valid_feedback: 0,
+    ai_analyzed: 0,
+    explicit_issue_feedback: 0,
+    watch_issue_count: 0,
+    latest_data_at: null,
+    published_time_fallback_count: 0,
+    disclaimer: '',
+    watchlist: [],
+  }),
+  getDashboardTrends: vi.fn().mockResolvedValue([]),
+  getDashboardCategories: vi.fn().mockResolvedValue([]),
+  getDashboardProducts: vi.fn().mockResolvedValue([]),
   getReviews: vi.fn().mockResolvedValue({ count: 0, results: [] }),
   getReviewFacets: vi.fn().mockResolvedValue({ variants: [], regions: [], ratings: [] }),
   getReviewMetadataCompleteness: vi.fn().mockResolvedValue({
@@ -104,12 +118,19 @@ vi.mock('@/api', () => ({
 }))
 
 const expectedNavigationLabels = [
-  '数据总览',
+  '智能驾驶舱',
+  '产品对比中心',
+  '用户问题洞察',
+  'AI洞察报告',
+  '数据运行监控',
   '手机产品',
   '帖子视图',
   '原始数据',
   '数据质量',
   'AI结构化分析',
+]
+const advancedNavigationLabels = [
+  ...expectedNavigationLabels,
   'AI质量中心',
   'AI任务中心',
   '历史AI分析',
@@ -117,7 +138,7 @@ const expectedNavigationLabels = [
   '系统状态',
 ]
 
-async function mountApp(path = '/dashboard') {
+async function mountApp(path = '/dashboard', role: 'ADMIN' | 'ANALYST' | 'VIEWER' = 'VIEWER') {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const app = createApp(App)
@@ -132,7 +153,7 @@ async function mountApp(path = '/dashboard') {
     email: '',
     first_name: '',
     last_name: '',
-    role: 'VIEWER',
+    role,
     is_active: true,
     last_login: null,
     date_joined: '2026-01-01T00:00:00Z',
@@ -158,13 +179,13 @@ describe('App', () => {
     const { app, container } = await mountApp()
 
     expect(container.textContent).toContain('Phone Voice Insight')
-    expect(container.textContent).toContain('数据总览')
-    expect(container.textContent).toContain('已连接')
+    expect(container.textContent).toContain('智能驾驶舱')
+    expect(container.textContent).toContain('数据状态正常')
     const navigationLabels = Array.from(container.querySelectorAll('.nav-menu .el-menu-item')).map(
       (item) => item.textContent?.trim(),
     )
     expect(navigationLabels).toEqual(expectedNavigationLabels)
-    expect(new Set(navigationLabels).size).toBe(11)
+    expect(new Set(navigationLabels).size).toBe(10)
     expect(container.querySelector('.el-menu--collapse')).toBeNull()
     expect(container.querySelector('.brand-copy')).not.toBeNull()
 
@@ -183,8 +204,8 @@ describe('App', () => {
     expect(container.querySelector('.sidebar')?.classList.contains('collapsed')).toBe(true)
     expect(container.querySelector('.nav-menu')?.classList.contains('el-menu--collapse')).toBe(true)
     expect(container.querySelector('.brand-copy')).toBeNull()
-    expect(container.querySelectorAll('.nav-menu .el-menu-item')).toHaveLength(11)
-    expect(container.querySelectorAll('.nav-menu .el-menu-item .el-icon')).toHaveLength(11)
+    expect(container.querySelectorAll('.nav-menu .el-menu-item')).toHaveLength(10)
+    expect(container.querySelectorAll('.nav-menu .el-menu-item .el-icon')).toHaveLength(10)
     expect(collapseButton?.getAttribute('aria-label')).toBe('展开菜单')
     expect(collapseButton?.textContent?.trim()).toBe('')
     expect(window.localStorage.getItem('pvi.sidebar.collapsed')).toBe('true')
@@ -209,7 +230,7 @@ describe('App', () => {
   })
 
   it('历史分析路由刷新后只高亮历史 AI 分析', async () => {
-    const { app, container } = await mountApp('/analysis')
+    const { app, container } = await mountApp('/analysis', 'ANALYST')
     await new Promise((resolve) => setTimeout(resolve, 0))
     await nextTick()
 
@@ -220,7 +241,7 @@ describe('App', () => {
     const navigationLabels = Array.from(container.querySelectorAll('.nav-menu .el-menu-item')).map(
       (item) => item.textContent?.trim(),
     )
-    expect(navigationLabels).toEqual(expectedNavigationLabels)
+    expect(navigationLabels).toEqual(advancedNavigationLabels)
 
     app.unmount()
   })

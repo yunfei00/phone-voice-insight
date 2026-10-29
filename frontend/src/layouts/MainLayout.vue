@@ -10,6 +10,10 @@ import {
   ChatLineSquare,
   List,
   Monitor,
+  TrendCharts,
+  Warning,
+  Notebook,
+  Operation,
   Setting,
   UserFilled,
 } from '@element-plus/icons-vue'
@@ -40,27 +44,34 @@ function initialSidebarCollapsed() {
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const projectionMode = computed(() => route.path === '/dashboard' && route.query.fullscreen === '1')
 const mobileMenuOpen = ref(false)
 const sidebarCollapsed = ref(initialSidebarCollapsed())
 const baseNavigationItems = [
-  { path: '/dashboard', label: '数据总览', icon: Monitor },
+  { path: '/dashboard', label: '智能驾驶舱', icon: Monitor },
+  { path: '/comparison', label: '产品对比中心', icon: TrendCharts },
+  { path: '/issues', label: '用户问题洞察', icon: Warning },
+  { path: '/insight-reports', label: 'AI洞察报告', icon: Notebook },
+  { path: '/operations', label: '数据运行监控', icon: Operation },
   { path: '/products', label: '手机产品', icon: Iphone },
   { path: '/threads', label: '帖子视图', icon: ChatLineSquare },
   { path: '/reviews', label: '原始数据', icon: Document },
   { path: '/data-quality', label: '数据质量', icon: CircleCheck },
   { path: '/structured-analysis', label: 'AI结构化分析', icon: DataAnalysis },
-  { path: '/ai-quality', label: 'AI质量中心', icon: CircleCheck },
-  { path: '/ai-tasks', label: 'AI任务中心', icon: List },
-  { path: '/analysis', label: '历史AI分析', icon: DataAnalysis },
-  { path: '/ai-settings', label: 'AI配置', icon: Setting },
-  { path: '/system', label: '系统状态', icon: Cpu },
+  { path: '/ai-quality', label: 'AI质量中心', icon: CircleCheck, advanced: true },
+  { path: '/ai-tasks', label: 'AI任务中心', icon: List, advanced: true },
+  { path: '/analysis', label: '历史AI分析', icon: DataAnalysis, advanced: true },
+  { path: '/ai-settings', label: 'AI配置', icon: Setting, advanced: true },
+  { path: '/system', label: '系统状态', icon: Cpu, advanced: true },
 ]
 const navigationItems = computed(() => [
-  ...baseNavigationItems.flatMap((item) =>
-    item.path === '/products' && auth.isAdmin
-      ? [item, { path: '/collection-tasks', label: '采集任务', icon: List }]
-      : [item],
-  ),
+  ...baseNavigationItems
+    .filter((item) => !item.advanced || auth.canWrite)
+    .flatMap((item) =>
+      item.path === '/products' && auth.isAdmin
+        ? [item, { path: '/collection-tasks', label: '采集任务', icon: List }]
+        : [item],
+    ),
   ...(auth.isAdmin ? [{ path: '/users', label: '用户管理', icon: UserFilled }] : []),
 ])
 const activePath = computed(
@@ -123,7 +134,11 @@ watch(sidebarCollapsed, (collapsed) => {
 </script>
 
 <template>
-  <div class="app-shell" :style="{ '--sidebar-width': `${sidebarWidth}px` }">
+  <div
+    class="app-shell"
+    :class="{ 'projection-shell': projectionMode }"
+    :style="{ '--sidebar-width': `${sidebarWidth}px` }"
+  >
     <aside class="sidebar" :class="{ open: mobileMenuOpen, collapsed: sidebarCollapsed }">
       <div class="brand">
         <span class="brand-mark">PVI</span>
@@ -233,8 +248,9 @@ watch(sidebarCollapsed, (collapsed) => {
   height: 100vh;
   flex: 0 0 var(--sidebar-width);
   padding: 20px 14px;
-  color: #e5e7eb;
-  background: #121a2d;
+  color: var(--pvi-text);
+  background: #081728;
+  border-right: 1px solid var(--pvi-border);
   transition:
     width 0.2s ease,
     flex-basis 0.2s ease,
@@ -271,7 +287,8 @@ watch(sidebarCollapsed, (collapsed) => {
   place-items: center;
   color: #fff;
   font-weight: 800;
-  background: #3b82f6;
+  background: linear-gradient(135deg, var(--pvi-blue), #2478d3);
+  box-shadow: 0 0 22px #35b9f044;
   border-radius: 12px;
 }
 
@@ -286,7 +303,7 @@ watch(sidebarCollapsed, (collapsed) => {
 
 .brand small {
   margin-top: 4px;
-  color: #9ca3af;
+  color: var(--pvi-muted);
   font-size: 11px;
 }
 
@@ -298,14 +315,14 @@ watch(sidebarCollapsed, (collapsed) => {
 
 .nav-menu :deep(.el-menu-item) {
   margin: 4px 0;
-  color: #b8c0d1;
+  color: var(--pvi-muted);
   border-radius: 8px;
 }
 
 .nav-menu :deep(.el-menu-item:hover),
 .nav-menu :deep(.el-menu-item.is-active) {
   color: #fff;
-  background: #25314d;
+  background: #17334e;
 }
 
 .nav-menu.el-menu--collapse :deep(.el-menu-item) {
@@ -328,6 +345,7 @@ watch(sidebarCollapsed, (collapsed) => {
 .main {
   min-width: 0;
   flex: 1 1 auto;
+  background: var(--pvi-bg);
 }
 
 .topbar {
@@ -336,9 +354,10 @@ watch(sidebarCollapsed, (collapsed) => {
   align-items: center;
   justify-content: space-between;
   padding: 0 28px;
-  color: #6b7280;
-  background: #fff;
-  border-bottom: 1px solid #e7eaf0;
+  color: var(--pvi-muted);
+  background: #0a192aee;
+  border-bottom: 1px solid var(--pvi-border);
+  backdrop-filter: blur(12px);
 }
 
 .menu-button {
@@ -352,7 +371,7 @@ watch(sidebarCollapsed, (collapsed) => {
 .phase-label {
   margin-right: auto;
   margin-left: 12px;
-  color: #6b7280;
+  color: var(--pvi-muted);
   font-size: 13px;
 }
 
@@ -373,11 +392,20 @@ watch(sidebarCollapsed, (collapsed) => {
 .user-trigger {
   gap: 8px;
   padding: 0;
-  color: #3f4757;
+  color: var(--pvi-text);
   font: inherit;
   background: transparent;
   border: 0;
   cursor: pointer;
+}
+
+.projection-shell .sidebar,
+.projection-shell .topbar {
+  display: none;
+}
+
+.projection-shell .content {
+  padding: 0;
 }
 
 @media (max-width: 768px) {

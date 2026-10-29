@@ -24,6 +24,18 @@ from apps.analysis.views import AnalysisBatchViewSet, AnalysisResultViewSet
 from apps.collection.views import CollectionScheduleViewSet, CollectionTargetStateViewSet, CollectionTaskViewSet
 from apps.common.views import health
 from apps.products.views import BrandViewSet, ProductViewSet
+from apps.reports.views import (
+    DashboardCategoriesView,
+    DashboardComparisonView,
+    DashboardIssueDetailView,
+    DashboardIssueListView,
+    DashboardOperationsView,
+    DashboardOverviewView,
+    DashboardProductsView,
+    DashboardReportDetailView,
+    DashboardReportListView,
+    DashboardTrendsView,
+)
 from apps.reviews.ai_views import GovernanceAIViewSet
 from apps.reviews.views import ReviewQualityViewSet, ReviewRecordViewSet, ThreadTreeViewSet
 from apps.sources.views import DataSourceViewSet, SourceTargetViewSet
@@ -57,6 +69,24 @@ urlpatterns = [
     path("api/v1/auth/change-password/", change_password, name="change-password"),
     path("api/v1/ai-configuration/", UserAIConfigurationView.as_view(), name="ai-configuration"),
     path("api/v1/ai-configuration/test/", UserAIConnectivityView.as_view(), name="ai-configuration-test"),
+    path("api/v1/dashboard/overview/", DashboardOverviewView.as_view(), name="dashboard-overview"),
+    path("api/v1/dashboard/trends/", DashboardTrendsView.as_view(), name="dashboard-trends"),
+    path("api/v1/dashboard/categories/", DashboardCategoriesView.as_view(), name="dashboard-categories"),
+    path("api/v1/dashboard/products/", DashboardProductsView.as_view(), name="dashboard-products"),
+    path("api/v1/dashboard/comparison/", DashboardComparisonView.as_view(), name="dashboard-comparison"),
+    path("api/v1/dashboard/issues/", DashboardIssueListView.as_view(), name="dashboard-issues"),
+    path(
+        "api/v1/dashboard/issues/<path:issue_id>/",
+        DashboardIssueDetailView.as_view(),
+        name="dashboard-issue-detail",
+    ),
+    path("api/v1/dashboard/reports/", DashboardReportListView.as_view(), name="dashboard-reports"),
+    path(
+        "api/v1/dashboard/reports/<int:report_id>/",
+        DashboardReportDetailView.as_view(),
+        name="dashboard-report-detail",
+    ),
+    path("api/v1/dashboard/operations/", DashboardOperationsView.as_view(), name="dashboard-operations"),
     path("api/v1/", include(router.urls)),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

@@ -81,14 +81,18 @@ def _decode(content: str) -> dict[str, object]:
     return parsed
 
 
-def _normalize_evidence_offsets(payload: dict[str, object], source_text: str) -> dict[str, object]:
-    """Repair model-supplied offsets only when evidence is an exact source substring."""
+def _normalize_structured_payload(payload: dict[str, object], source_text: str) -> dict[str, object]:
+    """Repair redundant taxonomy fields and exact evidence offsets deterministically."""
     aspects = payload.get("aspects")
     if not isinstance(aspects, list):
         return payload
+    topic_parent_map = load_taxonomy().topic_parent_map
     for value in aspects:
         if not isinstance(value, dict):
             continue
+        topic_code = value.get("topic_code")
+        if isinstance(topic_code, str) and topic_code in topic_parent_map:
+            value["aspect_code"] = topic_parent_map[topic_code]
         aspect_code = value.get("aspect_code")
         business_domains = value.get("business_domains")
         if isinstance(aspect_code, str) and aspect_code and isinstance(business_domains, list):
@@ -158,7 +162,7 @@ def analyze_content(
             last_response = response
             result: StructuredValidationResult | None
             try:
-                decoded = _normalize_evidence_offsets(_decode(response.content), review.content)
+                decoded = _normalize_structured_payload(_decode(response.content), review.content)
                 result = validate_structured_payload(decoded, review.content)
             except (json.JSONDecodeError, ValueError) as exc:
                 result = None

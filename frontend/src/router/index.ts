@@ -26,7 +26,31 @@ export const routes: RouteRecordRaw[] = [
         path: 'dashboard',
         name: 'dashboard',
         component: () => import('@/views/DashboardView.vue'),
-        meta: { title: '数据总览' },
+        meta: { title: '智能驾驶舱' },
+      },
+      {
+        path: 'comparison',
+        name: 'comparison',
+        component: () => import('@/views/ComparisonView.vue'),
+        meta: { title: '产品对比中心' },
+      },
+      {
+        path: 'issues',
+        name: 'issues',
+        component: () => import('@/views/IssuesView.vue'),
+        meta: { title: '用户问题洞察' },
+      },
+      {
+        path: 'insight-reports',
+        name: 'insight-reports',
+        component: () => import('@/views/InsightReportsView.vue'),
+        meta: { title: 'AI 洞察报告' },
+      },
+      {
+        path: 'operations',
+        name: 'operations',
+        component: () => import('@/views/OperationsView.vue'),
+        meta: { title: '数据运行监控' },
       },
       {
         path: 'products',
@@ -68,31 +92,31 @@ export const routes: RouteRecordRaw[] = [
         path: 'ai-quality',
         name: 'ai-quality',
         component: () => import('@/views/AIQualityView.vue'),
-        meta: { title: 'AI 质量中心' },
+        meta: { title: 'AI 质量中心', writeOnly: true },
       },
       {
         path: 'ai-tasks',
         name: 'ai-tasks',
         component: () => import('@/views/AITasksView.vue'),
-        meta: { title: 'AI 任务中心' },
+        meta: { title: 'AI 任务中心', writeOnly: true },
       },
       {
         path: 'analysis',
         name: 'analysis',
         component: () => import('@/views/AnalysisView.vue'),
-        meta: { title: '历史 AI 分析' },
+        meta: { title: '历史 AI 分析', writeOnly: true },
       },
       {
         path: 'ai-settings',
         name: 'ai-settings',
         component: () => import('@/views/AISettingsView.vue'),
-        meta: { title: 'AI 配置' },
+        meta: { title: 'AI 配置', writeOnly: true },
       },
       {
         path: 'system',
         name: 'system',
         component: () => import('@/views/SystemView.vue'),
-        meta: { title: '系统状态' },
+        meta: { title: '系统状态', writeOnly: true },
       },
     ],
   },
@@ -110,6 +134,7 @@ router.beforeEach(async (to) => {
   if (to.meta.public) return auth.isAuthenticated ? '/dashboard' : true
   if (!auth.isAuthenticated) return { name: 'login', query: { redirect: to.fullPath } }
   if (to.meta.adminOnly && !auth.isAdmin) return '/dashboard'
+  if (to.meta.writeOnly && !auth.canWrite) return '/dashboard'
   return true
 })
 
