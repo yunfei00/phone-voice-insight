@@ -1,12 +1,12 @@
 :root {
-  --pvi-bg: #071524;
+  --pvi-bg: #0a192a;
   --pvi-bg-secondary: #0a192a;
   --pvi-card: #12283f;
   --pvi-border: #29435c;
   --pvi-blue: #35b9f0;
-  --pvi-green: #42d6c6;
-  --pvi-orange: #f1ad61;
-  --pvi-red: #e36f79;
+  --pvi-green: #32d6c6;
+  --pvi-orange: #f7c47e;
+  --pvi-red: #ef8f97;
   --pvi-text: #edf5ff;
   --pvi-muted: #96adc6;
   color: var(--pvi-text);
@@ -104,4 +104,119 @@ a {
   .panel {
     padding: 14px;
   }
+}
+
+/* PVI unified dark palette: all Element Plus overlays, data tables and forms. */
+html.dark {
+  color-scheme: dark;
+  --el-color-primary: #35b9f0;
+  --el-color-success: #32d6c6;
+  --el-color-warning: #f7c47e;
+  --el-color-danger: #ef8f97;
+  --el-color-info: #96adc6;
+  --el-bg-color: #12283f;
+  --el-bg-color-page: #0a192a;
+  --el-bg-color-overlay: #12283f;
+  --el-fill-color: #1b344c;
+  --el-fill-color-light: #19334d;
+  --el-fill-color-lighter: #1c3853;
+  --el-fill-color-extra-light: #213c55;
+  --el-fill-color-dark: #0e2237;
+  --el-fill-color-darker: #0a192a;
+  --el-fill-color-blank: #12283f;
+  --el-border-color: #29435c;
+  --el-border-color-light: #29435c;
+  --el-border-color-lighter: #29435c;
+  --el-border-color-extra-light: #223b53;
+  --el-border-color-dark: #36536b;
+  --el-border-color-darker: #48657d;
+  --el-text-color-primary: #edf5ff;
+  --el-text-color-regular: #d7e5f5;
+  --el-text-color-secondary: #96adc6;
+  --el-text-color-placeholder: #96adc6;
+  --el-text-color-disabled: #7e96af;
+  --el-mask-color: rgba(3, 12, 22, 0.72);
+  --el-mask-color-extra-light: rgba(3, 12, 22, 0.36);
+  --el-box-shadow-light: 0 8px 28px rgba(0, 0, 0, 0.28);
+  --el-color-primary-light-9: #15394f;
+  --el-color-primary-light-8: #1b4c65;
+  --el-color-primary-light-7: #23617d;
+  --el-color-primary-light-5: #287a9e;
+  --el-color-primary-dark-2: #2595c4;
+  --el-color-success-light-9: #103e43;
+  --el-color-success-light-8: #16535a;
+  --el-color-warning-light-9: #443827;
+  --el-color-warning-light-8: #57472f;
+  --el-color-danger-light-9: #492d3b;
+  --el-color-danger-light-8: #603744;
+}
+html.dark body,
+html.dark #app {
+  background: #0a192a;
+  color: #edf5ff;
+}
+html.dark .el-table,
+html.dark .el-table__inner-wrapper,
+html.dark .el-table th.el-table__cell,
+html.dark .el-table tr,
+html.dark .el-table td.el-table__cell {
+  background-color: #12283f;
+  color: #edf5ff;
+}
+html.dark .el-table {
+  --el-table-bg-color: #12283f;
+  --el-table-tr-bg-color: #12283f;
+  --el-table-header-bg-color: #17334e;
+  --el-table-row-hover-bg-color: #1b3b57;
+  --el-table-border-color: #29435c;
+  --el-table-text-color: #edf5ff;
+  --el-table-header-text-color: #d7e5f5;
+  --el-table-current-row-bg-color: #1b3b57;
+}
+html.dark .el-table th.el-table__cell {
+  background-color: #17334e;
+}
+html.dark .el-table .el-table__body tr:hover > td.el-table__cell {
+  background-color: #1b3b57;
+}
+html.dark .el-card,
+html.dark .el-dialog,
+html.dark .el-drawer,
+html.dark .el-popover,
+html.dark .el-dropdown-menu,
+html.dark .el-select__wrapper,
+html.dark .el-input__wrapper,
+html.dark .el-textarea__inner,
+html.dark .el-descriptions__body,
+html.dark .el-descriptions__cell {
+  background-color: #12283f;
+  color: #edf5ff;
+  border-color: #29435c;
+}
+html.dark .el-tag {
+  border-color: currentColor;
+  background-color: #1a344c;
+}
+html.dark .el-tag--success { color: #32d6c6; background-color: #103e43; }
+html.dark .el-tag--warning { color: #f7c47e; background-color: #443827; }
+html.dark .el-tag--danger { color: #ef8f97; background-color: #492d3b; }
+html.dark .el-tag--info { color: #b4c8df; background-color: #233b54; }
+html.dark .el-tag--primary { color: #35b9f0; background-color: #15394f; }
+html.dark .el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
+  background: #35b9f0;
+  border-color: #35b9f0;
+  color: #071524;
+  font-weight: 600;
+}
+html.dark .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover {
+  background: #65cef7;
+  border-color: #65cef7;
+  color: #071524;
+}
+html.dark .el-pagination,
+html.dark .el-form-item__label,
+html.dark .el-descriptions__label,
+html.dark .el-statistic__head,
+html.dark .el-statistic__content {
+  color: #edf5ff;
 }
