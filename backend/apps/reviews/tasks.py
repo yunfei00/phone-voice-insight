@@ -6,8 +6,8 @@ from typing import Any
 
 from celery import shared_task
 from django.conf import settings
-from django.utils import timezone
 from django.db import transaction
+from django.utils import timezone
 
 from apps.accounts.ai_service import get_user_ai_provider
 from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewRecord
