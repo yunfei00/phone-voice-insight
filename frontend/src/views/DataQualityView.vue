@@ -14,6 +14,8 @@ import {
   retryGovernanceTask,
   startGovernanceAIReview,
   startFullGovernanceAIReview,
+  getFullGovernanceAIProgress,
+  stopFullGovernanceAI,
   getGovernanceAIHistory,
   getGovernanceAIResults,
   retryGovernanceAIBatch,
@@ -27,7 +29,7 @@ import type {
   ExclusionReason,
   ReviewQuality,
 } from '@/types/api'
-import type { GovernanceTaskInfo, GovernanceAIBatchInfo, GovernanceAIResultInfo } from '@/api'
+import type { GovernanceTaskInfo, GovernanceAIBatchInfo, GovernanceAIResultInfo, FullGovernanceAIProgress } from '@/api'
 
 const emptySummary = (): DataQualitySummary => ({
   total: 0,
@@ -68,6 +70,8 @@ const governanceBusy = ref(false)
 const governanceTasks = ref<GovernanceTaskInfo[]>([])
 const taskLoading = ref(false)
 const aiBusy = ref(false)
+const fullAIProgress = ref<FullGovernanceAIProgress | null>(null)
+const fullAIId = ref<number | null>(null)
 const aiBatches = ref<GovernanceAIBatchInfo[]>([])
 const aiResults = ref<GovernanceAIResultInfo[]>([])
 const governanceTaskPage = ref(1)
@@ -296,7 +300,8 @@ async function loadAIReviews(): Promise<void> {
       aiResultTotal.value = 0
       aiResults.value = []
     }
-    if (!aiBatches.value.some((b) => b.status === 'PENDING' || b.status === 'RUNNING'))
+    if (fullAIId.value) fullAIProgress.value = await getFullGovernanceAIProgress(fullAIId.value)
+    if (!aiBatches.value.some((b) => b.status === 'PENDING' || b.status === 'RUNNING') && fullAIProgress.value?.status !== 'RUNNING')
       stopAIPolling()
   } catch {
     ElMessage.error('AI 复核状态加载失败')
@@ -365,7 +370,8 @@ async function startFullAIReview(): Promise<void> {
       product_id: selectedProduct.value,
       source_id: selectedSource.value ?? null,
     })
-    ElMessage.success(result.total ? '全量 AI 判断已启动，将自动分批执行' : '没有待 AI 判断的数据')
+    if (result.id) fullAIId.value = result.id
+    ElMessage.success(result.total ? `全量 AI 判断已启动，共 ${result.total} 条` : '没有待 AI 判断的数据')
     await loadAIReviews()
     startAIPolling()
   } catch {
@@ -373,6 +379,18 @@ async function startFullAIReview(): Promise<void> {
   } finally {
     aiBusy.value = false
   }
+}
+
+async function stopFullAIReview(): Promise<void> {
+  if (!fullAIId.value) return
+  try {
+    await ElMessageBox.confirm('停止后不再提交后续批次，已完成的 AI 结果将保留。确定停止？', '停止全量任务', { type: 'warning' })
+  } catch {
+    return
+  }
+  await stopFullGovernanceAI(fullAIId.value)
+  ElMessage.success('已请求停止，当前正在处理的记录完成后退出')
+  await loadAIReviews()
 }
 
 function stopTaskPolling(): void {
@@ -569,10 +587,17 @@ onUnmounted(() => {
           @click="startFullAIReview"
           >一键 AI 判断全部</el-button
         >
+        <el-button type="danger" :disabled="!fullAIId || fullAIProgress?.status !== 'RUNNING'" @click="stopFullAIReview">停止全量任务</el-button>
         <el-button @click="loadAIReviews">查看复核结果</el-button>
         <span v-if="aiBatches.some((b) => b.status === 'RUNNING' || b.status === 'PENDING')"
           >每 3 秒自动更新</span
         >
+      </div>
+      <div v-if="fullAIProgress" class="panel" style="margin-bottom: 12px">
+        <strong>全量进度：{{ fullAIProgress.processed }} / {{ fullAIProgress.total }}</strong>
+        <el-progress :percentage="fullAIProgress.total ? Math.min(100, Math.round(fullAIProgress.processed / fullAIProgress.total * 100)) : 100" />
+        <p>状态：{{ fullAIProgress.status }} · 剩余：{{ fullAIProgress.remaining }} · 自动接受：{{ fullAIProgress.accepted }} · 自动排除：{{ fullAIProgress.rejected }} · 证据不足：{{ fullAIProgress.uncertain }} · 失败：{{ fullAIProgress.failed }}</p>
+        <p>Token：{{ fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens }}</p>
       </div>
       <el-table :data="aiBatches" size="small" style="margin-bottom: 12px">
         <el-table-column prop="id" label="任务编号" width="95" />
