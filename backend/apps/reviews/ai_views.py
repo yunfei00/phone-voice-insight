@@ -1,6 +1,7 @@
 """AI-assisted governance endpoints."""
 
 from django.db import transaction
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
@@ -24,6 +25,38 @@ class GovernancePagination(PageNumberPagination):
 class GovernanceAIViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAdministrator]
     queryset = GovernanceAIBatch.objects.all()
+
+    @action(detail=False, methods=["get"], url_path="corpus-summary")
+    def corpus_summary(self, request: Request) -> Response:
+        """Unique quality rows with their latest AI decision, not batch counters."""
+        # Validate IDs before querying; avoid leaking cross-product totals.
+        try:
+            product_id = int(request.query_params["product_id"])
+            source_id = request.query_params.get("source_id")
+            source_id = int(source_id) if source_id else None
+            if product_id < 1 or (source_id is not None and source_id < 1):
+                raise ValueError
+        except (KeyError, ValueError, TypeError):
+            return Response({"detail": "请选择有效产品和来源"}, status=400)
+        if not Product.objects.filter(pk=product_id).exists():
+            return Response({"detail": "产品不存在"}, status=404)
+        rows = ReviewQuality.objects.filter(review__product_id=product_id)
+        if source_id is not None:
+            rows = rows.filter(review__source_id=source_id)
+        latest = GovernanceAIReview.objects.filter(quality_id=OuterRef("pk")).order_by("-created_at", "-pk")
+        rows = rows.annotate(latest_ai_status=Subquery(latest.values("status")[:1]))
+        stats = rows.aggregate(
+            total=Count("pk"),
+            rule_eligible=Count("pk", filter=Q(eligible_for_ai=True)),
+            ai_accepted=Count("pk", filter=Q(latest_ai_status="ACCEPTED", eligible_for_ai=True)),
+            ai_rejected=Count("pk", filter=Q(latest_ai_status="REJECTED", eligible_for_ai=True)),
+            ai_uncertain=Count("pk", filter=Q(latest_ai_status__in=["UNCERTAIN", "REVIEW_REQUIRED"], eligible_for_ai=True)),
+            ai_failed=Count("pk", filter=Q(latest_ai_status__in=["ERROR", "FAILED"], eligible_for_ai=True)),
+            ai_unprocessed=Count("pk", filter=Q(latest_ai_status__isnull=True, eligible_for_ai=True)),
+        )
+        stats["final_eligible"] = stats["ai_accepted"]
+        stats["rule_excluded"] = stats["total"] - stats["rule_eligible"]
+        return Response(stats)
 
     @action(detail=False, methods=["post"])
     def start(self, request: Request) -> Response:
