@@ -173,3 +173,21 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
         return {"queued": 0}
     finally:
         cache.delete(lock_key)
+
+
+@shared_task(name="recover_stale_structured_batches")
+def recover_stale_structured_batches() -> int:
+    """Mark orphaned batches interrupted; the next dispatch resumes pending corpus."""
+    from datetime import timedelta
+
+    cutoff = timezone.now() - timedelta(hours=2)
+    stale = AnalysisBatch.objects.filter(
+        prompt_version="structured_analysis_v1",
+        status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
+        updated_at__lt=cutoff,
+    )
+    return stale.update(
+        status=AnalysisBatchStatus.FAILED,
+        error_message="WORKER_INTERRUPTED: batch did not report progress for two hours",
+        finished_at=timezone.now(),
+    )
