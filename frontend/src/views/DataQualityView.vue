@@ -18,7 +18,7 @@ import {
   getGovernanceAIResults,
   retryGovernanceAIBatch,
 } from '@/api'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import type {
   Product,
