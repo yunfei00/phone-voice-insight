@@ -526,6 +526,19 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
   overflow: hidden;
 }
 .muted {
-  color: var(--el-text-color-secondary);
+  color: var(--el-text-color-regular);
+}
+/* Keep the progress dialog readable without selecting text or hovering rows. */
+.product-panel :deep(.el-table) {
+  --el-table-header-bg-color: var(--el-fill-color-light);
+  --el-table-row-hover-bg-color: var(--el-fill-color-light);
+  --el-table-text-color: var(--el-text-color-primary);
+}
+.product-panel :deep(.el-table th.el-table__cell) {
+  color: var(--el-text-color-primary);
+  font-weight: 600;
+}
+.product-panel :deep(.el-tag) {
+  font-weight: 600;
 }
 </style>
