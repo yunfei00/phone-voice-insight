@@ -180,7 +180,7 @@ def _verification_report(task: CollectionTask, checkpoint: dict[str, Any], retry
     )
     warnings: list[str] = []
     if blocked:
-        warnings.append(f"{len(blocked)} 个帖子因访问权限限制跳过；不影响本次可访问范围的采集成功状态。")
+        warnings.append(f"{len(blocked)} 个帖子因访问权限限制跳过；不影响本次可访问范围的采集成功状态。")  # noqa: RUF001
     if discrepancies:
         warnings.append("来源回复数与已采集回复数存在差异；该指标仅诊断，不作为失败条件。")  # noqa: RUF001
     return {
