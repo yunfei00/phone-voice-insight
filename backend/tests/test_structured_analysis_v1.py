@@ -14,7 +14,13 @@ from apps.analysis.models import (
     StructuredRunStatus,
 )
 from apps.analysis.services.structured_engine import analyze_content
-from apps.reviews.models import AuthorRole, GovernanceAIReview, RecordType, ReviewQuality, ReviewRecord
+from apps.reviews.models import (
+    AuthorRole,
+    GovernanceAIReview,
+    RecordType,
+    ReviewQuality,
+    ReviewRecord,
+)
 
 
 class StructuredProvider(AIProvider):
