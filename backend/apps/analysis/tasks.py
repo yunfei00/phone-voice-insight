@@ -114,7 +114,7 @@ def run_structured_analysis_batch_task(
 
 
 @shared_task(name="dispatch_pending_structured_reviews")
-def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: int | None = None) -> dict[str, int]:
+def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: int | None = None) -> dict[str, Any]:
     """Queue one bounded chunk per invocation; Celery Beat can call this periodically.
 
     Successful and failed current runs are excluded from automatic dispatch. Failures
@@ -149,7 +149,7 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
             )
             if active.exists():
                 if user_id:
-                    return {"queued": 0, "active_batch_id": active.first().id}
+                    return {"queued": 0, "active_batch_id": active.values_list("id", flat=True).first()}
                 continue
             completed = AnalysisRun.objects.filter(
                 is_current=True,
