@@ -197,11 +197,26 @@ html.dark .el-tag {
   border-color: currentColor;
   background-color: #1a344c;
 }
-html.dark .el-tag--success { color: #32d6c6; background-color: #103e43; }
-html.dark .el-tag--warning { color: #f7c47e; background-color: #443827; }
-html.dark .el-tag--danger { color: #ef8f97; background-color: #492d3b; }
-html.dark .el-tag--info { color: #b4c8df; background-color: #233b54; }
-html.dark .el-tag--primary { color: #35b9f0; background-color: #15394f; }
+html.dark .el-tag--success {
+  color: #32d6c6;
+  background-color: #103e43;
+}
+html.dark .el-tag--warning {
+  color: #f7c47e;
+  background-color: #443827;
+}
+html.dark .el-tag--danger {
+  color: #ef8f97;
+  background-color: #492d3b;
+}
+html.dark .el-tag--info {
+  color: #b4c8df;
+  background-color: #233b54;
+}
+html.dark .el-tag--primary {
+  color: #35b9f0;
+  background-color: #15394f;
+}
 html.dark .el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
   background: #35b9f0;
   border-color: #35b9f0;
