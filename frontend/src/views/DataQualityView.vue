@@ -13,6 +13,7 @@ import {
   getGovernanceTaskStatus,
   retryGovernanceTask,
   startGovernanceAIReview,
+  startFullGovernanceAIReview,
   getGovernanceAIHistory,
   getGovernanceAIResults,
   retryGovernanceAIBatch,
@@ -347,6 +348,33 @@ async function startAIReview(): Promise<void> {
   }
 }
 
+async function startFullAIReview(): Promise<void> {
+  if (!selectedProduct.value) return
+  try {
+    await ElMessageBox.confirm(
+      '将按每批 100 条自动调用 AI，直到全部待处理记录完成。此操作会产生模型费用，确定继续？',
+      '一键 AI 判断全部',
+      { type: 'warning', confirmButtonText: '确认执行', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  aiBusy.value = true
+  try {
+    const result = await startFullGovernanceAIReview({
+      product_id: selectedProduct.value,
+      source_id: selectedSource.value ?? null,
+    })
+    ElMessage.success(result.total ? '全量 AI 判断已启动，将自动分批执行' : '没有待 AI 判断的数据')
+    await loadAIReviews()
+    startAIPolling()
+  } catch {
+    ElMessage.error('全量 AI 判断启动失败，请检查后台任务与模型配置')
+  } finally {
+    aiBusy.value = false
+  }
+}
+
 function stopTaskPolling(): void {
   if (taskPollTimer !== undefined) {
     clearInterval(taskPollTimer)
@@ -533,6 +561,13 @@ onUnmounted(() => {
           :disabled="!selectedProduct"
           @click="startAIReview"
           >立即运行自动判断</el-button
+        >
+        <el-button
+          type="success"
+          :loading="aiBusy"
+          :disabled="!selectedProduct"
+          @click="startFullAIReview"
+          >一键 AI 判断全部</el-button
         >
         <el-button @click="loadAIReviews">查看复核结果</el-button>
         <span v-if="aiBatches.some((b) => b.status === 'RUNNING' || b.status === 'PENDING')"
