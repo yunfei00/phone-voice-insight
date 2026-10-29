@@ -3,6 +3,7 @@ import { ElMessage } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
 
 import {
+  createStructuredBatch,
   getProducts,
   getStructuredAggregates,
   getStructuredAnalyses,
@@ -21,6 +22,8 @@ import type {
   TaxonomyDefinition,
 } from '@/types/api'
 
+const starting = ref(false)
+const sampleSize = ref(20)
 const loading = ref(false)
 const error = ref('')
 const items = ref<StructuredAnalysisV1[]>([])
@@ -62,6 +65,32 @@ async function load() {
     error.value = '结构化分析数据加载失败，请稍后重试。'
   } finally {
     loading.value = false
+  }
+}
+
+async function startSample() {
+  if (!selectedProduct.value || starting.value) return
+  starting.value = true
+  try {
+    const result = await createStructuredBatch({
+      product_id: selectedProduct.value,
+      max_items: sampleSize.value,
+      dry_run: false,
+      max_concurrency: 1,
+      requests_per_minute: 10,
+    })
+    ElMessage.success(`已提交真实分析任务 #${result.batch.id}，匹配 ${result.matched_content_ids.length} 条语料`)
+    await load()
+  } catch (reason: unknown) {
+    const detail = reason as { response?: { data?: { error_code?: string; detail?: string } } }
+    const code = detail.response?.data?.error_code
+    ElMessage.error(
+      code === 'NO_CONTENT_MATCHED'
+        ? '没有可分析的最终有效语料，请先在数据质量页面完成 AI 治理'
+        : detail.response?.data?.detail || '任务创建失败，请检查 AI 配置和后台任务服务',
+    )
+  } finally {
+    starting.value = false
   }
 }
 
@@ -127,6 +156,20 @@ onMounted(async () => {
       </div>
       <el-tag effect="plain">Taxonomy {{ taxonomy?.taxonomy_version || '1.0.0' }}</el-tag>
     </header>
+    <el-card shadow="never">
+      <div class="filters">
+        <strong>下一步：启动真实 AI 结构化分析</strong>
+        <el-select v-model="selectedProduct" placeholder="先选择手机产品" @change="changeProduct">
+          <el-option v-for="product in products" :key="product.id" :label="product.name" :value="product.id" />
+        </el-select>
+        <el-input-number v-model="sampleSize" :min="1" :max="1000" :step="10" />
+        <el-button type="primary" :loading="starting" :disabled="!selectedProduct" @click="startSample">
+          开始分析（非模拟）
+        </el-button>
+        <el-button @click="load">刷新结果与任务进度</el-button>
+      </div>
+      <p>建议先运行 20 条验证模型与标签结果。任务提交后在下方查看状态；成功后刷新查看观点和聚合统计。</p>
+    </el-card>
     <div class="metric-grid">
       <el-card shadow="never"
         ><span>AI 已分析量</span><strong>{{ quality?.total_runs || 0 }}</strong></el-card
