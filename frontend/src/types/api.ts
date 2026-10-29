@@ -585,7 +585,7 @@ export interface AIConfiguration extends PersonalAIConfiguration {
 }
 
 export interface AIConfigurationPayload {
-  provider: 'openai_compatible'
+  provider: 'openai_compatible' | 'ollama'
   base_url: string
   api_key?: string
   model: string
