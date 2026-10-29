@@ -479,6 +479,12 @@ export const startGovernanceAIReview = async (payload: {
 }): Promise<{ id: number; total: number }> =>
   (await apiClient.post('/governance-ai/start/', payload)).data
 
+export const startFullGovernanceAIReview = async (payload: {
+  product_id: number
+  source_id?: number | null
+}): Promise<{ id?: number; total: number; automatic?: boolean; detail?: string }> =>
+  (await apiClient.post('/governance-ai/start-full/', payload)).data
+
 export const getGovernanceAIHistory = async (params: {
   product_id?: number
   source_id?: number
