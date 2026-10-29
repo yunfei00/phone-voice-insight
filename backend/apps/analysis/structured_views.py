@@ -200,8 +200,6 @@ class StructuredBatchViewSet(ViewSet):
         product_id = request.data.get("product_id")
         if not isinstance(product_id, int) or product_id <= 0:
             return Response({"error_code": "PRODUCT_REQUIRED"}, status=status.HTTP_400_BAD_REQUEST)
-        from apps.analysis.tasks import dispatch_pending_structured_reviews
-
         result = dispatch_pending_structured_reviews(request.user.pk, product_id)
         if result.get("locked"):
             return Response({"error_code": "DISPATCH_BUSY"}, status=status.HTTP_409_CONFLICT)
