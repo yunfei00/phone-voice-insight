@@ -383,8 +383,14 @@ def run_honor_full_chunk(
                 error_code = str(getattr(exc, "code", "COLLECTION_ERROR")).upper()
                 # Only explicit access-control responses qualify for a verified skip.
                 blocked_codes = {
-                    "HTTP_401", "HTTP_403", "AUTH_REQUIRED", "LOGIN_REQUIRED",
-                    "LOGIN_WALL", "PERMISSION_DENIED", "ACCESS_DENIED", "BLOCKED_PERMISSION_PAGE",
+                    "HTTP_401",
+                    "HTTP_403",
+                    "AUTH_REQUIRED",
+                    "LOGIN_REQUIRED",
+                    "LOGIN_WALL",
+                    "PERMISSION_DENIED",
+                    "ACCESS_DENIED",
+                    "BLOCKED_PERMISSION_PAGE",
                 }
                 item.status = (
                     DiscoveryStatus.BLOCKED_SKIPPED
