@@ -138,7 +138,9 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
         for user in users:
             try:
                 provider = get_user_ai_provider(user)
-            except Exception:
+            except Exception as exc:
+                if user_id:
+                    return {"queued": 0, "error_code": "AI_NOT_CONFIGURED", "detail": str(exc)[:200]}
                 continue
             active = AnalysisBatch.objects.filter(
                 created_by=user,
@@ -146,6 +148,8 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
                 status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
             )
             if active.exists():
+                if user_id:
+                    return {"queued": 0, "active_batch_id": active.first().id}
                 continue
             completed = AnalysisRun.objects.filter(
                 is_current=True,
@@ -183,8 +187,16 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
                 status=AnalysisBatchStatus.PENDING,
                 total_tokens=0,
             )
-            run_structured_analysis_batch_task.delay(batch.id, ids)
-            return {"queued": len(ids), "batch_id": batch.id}
+            try:
+                task = run_structured_analysis_batch_task.delay(batch.id, ids)
+            except Exception as exc:
+                batch.status = AnalysisBatchStatus.FAILED
+                batch.error_message = f"TASK_DISPATCH_FAILED: {type(exc).__name__}: {exc}"[:1000]
+                batch.finished_at = timezone.now()
+                batch.save(update_fields=("status", "error_message", "finished_at", "updated_at"))
+                logger.exception("structured_dispatch_failed batch_id=%s", batch.id)
+                return {"queued": 0, "batch_id": batch.id, "error_code": "TASK_DISPATCH_FAILED"}
+            return {"queued": len(ids), "batch_id": batch.id, "celery_task_id": task.id}
         return {"queued": 0}
     finally:
         cache.delete(lock_key)
