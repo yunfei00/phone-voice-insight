@@ -197,6 +197,68 @@ def process_governance_ai_batch(self: Any, batch_id: int, max_attempts: int = 2)
     return {"batch_id": batch.id, "status": batch.status, "processed": batch.processed}
 
 
+@shared_task(name="recover_stale_governance_ai_batches")
+def recover_stale_governance_ai_batches(stale_seconds: int = 300) -> dict[str, int]:
+    """Reconcile stale AI batches after an interrupted worker lifecycle.
+
+    Only a verified inactive Celery task may be recovered. If inspection fails,
+    leave the batch untouched to avoid two workers calling the model at once.
+    """
+    from datetime import timedelta
+
+    from celery import current_app
+
+    cutoff = timezone.now() - timedelta(seconds=max(stale_seconds, 60))
+    candidates = GovernanceAIBatch.objects.filter(
+        status__in=[GovernanceAIBatch.Status.PENDING, GovernanceAIBatch.Status.RUNNING],
+        updated_at__lt=cutoff,
+    ).order_by("id")[:100]
+    try:
+        inspector = current_app.control.inspect(timeout=3)
+        active = inspector.active()
+        reserved = inspector.reserved()
+        scheduled = inspector.scheduled()
+        if active is None or reserved is None or scheduled is None:
+            return {"recovered": 0, "skipped": candidates.count()}
+        live_ids = set()
+        for collection in (active, reserved, scheduled):
+            for entries in collection.values():
+                for item in entries or []:
+                    task_id = item.get("id") or item.get("request", {}).get("id")
+                    if task_id:
+                        live_ids.add(task_id)
+    except Exception:
+        return {"recovered": 0, "skipped": candidates.count()}
+    recovered = 0
+    for candidate in candidates:
+        if candidate.celery_task_id and candidate.celery_task_id in live_ids:
+            continue
+        with transaction.atomic():
+            batch = GovernanceAIBatch.objects.select_for_update().get(pk=candidate.pk)
+            if batch.status not in [GovernanceAIBatch.Status.PENDING, GovernanceAIBatch.Status.RUNNING]:
+                continue
+            if batch.updated_at >= cutoff:
+                continue
+            root = GovernanceAIBatch.objects.get(pk=batch.root_batch_id or batch.id)
+            if root.stop_requested:
+                batch.status = GovernanceAIBatch.Status.STOPPED
+                batch.finished_at = timezone.now()
+                batch.save(update_fields=["status", "finished_at", "updated_at"])
+                continue
+            batch.status = GovernanceAIBatch.Status.PENDING
+            batch.error_code = "RECOVERED_AFTER_WORKER_INTERRUPTION"
+            batch.save(update_fields=["status", "error_code", "updated_at"])
+        try:
+            job = process_governance_ai_batch.delay(batch.id)
+            GovernanceAIBatch.objects.filter(pk=batch.id, status="PENDING").update(celery_task_id=job.id)
+            recovered += 1
+        except Exception:
+            GovernanceAIBatch.objects.filter(pk=batch.id, status="PENDING").update(
+                status="FAILED", error_code="RECOVERY_DISPATCH_FAILED"
+            )
+    return {"recovered": recovered, "skipped": 0}
+
+
 @shared_task(name="run_automatic_voice_pipeline", autoretry_for=(), max_retries=0)
 def run_automatic_voice_pipeline(product_id: int, source_id: int | None = None) -> dict[str, object]:
     from apps.reviews.services.automatic_pipeline import run_automatic_pipeline
