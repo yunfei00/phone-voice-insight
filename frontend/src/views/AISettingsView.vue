@@ -5,6 +5,7 @@ import { onMounted, reactive, ref } from 'vue'
 
 import {
   getPersonalAIConfiguration,
+  getOllamaModels,
   savePersonalAIConfiguration,
   testPersonalAIConfiguration,
 } from '@/api'
@@ -13,6 +14,8 @@ import type { AIConfigurationPayload } from '@/types/api'
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref(false)
+const discovering = ref(false)
+const ollamaModels = ref<string[]>([])
 const configured = ref(false)
 const maskedKey = ref('')
 const updatedAt = ref<string | null>(null)
@@ -30,13 +33,13 @@ const form = reactive<AIConfigurationPayload>({
 })
 const rules: FormRules = {
   base_url: [
-    { required: true, message: '请输入 API 地址', trigger: 'blur' },
+    { required: true, message: '请输入服务地址', trigger: 'blur' },
     { type: 'url', message: '请输入完整 URL，例如 https://api.deepseek.com', trigger: 'blur' },
   ],
   api_key: [
     {
       validator: (_rule, value: string, callback: (error?: Error) => void) => {
-        callback(configured.value || value ? undefined : new Error('首次配置必须填写 API Key'))
+        callback(form.provider === 'ollama' || (configured.value && maskedKey.value) || value ? undefined : new Error('首次配置必须填写 API Key'))
       },
       trigger: 'blur',
     },
@@ -49,7 +52,7 @@ async function loadConfiguration(): Promise<void> {
   try {
     const configuration = await getPersonalAIConfiguration()
     Object.assign(form, {
-      provider: 'openai_compatible',
+      provider: configuration.provider === 'ollama' ? 'ollama' : 'openai_compatible',
       base_url: configuration.base_url,
       api_key: '',
       model: configuration.model === 'NOT_CONFIGURED' ? '' : configuration.model,
@@ -82,6 +85,20 @@ async function saveConfiguration(): Promise<boolean> {
     return true
   } finally {
     saving.value = false
+  }
+}
+
+async function discoverOllamaModels(): Promise<void> {
+  if (form.provider !== 'ollama') return
+  if (!(await saveConfiguration())) return
+  discovering.value = true
+  try {
+    ollamaModels.value = (await getOllamaModels()).models
+    if (!ollamaModels.value.length) ElMessage.warning('Ollama 可访问，但没有已安装的模型')
+  } catch {
+    ElMessage.error('无法读取 Ollama 模型，请确认服务地址可从 Docker 后端访问')
+  } finally {
+    discovering.value = false
   }
 }
 
@@ -124,14 +141,15 @@ onMounted(loadConfiguration)
     <section class="panel settings-panel">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <el-form-item label="接口类型">
-          <el-select v-model="form.provider" disabled>
+          <el-select v-model="form.provider">
             <el-option label="OpenAI 兼容接口" value="openai_compatible" />
+            <el-option label="本地 Ollama" value="ollama" />
           </el-select>
         </el-form-item>
         <el-form-item label="API 地址" prop="base_url">
-          <el-input v-model="form.base_url" placeholder="https://api.deepseek.com" />
+          <el-input v-model="form.base_url" :placeholder="form.provider === 'ollama' ? 'http://host.docker.internal:11434' : 'https://api.deepseek.com'" />
         </el-form-item>
-        <el-form-item label="API Key" prop="api_key">
+        <el-form-item v-if="form.provider !== 'ollama'" label="API Key" prop="api_key">
           <el-input
             v-model="form.api_key"
             type="password"
@@ -141,7 +159,11 @@ onMounted(loadConfiguration)
           />
         </el-form-item>
         <el-form-item label="模型名称" prop="model">
-          <el-input v-model="form.model" placeholder="例如 deepseek-flash" />
+          <el-select v-if="form.provider === 'ollama'" v-model="form.model" filterable allow-create default-first-option placeholder="选择已安装模型或输入模型名称">
+            <el-option v-for="name in ollamaModels" :key="name" :label="name" :value="name" />
+          </el-select>
+          <el-input v-else v-model="form.model" placeholder="例如 deepseek-flash" />
+          <el-button v-if="form.provider === 'ollama'" :loading="discovering" @click="discoverOllamaModels">保存并获取本地模型列表</el-button>
         </el-form-item>
         <div class="advanced-grid">
           <el-form-item label="思考模式">
