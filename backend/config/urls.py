@@ -7,6 +7,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.accounts.views import (
     UserAIConfigurationView,
+    OllamaModelsView,
     UserAIConnectivityView,
     UserViewSet,
     change_password,
