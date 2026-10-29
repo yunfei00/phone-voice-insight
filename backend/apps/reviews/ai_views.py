@@ -29,7 +29,7 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
     def start(self, request: Request) -> Response:
         class Parameters(serializers.Serializer):
             product_id = serializers.IntegerField(min_value=1)
-            source_id = serializers.IntegerField(min_value=1, required=False)
+            source_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
             limit = serializers.IntegerField(min_value=1, max_value=100, default=20)
 
         params = Parameters(data=request.data)

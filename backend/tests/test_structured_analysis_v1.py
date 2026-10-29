@@ -54,6 +54,17 @@ def test_structured_prompt_exists() -> None:
     assert '"BAT"' in rendered
 
 
+def test_structured_batch_filter_accepts_null_optional_ids() -> None:
+    from apps.analysis.structured_serializers import StructuredBatchCreateSerializer
+
+    serializer = StructuredBatchCreateSerializer(
+        data={"product_id": 1, "source_id": None, "max_items": 20, "dry_run": True}
+    )
+
+    assert serializer.is_valid(), serializer.errors
+    assert serializer.validated_data["source_id"] is None
+
+
 def payload(text: str) -> dict[str, Any]:
     evidence = "信号不稳定" if "信号不稳定" in text else text
     start = text.index(evidence)

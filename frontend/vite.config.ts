@@ -3,7 +3,7 @@ import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
 
-import packageJson from './package.json'
+import packageJson from './package.json' with { type: 'json' }
 
 export default defineConfig({
   base: process.env.VITE_PUBLIC_BASE || '/',

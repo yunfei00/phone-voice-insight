@@ -67,8 +67,8 @@ class StructuredBatchSerializer(serializers.ModelSerializer):
 
 class StructuredBatchCreateSerializer(serializers.Serializer):
     content_ids = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
-    product_id = serializers.IntegerField(required=False)
-    source_id = serializers.IntegerField(required=False)
+    product_id = serializers.IntegerField(required=False, allow_null=True)
+    source_id = serializers.IntegerField(required=False, allow_null=True)
     published_at_after = serializers.DateTimeField(required=False)
     published_at_before = serializers.DateTimeField(required=False)
     max_items = serializers.IntegerField(min_value=1, max_value=1000, default=20)

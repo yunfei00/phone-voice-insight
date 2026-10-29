@@ -334,7 +334,7 @@ async function startAIReview(): Promise<void> {
   try {
     const batch = await startGovernanceAIReview({
       product_id: selectedProduct.value,
-      source_id: selectedSource.value,
+      source_id: selectedSource.value ?? null,
       limit: governanceLimit.value,
     })
     ElMessage.success(`已提交 ${batch.total} 条 AI 复核数据`)
@@ -394,7 +394,7 @@ async function startAllGovernance(): Promise<void> {
   try {
     const result = await startFullGovernance({
       product_id: selectedProduct.value,
-      source_id: selectedSource.value,
+      source_id: selectedSource.value ?? null,
     })
     ElMessage.success(
       result.task ? `已提交全部 ${result.task.total} 条待治理数据` : '当前范围没有待治理数据',

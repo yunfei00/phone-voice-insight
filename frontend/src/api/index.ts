@@ -340,8 +340,8 @@ export const getStructuredBatches = async (
   (await apiClient.get<PaginatedResponse<StructuredBatch>>('/structured-batches/', { params })).data
 
 export const createStructuredBatch = async (payload: {
-  product_id?: number
-  source_id?: number
+  product_id?: number | null
+  source_id?: number | null
   content_ids?: number[]
   max_items: number
   dry_run: boolean
@@ -410,7 +410,7 @@ export const startAsyncGovernance = async (payload: {
 
 export const startFullGovernance = async (payload: {
   product_id: number
-  source_id?: number
+  source_id?: number | null
 }): Promise<{ task?: GovernanceTaskInfo; total?: number; detail?: string }> =>
   (await apiClient.post('/review-quality/start-full/', payload)).data
 
@@ -474,7 +474,7 @@ export interface GovernanceAIResultInfo {
 
 export const startGovernanceAIReview = async (payload: {
   product_id: number
-  source_id?: number
+  source_id?: number | null
   limit: number
 }): Promise<{ id: number; total: number }> =>
   (await apiClient.post('/governance-ai/start/', payload)).data
