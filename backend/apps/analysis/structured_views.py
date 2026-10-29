@@ -157,8 +157,19 @@ class StructuredBatchViewSet(ViewSet):
         product_id = request.data.get("product_id")
         if not isinstance(product_id, int) or product_id <= 0:
             return Response({"error_code": "PRODUCT_REQUIRED"}, status=status.HTTP_400_BAD_REQUEST)
-        task = dispatch_pending_structured_reviews.delay(request.user.pk, product_id)
-        return Response({"status": "QUEUED", "celery_task_id": task.id}, status=status.HTTP_202_ACCEPTED)
+        from apps.analysis.tasks import dispatch_pending_structured_reviews
+
+        result = dispatch_pending_structured_reviews(request.user.pk, product_id)
+        if result.get("locked"):
+            return Response({"error_code": "DISPATCH_BUSY"}, status=status.HTTP_409_CONFLICT)
+        if result.get("active_batch_id"):
+            return Response(
+                {"error_code": "ANALYSIS_ALREADY_RUNNING", "batch_id": result["active_batch_id"]},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if result.get("error_code"):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_202_ACCEPTED if result.get("batch_id") else status.HTTP_200_OK)
 
     @action(detail=True, methods=("post",))
     def cancel(self, _request: Request, pk: str | None = None) -> Response:
