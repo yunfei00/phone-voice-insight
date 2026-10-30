@@ -175,11 +175,7 @@ onUnmounted(() => {
         ><el-select v-model="form.source_id" clearable placeholder="数据来源（可选）"
           ><el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id" /></el-select
         ><el-input-number v-model="form.max_items" :min="1" :max="1000" aria-label="分析数量" />
-        <el-button
-          :loading="submitting"
-          @click="createPreview"
-          >预估任务</el-button
-        >
+        <el-button :loading="submitting" @click="createPreview">预估任务</el-button>
         <el-button
           type="primary"
           :loading="submitting"
