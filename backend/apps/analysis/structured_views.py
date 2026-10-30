@@ -231,7 +231,7 @@ class StructuredBatchViewSet(ViewSet):
                 if not ids:
                     continue
                 batch = AnalysisBatch.objects.create(
-                    created_by=request.user,
+                    created_by=user,
                     product_id=product_id,
                     source_id=source_id,
                     corpus_version="structured-v1",
