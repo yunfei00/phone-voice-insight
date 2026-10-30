@@ -38,6 +38,7 @@ const selected = ref<ReviewRecord | null>(null)
 const loading = ref(false)
 const error = ref('')
 const total = ref(0)
+const customPageSize = ref<number | undefined>(undefined)
 const metadata = ref<ReviewMetadataCompleteness | null>(null)
 const filters = reactive({
   page: 1,
@@ -127,6 +128,20 @@ function onSortChange(sort: {
     sort.prop && sort.order && fields[sort.prop]
       ? `${sort.order === 'descending' ? '-' : ''}${fields[sort.prop]}`
       : '-published_at'
+  filters.page = 1
+  void loadReviews()
+}
+
+function onPageSizeChange(): void {
+  filters.page = 1
+  customPageSize.value = undefined
+  void loadReviews()
+}
+
+function applyCustomPageSize(): void {
+  const size = customPageSize.value
+  if (size === undefined || !Number.isInteger(size) || size < 1 || size > 1000) return
+  filters.page_size = size
   filters.page = 1
   void loadReviews()
 }
@@ -278,14 +293,32 @@ onMounted(async () => {
         >
       </el-table>
 
-      <el-pagination
-        v-model:current-page="filters.page"
-        v-model:page-size="filters.page_size"
-        class="pagination"
-        layout="total, prev, pager, next"
-        :total="total"
-        @current-change="loadReviews"
-      />
+      <div class="reviews-pagination">
+        <el-pagination
+          v-model:current-page="filters.page"
+          v-model:page-size="filters.page_size"
+          class="pagination"
+          layout="total, sizes, prev, pager, next, jumper"
+          :page-sizes="[10, 20, 50, 100, 200, 500]"
+          :total="total"
+          @current-change="loadReviews"
+          @size-change="onPageSizeChange"
+        />
+        <div class="custom-page-size">
+          <span>自定义每页</span>
+          <el-input-number
+            v-model="customPageSize"
+            :min="1"
+            :max="1000"
+            :step="1"
+            :precision="0"
+            controls-position="right"
+            placeholder="输入条数"
+            @keyup.enter="applyCustomPageSize"
+          />
+          <el-button @click="applyCustomPageSize">应用</el-button>
+        </div>
+      </div>
     </div>
 
     <el-drawer
