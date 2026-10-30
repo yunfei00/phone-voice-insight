@@ -67,7 +67,9 @@ const baseNavigationItems = [
 ]
 const navigationItems = computed(() => [
   ...baseNavigationItems
-    .filter((item) => (item.path === '/ai-settings' ? auth.isAdmin : !item.advanced || auth.canWrite))
+    .filter((item) =>
+      item.path === '/ai-settings' ? auth.isAdmin : !item.advanced || auth.canWrite,
+    )
     .flatMap((item) =>
       item.path === '/products' && auth.isAdmin
         ? [item, { path: '/collection-tasks', label: '采集任务', icon: List }]
