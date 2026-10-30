@@ -175,7 +175,11 @@ onUnmounted(() => {
             row.requested_count
           }}</template
         ></el-table-column
-      ><el-table-column prop="success_count" label="成功" width="80" /><el-table-column prop="failed_count" label="失败" width="80" /><el-table-column prop="skipped_count" label="跳过" width="80" /><el-table-column label="模式"
+      ><el-table-column prop="success_count" label="成功" width="80" /><el-table-column
+        prop="failed_count"
+        label="失败"
+        width="80"
+      /><el-table-column prop="skipped_count" label="跳过" width="80" /><el-table-column label="模式"
         ><template #default="{ row }"
           ><el-tag :type="row.dry_run ? 'info' : 'warning'">{{
             row.dry_run ? 'DRY-RUN' : '真实调用'
@@ -212,13 +216,32 @@ onUnmounted(() => {
       @current-change="load"
       @size-change="onPageSizeChange"
     />
-    <el-dialog v-model="failureDialog" :title="`批次 #${failureBatchId} · 失败帖子`" width="min(900px, 95%)">
+    <el-dialog
+      v-model="failureDialog"
+      :title="`批次 #${failureBatchId} · 失败帖子`"
+      width="min(900px, 95%)"
+    >
       <el-alert v-if="failureError" :title="failureError" type="warning" :closable="false" />
-      <el-table v-loading="failureLoading" :data="failureRows" max-height="450" empty-text="暂无失败记录">
+      <el-table
+        v-loading="failureLoading"
+        :data="failureRows"
+        max-height="450"
+        empty-text="暂无失败记录"
+      >
         <el-table-column prop="content" label="帖子 ID" width="100" />
-        <el-table-column prop="content_excerpt" label="帖子内容" min-width="200" show-overflow-tooltip />
+        <el-table-column
+          prop="content_excerpt"
+          label="帖子内容"
+          min-width="200"
+          show-overflow-tooltip
+        />
         <el-table-column prop="error_code" label="错误代码" width="150" />
-        <el-table-column prop="error_message" label="失败原因" min-width="260" show-overflow-tooltip />
+        <el-table-column
+          prop="error_message"
+          label="失败原因"
+          min-width="260"
+          show-overflow-tooltip
+        />
         <el-table-column prop="attempt_count" label="尝试次数" width="90" />
       </el-table>
     </el-dialog>
