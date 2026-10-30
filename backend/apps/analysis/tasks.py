@@ -109,7 +109,10 @@ def run_structured_analysis_batch_task(
         batch.status = AnalysisBatchStatus.PARTIAL if batch.failed_count else AnalysisBatchStatus.SUCCESS
     batch.finished_at = timezone.now()
     batch.save()
-    dispatch_pending_structured_reviews.delay(batch.created_by_id, batch.product_id)
+    try:
+        dispatch_pending_structured_reviews.delay(batch.created_by_id, batch.product_id)
+    except Exception:
+        logger.exception("structured_followup_dispatch_failed batch_id=%s", batch.id)
     return {"batch_id": batch.id, "status": batch.status, "success": batch.success_count, "failed": batch.failed_count}
 
 
