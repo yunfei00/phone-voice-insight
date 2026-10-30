@@ -143,6 +143,23 @@ class DashboardReportListView(APIView):
         )
 
 
+class DashboardReportGenerateView(APIView):
+    """Admin-triggered generation; scheduled Beat jobs remain unchanged."""
+
+    def post(self, request: Request) -> Response:
+        if not request.user.is_authenticated or get_user_role(request.user) != UserRole.ADMIN:
+            return Response({"message": "仅管理员可以生成报告"}, status=status.HTTP_403_FORBIDDEN)
+        report_type = request.data.get("report_type")
+        if report_type not in ("DAILY", "WEEKLY"):
+            return Response({"message": "报告类型无效"}, status=status.HTTP_400_BAD_REQUEST)
+        from apps.reports.tasks import generate_insight_reports
+        try:
+            task = generate_insight_reports.delay(report_type)
+        except Exception:
+            return Response({"message": "任务提交失败，请检查 Celery 服务"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response({"task_id": task.id, "report_type": report_type, "status": "QUEUED"}, status=status.HTTP_202_ACCEPTED)
+
+
 class DashboardReportDetailView(APIView):
     def get(self, _request: Request, report_id: int) -> Response:
         report = get_object_or_404(AggregateReport.objects.select_related("product", "source"), pk=report_id)
