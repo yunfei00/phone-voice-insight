@@ -248,7 +248,14 @@ class Command(BaseCommand):
             analysis__review_required=False,
             analysis__content_id__in=final_corpus_reviews().values("pk"),
         )
-        query = (
+        legacy_query = aspects.filter(
+            topic_code="NET.PERF_000",
+            analysis__content__published_at__gte=recent_start,
+        )
+        self.stdout.write(
+            f"EXPLAIN_LEGACY_TOPIC_COUNT {legacy_query.explain(analyze=True, buffers=True, format='json')}"
+        )
+        optimized_query = (
             aspects.values("topic_code")
             .annotate(
                 recent=Count(
@@ -265,4 +272,6 @@ class Command(BaseCommand):
             )
             .order_by("topic_code")
         )
-        self.stdout.write(f"EXPLAIN_ANALYZE {query.explain(analyze=True, buffers=True, format='json')}")
+        self.stdout.write(
+            f"EXPLAIN_OPTIMIZED_WINDOWS {optimized_query.explain(analyze=True, buffers=True, format='json')}"
+        )
