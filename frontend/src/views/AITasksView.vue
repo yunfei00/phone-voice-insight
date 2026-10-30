@@ -102,6 +102,14 @@ async function create() {
     submitting.value = false
   }
 }
+function createPreview() {
+  form.dry_run = true
+  void create()
+}
+function createAnalysis() {
+  form.dry_run = false
+  void create()
+}
 async function cancel(id: number) {
   await cancelStructuredBatch(id)
   ElMessage.success('已停止启动后续项目')
@@ -169,20 +177,14 @@ onUnmounted(() => {
         ><el-input-number v-model="form.max_items" :min="1" :max="1000" aria-label="分析数量" />
         <el-button
           :loading="submitting"
-          @click="
-            form.dry_run = true
-            create()
-          "
+          @click="createPreview"
           >预估任务</el-button
         >
         <el-button
           type="primary"
           :loading="submitting"
           :disabled="submitting"
-          @click="
-            form.dry_run = false
-            create()
-          "
+          @click="createAnalysis"
           >开始分析</el-button
         >
       </div>
