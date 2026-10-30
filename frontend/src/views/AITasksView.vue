@@ -167,7 +167,19 @@ onUnmounted(() => {
           ></template
         ></el-table-column
       ></el-table
-    ><div class="pagination-bar"><span>共 {{ total }} 条任务记录</span><el-pagination v-model:current-page="page" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" :total="total" layout="sizes, prev, pager, next, jumper" background @current-change="load" @size-change="onPageSizeChange" /></div>
+    ><div class="pagination-bar">
+      <span>共 {{ total }} 条任务记录</span>
+      <el-pagination
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="total"
+        layout="sizes, prev, pager, next, jumper"
+        background
+        @current-change="load"
+        @size-change="onPageSizeChange"
+      />
+    </div>
   </section>
 </template>
 <style scoped>
@@ -175,7 +187,13 @@ onUnmounted(() => {
   display: grid;
   gap: 18px;
 }
-.pagination-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 .tasks h1 {
   margin: 0;
 }
