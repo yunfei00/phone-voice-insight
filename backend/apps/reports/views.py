@@ -254,4 +254,13 @@ class DashboardOperationsView(APIView):
                 },
             }
         )
+        from apps.assistant.models import AssistantMessage, MessageRole, MessageStatus
+
+        assistant_messages = AssistantMessage.objects.filter(role=MessageRole.ASSISTANT)
+        summary["assistant"] = {
+            "running": assistant_messages.filter(status=MessageStatus.RUNNING).count(),
+            "completed": assistant_messages.filter(status=MessageStatus.COMPLETED).count(),
+            "failed": assistant_messages.filter(status=MessageStatus.FAILED).count(),
+            "cancelled": assistant_messages.filter(status=MessageStatus.CANCELLED).count(),
+        }
         return Response(summary)
