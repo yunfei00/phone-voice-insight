@@ -19,12 +19,7 @@ import AssistantComposer from '@/components/assistant/AssistantComposer.vue'
 import AssistantEvidence from '@/components/assistant/AssistantEvidence.vue'
 import AssistantMarkdown from '@/components/assistant/AssistantMarkdown.vue'
 import AssistantSidebar from '@/components/assistant/AssistantSidebar.vue'
-import type {
-  AssistantConversation,
-  AssistantMessage,
-  DataSource,
-  Product,
-} from '@/types/api'
+import type { AssistantConversation, AssistantMessage, DataSource, Product } from '@/types/api'
 
 const route = useRoute()
 const conversations = ref<AssistantConversation[]>([])
