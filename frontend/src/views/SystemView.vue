@@ -1,77 +1,55 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { getHealth, getOperationsStatus } from '@/api'
+import { getHealth, getOperationsStatus, getSystemResources } from '@/api'
 import type { HealthStatus, OperationsStatus } from '@/types/api'
 
+interface ResourceMetric { total: number; used: number; percent: number | null }
+interface SystemResources {
+  scope: string
+  cpu: { cores: number; load_percent: number | null; metric: string }
+  memory: ResourceMetric
+  disk: ResourceMetric | null
+  online: { count: number; definition: string }
+  sampled_at: string
+}
 const appVersion = __APP_VERSION__
 const health = ref<HealthStatus | null>(null)
 const operations = ref<OperationsStatus | null>(null)
+const resources = ref<SystemResources | null>(null)
 const loading = ref(false)
 const error = ref('')
 const checkedAt = ref('')
 let timer: number | undefined
-
 const serviceNames: Record<string, string> = {
-  backend: '后端 API',
-  database: '数据库',
-  redis: 'Redis',
-  celery_worker: 'Celery Worker',
-  celery_beat: 'Celery Beat',
-}
-const metricNames: Record<string, string> = {
-  running: '运行中',
-  waiting: '等待中',
-  recent_success: '累计成功',
-  recent_failed: '累计失败',
-  active_leases: '有效采集租约',
-  pending: '待处理',
-  eligible: '可分析语料',
-  rejected: '已拒绝',
-  uncertain: '待确认',
-  errors: '错误',
-  running_batches: '运行中批次',
-  ai_governance_running: 'AI 治理运行中',
-  successful: '累计成功',
-  failed: '累计失败',
-  completed: '累计完成',
-  cancelled: '累计取消',
+  backend: '后端 API', database: '数据库', redis: 'Redis',
+  celery_worker: 'Celery Worker', celery_beat: 'Celery Beat',
 }
 const statusNames: Record<string, string> = {
-  online: '在线',
-  offline: '离线',
-  stale: '心跳过期',
-  unknown: '无法确认',
-  ok: '正常',
-  error: '异常',
-  running: '运行中',
-  idle: '空闲',
-  normal: '正常',
-  no_success_record: '暂无成功记录',
-  enabled: '已启用',
-  disabled: '未启用',
+  online: '在线', offline: '离线', stale: '心跳过期',
+  unknown: '无法确认', ok: '正常', error: '异常',
 }
-function statusText(value: string | undefined): string {
-  return statusNames[value || ''] || value || '未知'
-}
+function statusText(value: string | undefined): string { return statusNames[value || ''] || value || '未知' }
 function statusType(value: string | undefined): 'success' | 'danger' | 'warning' {
-  if (value === 'online' || value === 'ok' || value === 'normal') return 'success'
+  if (value === 'online' || value === 'ok') return 'success'
   if (value === 'offline' || value === 'error' || value === 'stale') return 'danger'
   return 'warning'
 }
-function formatDate(value: string | null | undefined): string {
-  return value ? new Date(value).toLocaleString('zh-CN') : '暂无记录'
+function size(bytes: number | undefined): string {
+  if (bytes === undefined) return '—'
+  return bytes >= 1073741824 ? (bytes / 1073741824).toFixed(1) + ' GB' : (bytes / 1048576).toFixed(1) + ' MB'
 }
 async function load(): Promise<void> {
   if (loading.value) return
   loading.value = true
   error.value = ''
-  const [base, detail] = await Promise.allSettled([getHealth(), getOperationsStatus()])
-  if (base.status === 'fulfilled') health.value = base.value
-  else health.value = null
-  if (detail.status === 'fulfilled') operations.value = detail.value
-  else operations.value = null
-  if (base.status === 'rejected' || detail.status === 'rejected') {
-    error.value = '部分监控数据获取失败，请检查网络、登录权限或后端服务。'
+  const [base, detail, runtime] = await Promise.allSettled([
+    getHealth(), getOperationsStatus(), getSystemResources(),
+  ])
+  health.value = base.status === 'fulfilled' ? base.value : null
+  operations.value = detail.status === 'fulfilled' ? detail.value : null
+  resources.value = runtime.status === 'fulfilled' ? runtime.value : null
+  if (base.status === 'rejected' || detail.status === 'rejected' || runtime.status === 'rejected') {
+    error.value = '部分监控数据获取失败，请检查后端服务或权限。'
   }
   checkedAt.value = new Date().toLocaleString('zh-CN')
   loading.value = false
@@ -80,7 +58,7 @@ onMounted(() => {
   void load()
   timer = window.setInterval(() => {
     if (document.visibilityState === 'visible') void load()
-  }, 30_000)
+  }, 10_000)
 })
 onBeforeUnmount(() => window.clearInterval(timer))
 </script>
@@ -89,81 +67,72 @@ onBeforeUnmount(() => window.clearInterval(timer))
   <div class="system-status-page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">系统运行监控中心</h1>
-        <p class="page-description">基础服务、后台任务、数据采集和 AI 运行状态 · 每30秒自动刷新</p>
+        <h1 class="page-title">系统资源监控</h1>
+        <p class="page-description">CPU、内存、磁盘与用户活动 · 每10秒自动刷新</p>
       </div>
-      <el-button :loading="loading" @click="load">刷新状态</el-button>
+      <el-button :loading="loading" @click="load">立即刷新</el-button>
     </div>
     <el-alert v-if="error" :title="error" type="warning" :closable="false" class="notice" />
-    <div class="panel">
-      <h3>基础服务健康</h3>
-      <el-descriptions :column="1" border>
-        <el-descriptions-item label="前端版本">{{ appVersion }}</el-descriptions-item>
-        <el-descriptions-item label="API 连接">
-          <el-tag :type="health ? 'success' : 'danger'">{{ health ? '已连接' : '未连接' }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="后端服务">{{ health?.service || '未知' }}</el-descriptions-item>
-        <el-descriptions-item v-for="(value, key) in operations?.system || {}" :key="key" :label="serviceNames[key] || key">
-          <el-tag :type="statusType(value)">{{ statusText(value) }}</el-tag>
-        </el-descriptions-item>
-        <template v-if="!operations">
-          <el-descriptions-item label="数据库">{{ statusText(health?.database) }}</el-descriptions-item>
-          <el-descriptions-item label="Redis">{{ statusText(health?.redis) }}</el-descriptions-item>
-        </template>
-      </el-descriptions>
-    </div>
-    <template v-if="operations">
-      <div class="monitor-grid">
-        <section class="panel">
-          <h3>数据采集</h3>
-          <p>当前状态：<el-tag :type="operations.business_status.collection === 'running' ? 'warning' : 'info'">{{ statusText(operations.business_status.collection) }}</el-tag></p>
-          <p>最近成功采集：{{ formatDate(operations.latest.collection_at) }}</p>
-          <el-descriptions v-if="operations.collection" :column="1" border>
-            <el-descriptions-item v-for="(value, key) in operations.collection" :key="key" :label="metricNames[key] || key">{{ value }}</el-descriptions-item>
-          </el-descriptions>
-        </section>
-        <section class="panel">
-          <h3>AI 分析</h3>
-          <p>最近成功分析：{{ formatDate(operations.latest.analysis_at) }}</p>
-          <p>自动分析：{{ operations.business_status.ai_message }}</p>
-          <el-descriptions v-if="operations.analysis" :column="1" border>
-            <el-descriptions-item v-for="(value, key) in operations.analysis" :key="key" :label="metricNames[key] || key">{{ value }}</el-descriptions-item>
-          </el-descriptions>
-        </section>
-        <section class="panel">
-          <h3>数据治理</h3>
-          <el-descriptions v-if="operations.governance" :column="1" border>
-            <el-descriptions-item v-for="(value, key) in operations.governance" :key="key" :label="metricNames[key] || key">{{ value }}</el-descriptions-item>
-          </el-descriptions>
-          <p v-else>详细统计仅管理员可见。</p>
-        </section>
-        <section class="panel">
-          <h3>AI 智能助手</h3>
-          <el-descriptions v-if="operations.assistant" :column="1" border>
-            <el-descriptions-item v-for="(value, key) in operations.assistant" :key="key" :label="metricNames[key] || key">{{ value }}</el-descriptions-item>
-          </el-descriptions>
-          <p v-else>详细统计仅管理员可见，或后端尚未更新。</p>
-        </section>
-      </div>
-      <section class="panel">
-        <h3>异常关注</h3>
-        <el-alert v-if="operations.system.celery_worker === 'offline'" title="Celery Worker 未响应，后台任务可能无法执行" type="error" :closable="false" class="notice" />
-        <el-alert v-if="operations.system.celery_beat === 'stale'" title="Celery Beat 心跳过期，请检查定时调度" type="warning" :closable="false" class="notice" />
-        <el-alert v-if="operations.collection?.recent_failed" :title="`采集任务累计失败 ${operations.collection.recent_failed} 次（历史累计，非当前告警）`" type="warning" :closable="false" class="notice" />
-        <el-alert v-if="operations.assistant?.failed" :title="`AI 助手累计失败 ${operations.assistant.failed} 次（历史累计，非当前告警）`" type="warning" :closable="false" class="notice" />
-        <p v-if="operations.system.celery_worker !== 'offline' && operations.system.celery_beat !== 'stale' && !operations.collection?.recent_failed && !operations.assistant?.failed">未发现以上监控规则匹配的异常；不代表所有业务均已通过健康检查。</p>
+    <el-alert
+      title="资源指标来自后端容器视角，不等于宿主机整体使用率；CPU 显示一分钟负载比例，不是瞬时使用率。"
+      type="info" :closable="false" show-icon class="notice"
+    />
+    <div class="resource-grid">
+      <section class="panel metric-card">
+        <h3>CPU 负载</h3>
+        <div class="metric-value">{{ resources?.cpu.load_percent ?? '—' }}<small v-if="resources?.cpu.load_percent != null">%</small></div>
+        <el-progress :percentage="Math.min(100, Math.max(0, resources?.cpu.load_percent ?? 0))" :show-text="false" />
+        <p>逻辑核心：{{ resources?.cpu.cores ?? '—' }} · 一分钟负载/核心数</p>
       </section>
-    </template>
+      <section class="panel metric-card">
+        <h3>内存</h3>
+        <div class="metric-value">{{ resources?.memory.percent ?? '—' }}<small v-if="resources?.memory.percent != null">%</small></div>
+        <el-progress :percentage="Math.min(100, Math.max(0, resources?.memory.percent ?? 0))" :show-text="false" />
+        <p>{{ size(resources?.memory.used) }} / {{ size(resources?.memory.total) }}</p>
+      </section>
+      <section class="panel metric-card">
+        <h3>磁盘</h3>
+        <div class="metric-value">{{ resources?.disk?.percent ?? '—' }}<small v-if="resources?.disk?.percent != null">%</small></div>
+        <el-progress :percentage="Math.min(100, Math.max(0, resources?.disk?.percent ?? 0))" :show-text="false" />
+        <p>{{ size(resources?.disk?.used) }} / {{ size(resources?.disk?.total) }}</p>
+      </section>
+      <section class="panel metric-card">
+        <h3>最近登录用户</h3>
+        <div class="metric-value">{{ resources?.online.count ?? '—' }}<small>人</small></div>
+        <p>最近5分钟登录人数；非实时在线人数</p>
+      </section>
+    </div>
+    <section class="panel">
+      <h3>基础服务健康</h3>
+      <div class="service-grid">
+        <div class="service-item"><span>前端版本</span><strong>{{ appVersion }}</strong></div>
+        <div class="service-item"><span>API 连接</span><el-tag :type="health ? 'success' : 'danger'">{{ health ? '在线' : '离线' }}</el-tag></div>
+        <div v-for="(value, key) in operations?.system || {}" :key="key" class="service-item">
+          <span>{{ serviceNames[key] || key }}</span>
+          <el-tag :type="statusType(value)">{{ statusText(value) }}</el-tag>
+        </div>
+        <template v-if="!operations">
+          <div class="service-item"><span>数据库</span><el-tag :type="statusType(health?.database)">{{ statusText(health?.database) }}</el-tag></div>
+          <div class="service-item"><span>Redis</span><el-tag :type="statusType(health?.redis)">{{ statusText(health?.redis) }}</el-tag></div>
+        </template>
+      </div>
+    </section>
     <p class="checked-at">最近检查：{{ checkedAt || '尚未检查' }}</p>
   </div>
 </template>
 
 <style scoped>
-.notice { margin-bottom: 12px; }
+.notice { margin-bottom: 16px; }
 .panel { margin-bottom: 16px; }
-.panel h3 { margin: 0 0 16px; }
-.monitor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.monitor-grid .panel { min-width: 0; }
+.panel h3 { margin: 0 0 18px; }
+.resource-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.metric-card { min-width: 0; padding: 22px; }
+.metric-value { font-size: clamp(28px, 3vw, 42px); font-weight: 700; line-height: 1.3; margin: 8px 0 16px; font-variant-numeric: tabular-nums; }
+.metric-value small { font-size: 16px; margin-left: 4px; font-weight: 500; }
+.metric-card p { margin: 16px 0 0; color: var(--pvi-muted); font-size: 13px; }
+.service-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.service-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; }
 .checked-at { color: var(--pvi-muted); font-size: 12px; }
-@media (max-width: 800px) { .monitor-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .resource-grid, .service-grid { grid-template-columns: 1fr; } }
 </style>
