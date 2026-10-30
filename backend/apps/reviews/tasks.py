@@ -319,7 +319,7 @@ def reconcile_automatic_voice_pipeline() -> dict[str, int | str]:
         .annotate(
             error_attempts=Count(
                 "ai_reviews",
-                filter=Q(ai_reviews__status=GovernanceAIReview.Status.ERROR),
+                filter=Q(ai_reviews__status__in=(GovernanceAIReview.Status.ERROR, GovernanceAIReview.Status.FAILED)),
             )
         )
         .filter(error_attempts__lt=settings.AI_AUTOMATION_MAX_ATTEMPTS)
