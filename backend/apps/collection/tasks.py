@@ -272,7 +272,15 @@ def reconcile_collection_tasks() -> dict[str, int]:
         .values_list("source_target__source_id", flat=True)
         .distinct()
     )
+    dispatch_failed = 0
     for source_id in source_ids:
-        if dispatch_next_source_task(source_id) is not None:
-            dispatched += 1
-    return {"recovered": recovered, "dispatched": dispatched}
+        try:
+            if dispatch_next_source_task(source_id) is not None:
+                dispatched += 1
+        except Exception:
+            # enqueue_collection_task persists the pending state for the next
+            # reconciliation tick. One broken broker submission must not block
+            # other independent sources.
+            dispatch_failed += 1
+            logger.exception("collection_reconcile_dispatch_failed source_id=%s", source_id)
+    return {"recovered": recovered, "dispatched": dispatched, "dispatch_failed": dispatch_failed}
