@@ -13,6 +13,7 @@ import {
   getProducts,
   getSources,
   streamAssistantChat,
+  updateAssistantConversation,
 } from '@/api'
 import AssistantComposer from '@/components/assistant/AssistantComposer.vue'
 import AssistantEvidence from '@/components/assistant/AssistantEvidence.vue'
@@ -99,7 +100,6 @@ async function selectConversation(id: string) {
   messagesLoading.value = true
   try {
     messages.value = await getAssistantMessages(id)
-    const item = conversations.value.find((conversation) => conversation.id === id)
     await scrollToBottom()
   } finally {
     messagesLoading.value = false
