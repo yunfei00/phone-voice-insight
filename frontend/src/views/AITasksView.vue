@@ -20,6 +20,8 @@ const batches = ref<StructuredBatch[]>([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const filterProductId = ref<number | undefined>()
+const filterSourceId = ref<number | undefined>()
 const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
 const form = reactive({
@@ -37,7 +39,12 @@ async function load() {
   error.value = ''
   try {
     const [b, p, s] = await Promise.all([
-      getStructuredBatches({ page: page.value, page_size: pageSize.value }),
+      getStructuredBatches({
+        page: page.value,
+        page_size: pageSize.value,
+        product: filterProductId.value,
+        source: filterSourceId.value,
+      }),
       getProducts({ page_size: 100 }),
       getSources({ page_size: 100 }),
     ])
@@ -50,6 +57,10 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+function onFilterChange() {
+  page.value = 1
+  void load()
 }
 function onPageSizeChange() {
   if (page.value !== 1) {
@@ -129,7 +140,25 @@ onUnmounted(() => {
         >并发 {{ form.max_concurrency }} · {{ form.requests_per_minute }} 请求/分钟 · Token 上限
         {{ form.token_limit }} · 预算 ¥{{ form.cost_budget }}</small
       ></el-card
-    ><el-alert v-if="error" :title="error" type="error" /><el-table
+    ><div class="task-filters">
+      <el-select
+        v-model="filterProductId"
+        clearable
+        placeholder="筛选任务机型（全部）"
+        @change="onFilterChange"
+      >
+        <el-option v-for="p in products" :key="p.id" :label="p.name" :value="p.id" />
+      </el-select>
+      <el-select
+        v-model="filterSourceId"
+        clearable
+        placeholder="筛选任务来源（全部）"
+        @change="onFilterChange"
+      >
+        <el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id" />
+      </el-select>
+    </div>
+    <el-alert v-if="error" :title="error" type="error" /><el-table
       v-loading="loading"
       :data="batches"
       empty-text="暂无 V1 任务"
@@ -183,6 +212,14 @@ onUnmounted(() => {
 .tasks {
   display: grid;
   gap: 18px;
+}
+.task-filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.task-filters .el-select {
+  width: 220px;
 }
 .tasks h1 {
   margin: 0;
