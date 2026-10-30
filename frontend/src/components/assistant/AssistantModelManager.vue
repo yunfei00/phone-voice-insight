@@ -37,7 +37,7 @@ const title = computed(() => (editing.value ? '编辑模型配置' : '新增模�
 function reset(item?: AssistantModelProfile) {
   editing.value = item
   Object.assign(form, {
-    name: item?.name || '平台智能助手',
+    name: item?.name || '',
     provider: item?.provider || 'openai_compatible',
     base_url: item?.base_url || '',
     model: item?.model || '',
@@ -60,10 +60,10 @@ function describeError(error: unknown): string {
 }
 
 async function save() {
-  if (!form.name.trim() || !form.model.trim()) return ElMessage.warning('请填写配置名称和模型名称')
+  if (!form.model.trim()) return ElMessage.warning('请填写实际模型标识')
   saving.value = true
   try {
-    const payload = { ...form }
+    const payload = { ...form, name: form.name.trim() || form.model.trim() }
     if (!payload.api_key) delete payload.api_key
     if (editing.value) await updateAssistantModel(editing.value.id, payload)
     else await createAssistantModel(payload)
@@ -147,8 +147,8 @@ watch(
       <el-form label-position="top" class="profile-form">
         <h3>{{ title }}</h3>
         <div class="form-grid">
-          <el-form-item label="配置名称"
-            ><el-input v-model="form.name" maxlength="80"
+          <el-form-item label="显示名称（可选）"
+            ><el-input v-model="form.name" maxlength="80" :placeholder="form.model || '默认使用实际模型标识'"
           /></el-form-item>
           <el-form-item label="Provider">
             <el-select v-model="form.provider"
@@ -160,7 +160,7 @@ watch(
           <el-form-item label="服务地址" class="full"
             ><el-input v-model="form.base_url" placeholder="https://example.com/v1"
           /></el-form-item>
-          <el-form-item label="模型名称"><el-input v-model="form.model" /></el-form-item>
+          <el-form-item label="实际模型标识"><el-input v-model="form.model" placeholder="例如 qwen3:8b" /></el-form-item>
           <el-form-item label="API Key">
             <el-input
               v-model="form.api_key"
