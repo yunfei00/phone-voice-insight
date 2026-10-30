@@ -157,7 +157,7 @@ class DashboardReportGenerateView(APIView):
         try:
             task = generate_insight_reports.delay(report_type)
         except Exception:
-            return Response({"message": "任务提交失败，请检查 Celery 服务"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            return Response({"message": "任务提交失败, 请检查 Celery 服务"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         return Response(
             {"task_id": task.id, "report_type": report_type, "status": "QUEUED"}, status=status.HTTP_202_ACCEPTED
         )
@@ -172,7 +172,7 @@ class DashboardReportDetailView(APIView):
 class SystemResourcesView(APIView):
     """Container-scoped runtime metrics; host-wide usage requires a host agent."""
 
-    def get(self, request: Request) -> Response:
+    def get(self, _request: Request) -> Response:
         import os
         import shutil
         import time
@@ -214,7 +214,7 @@ class SystemResourcesView(APIView):
         return Response(
             {
                 "scope": "backend_container",
-                "cpu": {"cores": cpu_count, "load_percent": cpu_load, "metric": "1分钟负载/核心数（非CPU使用率）"},
+                "cpu": {"cores": cpu_count, "load_percent": cpu_load, "metric": "1分钟负载/核心数 (非CPU使用率)"},
                 "memory": {
                     "total": total,
                     "used": max(0, total - available),
