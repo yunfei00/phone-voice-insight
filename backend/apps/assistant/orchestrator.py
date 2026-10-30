@@ -233,9 +233,9 @@ def _resolve_settings(conversation: AssistantConversation) -> tuple[AssistantPro
     profile = next(
         (
             item
-            for item in AssistantModelProfile.objects.filter(
-                name="平台智能助手", is_active=True
-            ).select_related("user").order_by("id")
+            for item in AssistantModelProfile.objects.filter(name="平台智能助手", is_active=True)
+            .select_related("user")
+            .order_by("id")
             if get_user_role(item.user) == UserRole.ADMIN
         ),
         None,
