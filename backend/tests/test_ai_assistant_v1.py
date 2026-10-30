@@ -192,6 +192,41 @@ def test_model_profiles_are_encrypted_masked_and_isolated(api_client: APIClient)
     assert other_client.get(f"/api/v1/assistant/models/{profile.id}/").status_code == 403
 
 
+def test_admin_selects_shared_assistant_model_and_viewer_cannot_modify(api_client: APIClient) -> None:
+    admin = current_user(api_client)
+    profile = create_profile(admin, name="共用模型")
+    response = api_client.post(
+        "/api/v1/assistant/models/select-assistant/",
+        {"model_id": profile.id},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.data["assistant_model_id"] == profile.id
+    assert AssistantModelSelection.objects.get(slot="assistant").profile_id == profile.id
+
+    viewer = get_user_model().objects.create_user(username="assistant-viewer", password="password")
+    UserProfile.objects.create(user=viewer, role=UserRole.VIEWER)
+    client = APIClient()
+    client.force_authenticate(viewer)
+    assert client.get("/api/v1/assistant/models/").status_code == 403
+    assert (
+        client.post(
+            "/api/v1/assistant/models/select-assistant/",
+            {"model_id": profile.id},
+            format="json",
+        ).status_code
+        == 403
+    )
+    conversation = client.post(
+        "/api/v1/assistant/conversations/",
+        {"title": "普通用户对话", "model_profile": profile.id, "use_default_model": False},
+        format="json",
+    )
+    assert conversation.status_code == 201
+    assert conversation.data["model_profile"] is None
+    assert conversation.data["use_default_model"] is True
+
+
 def test_ai_endpoint_blocks_private_address_and_allows_approved_ollama() -> None:
     with patch.object(
         socket, "getaddrinfo", return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 11434))]
