@@ -409,6 +409,11 @@ export const runAllStructuredAnalysis = async (
 ): Promise<{ queued: number; batch_id?: number; celery_task_id?: string; error_code?: string }> =>
   (await apiClient.post('/structured-batches/run-all/', { product_id: productId })).data
 
+export const retryRemainingStructuredAnalysis = async (
+  productId: number,
+): Promise<{ queued: number; batch_ids: number[] }> =>
+  (await apiClient.post('/structured-batches/retry-remaining/', { product_id: productId })).data
+
 export const createStructuredBatch = async (payload: {
   product_id?: number | null
   source_id?: number | null
