@@ -12,6 +12,7 @@ from apps.assistant.security import validate_ai_endpoint
 
 
 class AssistantModelProfileSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(required=False, allow_blank=True, max_length=80)
     api_key = serializers.CharField(write_only=True, required=False, allow_blank=False, trim_whitespace=True)
     api_key_configured = serializers.SerializerMethodField()
     api_key_masked = serializers.SerializerMethodField()
@@ -59,7 +60,12 @@ class AssistantModelProfileSerializer(serializers.ModelSerializer):
             if provider == AIProviderName.OPENAI_COMPATIBLE and not has_key:
                 raise serializers.ValidationError({"api_key": "OpenAI 兼容接口必须配置 API Key。"})
         if not model:
-            raise serializers.ValidationError({"model": "请输入模型名称。"})
+            raise serializers.ValidationError({"model": "请输入实际模型标识。"})
+        attrs["model"] = model
+        if "name" in attrs:
+            attrs["name"] = str(attrs["name"]).strip() or model
+        elif instance is None:
+            attrs["name"] = model
         return attrs
 
     @transaction.atomic
