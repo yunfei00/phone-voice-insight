@@ -10,7 +10,9 @@ declare module 'axios' {
 }
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.DEV ? '/api/v1' : import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: import.meta.env.DEV
+    ? '/api/v1'
+    : import.meta.env.VITE_API_BASE_URL || `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/v1`,
   timeout: 10_000,
   headers: {
     Accept: 'application/json',
