@@ -158,9 +158,11 @@ describe('StructuredAnalysisView', () => {
     })
     const messageSpy = vi.spyOn(ElMessage, 'error')
     const { app, container } = mountView()
-    await flush(500)
+    await vi.waitFor(() => expect(getStructuredAggregates).toHaveBeenCalledTimes(3), {
+      timeout: 2000,
+    })
+    await flush()
 
-    expect(getStructuredAggregates).toHaveBeenCalledTimes(3)
     expect(getStructuredCorpusProgress).toHaveBeenCalled()
     expect(container.textContent).toContain('聚合统计加载失败，任务进度仍会继续更新')
     expect(container.textContent).toContain('有效语料 10')

@@ -736,7 +736,7 @@ footer {
 }
 .page-header p {
   margin: 6px 0 0;
-  color: #6b7280;
+  color: var(--pvi-muted);
 }
 .metric-grid {
   display: grid;
@@ -748,7 +748,7 @@ footer {
   display: block;
 }
 .metric-grid span {
-  color: #6b7280;
+  color: var(--pvi-muted);
 }
 .metric-grid strong {
   margin-top: 8px;
@@ -770,14 +770,16 @@ footer {
 .card-title span,
 footer,
 small {
-  color: #6b7280;
+  color: var(--pvi-muted);
 }
 .original {
   white-space: pre-wrap;
 }
 .summary {
   padding: 10px 12px;
-  background: #f7f8fb;
+  color: var(--pvi-text);
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--pvi-border);
   border-radius: 8px;
 }
 .opinions {
@@ -786,7 +788,9 @@ small {
 }
 .opinion {
   padding: 12px;
-  border: 1px solid #e5e7eb;
+  color: var(--pvi-text);
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--pvi-border);
   border-radius: 9px;
 }
 .opinion > div {
@@ -800,14 +804,14 @@ small {
 footer {
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid #eef0f3;
+  border-top: 1px solid var(--pvi-border);
 }
 .json-editor {
   margin: 14px 0;
 }
 .count {
   text-align: center;
-  color: #6b7280;
+  color: var(--pvi-muted);
 }
 .ranking {
   display: flex;

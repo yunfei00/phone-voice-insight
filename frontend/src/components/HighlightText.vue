@@ -35,8 +35,8 @@ const segments = computed(() => {
 <style scoped>
 mark {
   padding: 0 2px;
-  color: inherit;
-  background: #fff1a8;
+  color: #071524;
+  background: #f7c47e;
   border-radius: 3px;
 }
 </style>
