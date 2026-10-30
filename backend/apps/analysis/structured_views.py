@@ -119,6 +119,22 @@ class StructuredBatchViewSet(ViewSet):
         )
         estimated_tokens = max((estimated_characters + 3) // 4, len(content_ids) * 100)
         estimated_cost = estimated_tokens * values["input_cost_per_million"] / 1_000_000
+        if values["dry_run"]:
+            return Response(
+                {
+                    "dry_run": True,
+                    "preview": {
+                        "matched_count": len(content_ids),
+                        "estimated_tokens": estimated_tokens,
+                        "estimated_cost": str(estimated_cost),
+                        "cost_estimate_reliable": bool(values["input_cost_per_million"] or values["output_cost_per_million"]),
+                    },
+                    "matched_content_ids": content_ids,
+                    "batch": None,
+                    "celery_task_id": None,
+                },
+                status=status.HTTP_200_OK,
+            )
         batch = AnalysisBatch.objects.create(
             created_by=cast(User, request.user),
             product=product,
