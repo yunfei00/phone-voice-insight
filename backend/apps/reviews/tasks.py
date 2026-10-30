@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from celery import shared_task
@@ -10,9 +11,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.ai_service import get_user_ai_provider
-from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewRecord
+from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewQuality, ReviewRecord
 from apps.reviews.services.ai_governance import review_quality_with_ai
 from apps.reviews.services.governance_pipeline import GovernanceProcessor, process_reviews
+
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task(name="process_review_quality")
