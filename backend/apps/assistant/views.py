@@ -26,6 +26,7 @@ from apps.assistant.models import (
     AssistantConversation,
     AssistantMessage,
     AssistantModelProfile,
+    AssistantModelSelection,
     ConversationStatus,
     MessageStatus,
 )
@@ -55,6 +56,7 @@ class AssistantModelProfileViewSet(viewsets.ModelViewSet):
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: ARG002
         profiles = self.get_queryset()
+        selection = AssistantModelSelection.objects.filter(slot="assistant").first()
         default = UserAIConfiguration.objects.filter(user=cast(DjangoUser, request.user)).first()
         return Response(
             {
@@ -66,8 +68,22 @@ class AssistantModelProfileViewSet(viewsets.ModelViewSet):
                     "configured": bool(default and default.is_configured),
                 },
                 "results": self.get_serializer(profiles, many=True).data,
+                "assistant_model_id": selection.profile_id if selection else None,
             }
         )
+
+    @action(detail=False, methods=("post",), url_path="select-assistant")
+    def select_assistant(self, request: Request) -> Response:
+        raw_id = request.data.get("model_id")
+        if not isinstance(raw_id, int) or isinstance(raw_id, bool):
+            return Response({"detail": "请选择已保存的模型。"}, status=status.HTTP_400_BAD_REQUEST)
+        profile = self.get_queryset().filter(pk=raw_id, is_active=True).first()
+        if profile is None:
+            return Response({"detail": "模型不存在或已停用。"}, status=status.HTTP_400_BAD_REQUEST)
+        AssistantModelSelection.objects.update_or_create(
+            slot="assistant", defaults={"profile": profile}
+        )
+        return Response({"assistant_model_id": profile.pk})
 
     @action(detail=True, methods=("post",))
     def test(self, request: Request, pk: str | None = None) -> Response:  # noqa: ARG002
