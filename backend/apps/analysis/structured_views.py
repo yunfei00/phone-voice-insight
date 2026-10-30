@@ -63,7 +63,7 @@ class StructuredBatchViewSet(ViewSet):
     permission_classes = (IsAnalystOrAdministrator,)
 
     def list(self, request: Request) -> Response:
-        queryset = AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1").select_related(
+        queryset = AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1", dry_run=False).select_related(
             "product", "source"
         )
         if product_id := request.query_params.get("product"):
