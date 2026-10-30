@@ -170,7 +170,7 @@ onUnmounted(() => {
         <label>预算上限（元） <el-input-number v-model="form.cost_budget" :min="0" :precision="2" :step="1" /></label>
         <p>预算依赖模型单价配置和后端累计计算，不能保证实际账单严格不超过该值。</p>
       </div>
-          ></el-card
+    </el-card
     ><el-alert v-if="error" :title="error" type="error" /><el-table
       v-loading="loading"
       :data="batches.filter((batch) => !batch.dry_run)"
