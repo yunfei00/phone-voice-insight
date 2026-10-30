@@ -287,19 +287,36 @@ def run_automatic_voice_pipeline(product_id: int, source_id: int | None = None) 
 def reconcile_automatic_voice_pipeline() -> dict[str, int | str]:
     if not settings.AI_AUTOMATION_ENABLED:
         return {"status": "disabled", "queued": 0}
-    # A prior collection may have completed governance while the AI provider was
-    # unavailable. Reconcile both ungoverned records and eligible unreviewed ones.
-    # Limit the number of product/source pairs per tick to bound queue pressure.
-    from django.db.models import Q
+    # Reconcile unfinished governance and AI failures with a bounded retry
+    # budget. Do not requeue terminal AI decisions or exhausted failures.
+    from django.db.models import Count, Q
 
-    pairs = list(
-        ReviewRecord.objects.filter(
-            Q(quality__isnull=True)
-            | Q(quality__eligible_for_ai=True, quality__ai_reviews__isnull=True)
-        )
+    ungoverned = list(
+        ReviewRecord.objects.filter(quality__isnull=True)
         .values_list("product_id", "source_id")
         .distinct()[:20]
     )
+    terminal = (
+        GovernanceAIReview.Status.ACCEPTED,
+        GovernanceAIReview.Status.REJECTED,
+        GovernanceAIReview.Status.UNCERTAIN,
+        GovernanceAIReview.Status.SUCCEEDED,
+        GovernanceAIReview.Status.REVIEW_REQUIRED,
+    )
+    ai_pending = (
+        ReviewQuality.objects.filter(eligible_for_ai=True)
+        .exclude(ai_reviews__status__in=terminal)
+        .annotate(
+            error_attempts=Count(
+                "ai_reviews",
+                filter=Q(ai_reviews__status=GovernanceAIReview.Status.ERROR),
+            )
+        )
+        .filter(error_attempts__lt=settings.AI_AUTOMATION_MAX_ATTEMPTS)
+        .values_list("review__product_id", "review__source_id")
+        .distinct()[:20]
+    )
+    pairs = list(dict.fromkeys([*ungoverned, *list(ai_pending)]))[:20]
     queued = 0
     failed = 0
     for product_id, source_id in pairs:
