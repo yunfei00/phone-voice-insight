@@ -872,6 +872,7 @@ export interface OperationsStatus {
   collection?: Record<string, number>
   governance?: Record<string, number>
   analysis?: Record<string, number>
+  assistant?: Record<string, number>
 }
 
 export type AssistantProvider = 'openai_compatible' | 'ollama' | 'fake'
