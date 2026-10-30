@@ -446,9 +446,11 @@ export const createStructuredBatch = async (payload: {
   token_limit?: number
   cost_budget?: number
 }): Promise<{
-  batch: StructuredBatch
+  batch: StructuredBatch | null
   celery_task_id: string | null
   matched_content_ids: number[]
+  dry_run?: boolean
+  preview?: { matched_count: number; estimated_tokens: number; estimated_cost: string; cost_estimate_reliable: boolean }
 }> => (await apiClient.post('/structured-batches/', payload)).data
 
 export const cancelStructuredBatch = async (id: number): Promise<StructuredBatch> =>
