@@ -16,6 +16,7 @@ from apps.assistant.models import (
     AssistantConversation,
     AssistantMessage,
     AssistantModelProfile,
+    AssistantModelSelection,
     ConversationStatus,
     MessageStatus,
 )
@@ -226,22 +227,11 @@ class AssistantOrchestrator:
 
 
 def _resolve_settings(conversation: AssistantConversation) -> tuple[AssistantProviderSettings, int | None]:  # noqa: ARG001
-    """All customer conversations use the centrally managed assistant model."""
-    from apps.accounts.models import UserRole
-    from apps.accounts.permissions import get_user_role
-
-    profile = next(
-        (
-            item
-            for item in AssistantModelProfile.objects.filter(name="平台智能助手", is_active=True)
-            .select_related("user")
-            .order_by("id")
-            if get_user_role(item.user) == UserRole.ADMIN
-        ),
-        None,
-    )
-    if profile is None:
-        raise AIProviderError("AI_NOT_CONFIGURED", "管理员尚未在 AI 配置中设置平台智能助手模型。")
+    """Resolve the administrator-selected model for every customer chat."""
+    selection = AssistantModelSelection.objects.select_related("profile").filter(slot="assistant").first()
+    profile = selection.profile if selection else None
+    if profile is None or not profile.is_active:
+        raise AIProviderError("AI_NOT_CONFIGURED", "管理员尚未在 AI 配置中选择可用的智能助手模型。")
     return settings_from_profile(profile), profile.id
 
 
