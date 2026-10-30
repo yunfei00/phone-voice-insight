@@ -16,6 +16,7 @@ const appVersion = __APP_VERSION__
 const health = ref<HealthStatus | null>(null)
 const operations = ref<OperationsStatus | null>(null)
 const resources = ref<SystemResources | null>(null)
+const business = ref<OperationsStatus | null>(null)
 const loading = ref(false)
 const error = ref('')
 const checkedAt = ref('')
@@ -47,6 +48,7 @@ async function load(): Promise<void> {
   ])
   health.value = base.status === 'fulfilled' ? base.value : null
   operations.value = detail.status === 'fulfilled' ? detail.value : null
+  business.value = operations.value
   resources.value = runtime.status === 'fulfilled' ? runtime.value : null
   if (base.status === 'rejected' || detail.status === 'rejected' || runtime.status === 'rejected') {
     error.value = '部分监控数据获取失败，请检查后端服务或权限。'
@@ -67,8 +69,8 @@ onBeforeUnmount(() => window.clearInterval(timer))
   <div class="system-status-page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">系统资源监控</h1>
-        <p class="page-description">CPU、内存、磁盘与用户活动 · 每10秒自动刷新</p>
+        <h1 class="page-title">运行监控</h1>
+        <p class="page-description">数据采集、治理、AI 分析及系统资源 · 每10秒自动刷新</p>
       </div>
       <el-button :loading="loading" @click="load">立即刷新</el-button>
     </div>
@@ -103,6 +105,15 @@ onBeforeUnmount(() => window.clearInterval(timer))
       </section>
     </div>
     <section class="panel">
+      <h3>业务运行状态</h3>
+      <div v-if="business" class="business-grid">
+        <div class="business-item"><h4>数据采集</h4><p>状态：{{ business.business_status.collection }}</p><p>最近采集：{{ business.latest.collection_at ? new Date(business.latest.collection_at).toLocaleString('zh-CN') : '暂无' }}</p><p v-for="(value, key) in business.collection || {}" :key="key">{{ key }}：{{ value }}</p></div>
+        <div class="business-item"><h4>数据治理</h4><p>数据更新：{{ business.business_status.data_update }}</p><p v-for="(value, key) in business.governance || {}" :key="key">{{ key }}：{{ value }}</p></div>
+        <div class="business-item"><h4>AI 分析</h4><p>{{ business.business_status.ai_message }}</p><p>Token 使用：{{ business.ai.today_tokens.toLocaleString() }} / {{ business.ai.daily_budget.toLocaleString() }}</p><p v-for="(value, key) in business.analysis || {}" :key="key">{{ key }}：{{ value }}</p></div>
+      </div>
+      <el-empty v-else description="业务监控数据暂不可用" />
+    </section>
+    <section class="panel">
       <h3>基础服务健康</h3>
       <div class="service-grid">
         <div class="service-item"><span>前端版本</span><strong>{{ appVersion }}</strong></div>
@@ -123,6 +134,10 @@ onBeforeUnmount(() => window.clearInterval(timer))
 
 <style scoped>
 .notice { margin-bottom: 16px; }
+.business-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.business-item { padding: 16px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; overflow-wrap: anywhere; }
+.business-item h4 { margin: 0 0 12px; }
+.business-item p { margin: 8px 0; color: var(--pvi-muted); }
 .panel { margin-bottom: 16px; }
 .panel h3 { margin: 0 0 18px; }
 .resource-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
@@ -134,5 +149,5 @@ onBeforeUnmount(() => window.clearInterval(timer))
 .service-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; }
 .checked-at { color: var(--pvi-muted); font-size: 12px; }
 @media (max-width: 1100px) { .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 600px) { .resource-grid, .service-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .resource-grid, .service-grid, .business-grid { grid-template-columns: 1fr; } }
 </style>
