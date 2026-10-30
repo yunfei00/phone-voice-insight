@@ -182,16 +182,16 @@ class SystemResourcesView(APIView):
             cpu_load = round(load / cpu_count * 100, 1)
         except (OSError, AttributeError):
             cpu_load = None
-        from datetime import timedelta
         from django.contrib.auth import get_user_model
-        since = timezone.now() - timedelta(minutes=5)
-        online = get_user_model().objects.filter(last_login__gte=since, is_active=True).count()
+        from django.core.cache import cache
+        user_ids = get_user_model().objects.filter(is_active=True).values_list("pk", flat=True)
+        online = sum(bool(cache.get(f"presence:user:{user_id}")) for user_id in user_ids)
         return Response({
             "scope": "backend_container",
             "cpu": {"cores": cpu_count, "load_percent": cpu_load, "metric": "1分钟负载/核心数（非CPU使用率）"},
             "memory": {"total": total, "used": max(0, total - available), "percent": round((total - available) / total * 100, 1) if total else None},
             "disk": disk_info,
-            "online": {"count": online, "definition": "最近5分钟登录用户数（非实时在线人数）"},
+            "online": {"count": online, "definition": "最近120秒有活动心跳的独立账号数"},
             "sampled_at": timezone.now().isoformat(),
         })
 
