@@ -181,14 +181,9 @@ onUnmounted(() => {
         prop="failed_count"
         label="失败"
         width="80"
-      /><el-table-column prop="skipped_count" label="跳过" width="80" /><el-table-column
-        label="模式"
-        ><template #default="{ row }"
-          ><el-tag :type="row.dry_run ? 'info' : 'warning'">{{
-            row.dry_run ? 'DRY-RUN' : '真实调用'
-          }}</el-tag></template
-        ></el-table-column
-      ><el-table-column prop="actual_cost" label="实际成本" /><el-table-column
+      /><el-table-column label="实际成本" width="120">
+        <template #default="{ row }">{{ Number(row.actual_cost) > 0 ? '¥' + Number(row.actual_cost).toFixed(4) : '—' }}</template>
+      </el-table-column><el-table-column
         label="操作"
         min-width="230"
         ><template #default="{ row }"
