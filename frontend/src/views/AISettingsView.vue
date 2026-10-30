@@ -6,17 +6,22 @@ import { onMounted, reactive, ref } from 'vue'
 import {
   getPersonalAIConfiguration,
   getAssistantModels,
+  createAssistantModel,
+  updateAssistantModel,
+  testAssistantModel,
+  selectAssistantModel,
   getOllamaModels,
   savePersonalAIConfiguration,
   testPersonalAIConfiguration,
 } from '@/api'
-import type { AIConfigurationPayload, AssistantModelList } from '@/types/api'
-import AssistantModelManager from '@/components/assistant/AssistantModelManager.vue'
+import type { AIConfigurationPayload, AssistantModelList, AssistantModelProfile } from '@/types/api'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const assistantModels = ref<AssistantModelList>()
-const assistantManagerVisible = ref(false)
+const selectedProfileId = ref<number | null>(null)
+const assistantSelection = ref<number | null>(null)
+const assigning = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref(false)
@@ -80,18 +85,90 @@ async function loadConfiguration(): Promise<void> {
   }
 }
 
+function editProfile(profile: AssistantModelProfile): void {
+  selectedProfileId.value = profile.id
+  configured.value = profile.api_key_configured
+  maskedKey.value = profile.api_key_masked
+  Object.assign(form, {
+    provider: profile.provider,
+    base_url: profile.base_url,
+    api_key: '',
+    model: profile.model,
+    thinking_mode: profile.thinking_mode,
+    timeout_seconds: profile.timeout_seconds,
+    temperature: Number(profile.temperature),
+    max_output_tokens: profile.max_output_tokens,
+    is_active: profile.is_active,
+  })
+}
+
+function newProfile(): void {
+  selectedProfileId.value = 0
+  configured.value = false
+  maskedKey.value = ''
+  Object.assign(form, {
+    provider: 'openai_compatible',
+    base_url: '',
+    api_key: '',
+    model: '',
+    thinking_mode: '',
+    timeout_seconds: 60,
+    temperature: 0,
+    max_output_tokens: 1500,
+    is_active: true,
+  })
+}
+
+async function choosePersonal(): Promise<void> {
+  selectedProfileId.value = null
+  await loadConfiguration()
+}
+
+async function assignAssistantModel(): Promise<void> {
+  if (assistantSelection.value === null) return
+  assigning.value = true
+  try {
+    await selectAssistantModel(assistantSelection.value)
+    await loadAssistantModels()
+    ElMessage.success('智能助手模型已更新，客户下次提问即使用此模型')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '分配模型失败')
+  } finally {
+    assigning.value = false
+  }
+}
+
 async function saveConfiguration(): Promise<boolean> {
   if (!(await formRef.value?.validate().catch(() => false))) return false
   saving.value = true
   try {
     const payload = { ...form }
     if (!payload.api_key) delete payload.api_key
-    const saved = await savePersonalAIConfiguration(payload)
-    configured.value = saved.configured
-    maskedKey.value = saved.api_key_masked
-    updatedAt.value = saved.updated_at
-    form.api_key = ''
-    ElMessage.success('个人 AI 配置已保存')
+    if (selectedProfileId.value !== null) {
+      const profilePayload = {
+        ...payload,
+        name: selectedProfileId.value
+          ? assistantModels.value?.results.find((item) => item.id === selectedProfileId.value)?.name ||
+            payload.model
+          : `${payload.provider} · ${payload.model}`,
+      }
+      const saved = selectedProfileId.value
+        ? await updateAssistantModel(selectedProfileId.value, profilePayload)
+        : await createAssistantModel(profilePayload)
+      selectedProfileId.value = saved.id
+      configured.value = saved.api_key_configured
+      maskedKey.value = saved.api_key_masked
+      form.api_key = ''
+      await loadAssistantModels()
+      ElMessage.success('模型已保存到统一模型库')
+    } else {
+      const saved = await savePersonalAIConfiguration(payload)
+      configured.value = saved.configured
+      maskedKey.value = saved.api_key_masked
+      updatedAt.value = saved.updated_at
+      form.api_key = ''
+      ElMessage.success('个人默认模型已保存')
+    }
     return true
   } finally {
     saving.value = false
@@ -120,7 +197,9 @@ async function saveAndTest(): Promise<void> {
   if (!(await saveConfiguration())) return
   testing.value = true
   try {
-    const result = await testPersonalAIConfiguration()
+    const result = selectedProfileId.value
+      ? await testAssistantModel(selectedProfileId.value)
+      : await testPersonalAIConfiguration()
     ElMessage.success(`连接成功：${result.model}，耗时 ${result.latency_ms} ms`)
   } finally {
     testing.value = false
@@ -128,7 +207,10 @@ async function saveAndTest(): Promise<void> {
 }
 
 async function loadAssistantModels(): Promise<void> {
-  if (auth.isAdmin) assistantModels.value = await getAssistantModels()
+  if (auth.isAdmin) {
+    assistantModels.value = await getAssistantModels()
+    assistantSelection.value = assistantModels.value.assistant_model_id
+  }
 }
 
 onMounted(() => {
@@ -141,9 +223,9 @@ onMounted(() => {
   <div v-loading="loading">
     <header class="page-header">
       <div>
-        <h1 class="page-title">个人 AI 配置</h1>
+        <h1 class="page-title">AI 配置 · 模型管理</h1>
         <p class="page-description">
-          此配置仅属于当前登录用户。创建 AI 分析任务时，后台会使用当前用户自己的模型和密钥。
+          统一管理模型连接参数；个人默认模型供分析任务使用，智能助手模型由管理员在下方指定。
         </p>
       </div>
       <el-tag :type="configured ? 'success' : 'warning'">
@@ -159,7 +241,35 @@ onMounted(() => {
       class="notice"
     />
 
+    <section v-if="auth.isAdmin" class="panel settings-panel model-library">
+      <h2>统一模型库</h2>
+      <p>在下方同一表单中配置或编辑模型，保存后可分配给智能助手，无需重复填写。</p>
+      <div class="model-actions">
+        <el-button :type="selectedProfileId === null ? 'primary' : 'default'" @click="choosePersonal">个人默认模型</el-button>
+        <el-button
+          v-for="item in assistantModels?.results"
+          :key="item.id"
+          :type="selectedProfileId === item.id ? 'primary' : 'default'"
+          @click="editProfile(item)"
+        >{{ item.model }}</el-button>
+        <el-button type="success" plain @click="newProfile">+ 新增模型</el-button>
+      </div>
+      <el-divider />
+      <h3>智能助手使用模型</h3>
+      <div class="model-actions">
+        <el-select v-model="assistantSelection" placeholder="选择已保存的模型" style="width: 300px">
+          <el-option
+            v-for="item in assistantModels?.results.filter((profile) => profile.is_active)"
+            :key="item.id"
+            :label="`${item.model}（${item.provider}）`"
+            :value="item.id"
+          />
+        </el-select>
+        <el-button type="primary" :loading="assigning" @click="assignAssistantModel">设为智能助手模型</el-button>
+      </div>
+    </section>
     <section class="panel settings-panel">
+      <h2>{{ selectedProfileId === null ? "个人默认模型" : selectedProfileId === 0 ? "新增模型" : "编辑模型" }}</h2>
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <el-form-item label="接口类型">
           <el-select v-model="form.provider">
@@ -233,25 +343,23 @@ onMounted(() => {
           <el-button :loading="testing" @click="saveAndTest">保存并测试连接</el-button>
         </div>
       </el-form>
-      <p v-if="updatedAt" class="updated-at">
+      <p v-if="updatedAt && selectedProfileId === null" class="updated-at">
         最后更新：{{ new Date(updatedAt).toLocaleString() }}
       </p>
     </section>
   </div>
-  <section v-if="auth.isAdmin" class="panel settings-panel">
-    <h2>平台 AI 智能助手专用模型</h2>
-    <p>仅管理员配置，所有客户对话统一使用名称为“平台智能助手”的启用模型。</p>
-    <el-button type="primary" @click="assistantManagerVisible = true">配置助手模型</el-button>
-  </section>
-  <AssistantModelManager
-    v-if="auth.isAdmin"
-    v-model="assistantManagerVisible"
-    :models="assistantModels"
-    @refresh="loadAssistantModels"
-  />
 </template>
 
 <style scoped>
+.model-library {
+  margin-bottom: 18px;
+}
+.model-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
 .notice {
   margin-bottom: 18px;
 }
