@@ -401,7 +401,8 @@ def run_honor_full_chunk(
                 )
                 item.status = (
                     DiscoveryStatus.BLOCKED_SKIPPED
-                    if access_blocked and (item.attempts >= max_attempts or str(item.thread_id) in known_blocked_info_threads)
+                    if access_blocked
+                    and (item.attempts >= max_attempts or str(item.thread_id) in known_blocked_info_threads)
                     else DiscoveryStatus.FAILED
                 )
                 item.last_error = f"{error_code}: {exc}"

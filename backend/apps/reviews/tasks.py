@@ -304,9 +304,7 @@ def reconcile_automatic_voice_pipeline() -> dict[str, int | str]:
     from django.db.models import Count, Q
 
     ungoverned = list(
-        ReviewRecord.objects.filter(quality__isnull=True)
-        .values_list("product_id", "source_id")
-        .distinct()[:20]
+        ReviewRecord.objects.filter(quality__isnull=True).values_list("product_id", "source_id").distinct()[:20]
     )
     terminal = (
         GovernanceAIReview.Status.ACCEPTED,
@@ -336,6 +334,8 @@ def reconcile_automatic_voice_pipeline() -> dict[str, int | str]:
             run_automatic_voice_pipeline.delay(product_id, source_id)
             queued += 1
         except Exception:
-            logger.exception("automatic_pipeline_reconcile_dispatch_failed product_id=%s source_id=%s", product_id, source_id)
+            logger.exception(
+                "automatic_pipeline_reconcile_dispatch_failed product_id=%s source_id=%s", product_id, source_id
+            )
             failed += 1
     return {"status": "partial" if failed else "queued", "queued": queued, "dispatch_failed": failed}

@@ -22,7 +22,12 @@ const failureError = ref('')
 const loading = ref(false)
 const submitting = ref(false)
 const advancedVisible = ref(false)
-const preview = ref<{ matched_count: number; estimated_tokens: number; estimated_cost: string; cost_estimate_reliable: boolean } | null>(null)
+const preview = ref<{
+  matched_count: number
+  estimated_tokens: number
+  estimated_cost: string
+  cost_estimate_reliable: boolean
+} | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 const error = ref('')
 const batches = ref<StructuredBatch[]>([])
@@ -150,8 +155,10 @@ onUnmounted(() => {
 <template>
   <section class="tasks">
     <header class="page-header">
-      <div><h1 class="page-title">AI 任务中心</h1>
-      <p>创建分析任务、查看处理进度和失败明细。</p></div>
+      <div>
+        <h1 class="page-title">AI 任务中心</h1>
+        <p>创建分析任务、查看处理进度和失败明细。</p>
+      </div>
     </header>
     <el-card shadow="never"
       ><div class="form">
@@ -160,20 +167,50 @@ onUnmounted(() => {
         ><el-select v-model="form.source_id" clearable placeholder="数据来源（可选）"
           ><el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id" /></el-select
         ><el-input-number v-model="form.max_items" :min="1" :max="1000" aria-label="分析数量" />
-        <el-button :loading="submitting" @click="form.dry_run = true; create()">预估任务</el-button>
-        <el-button type="primary" :loading="submitting" :disabled="submitting" @click="form.dry_run = false; create()">开始分析</el-button>
+        <el-button
+          :loading="submitting"
+          @click="
+            form.dry_run = true
+            create()
+          "
+          >预估任务</el-button
+        >
+        <el-button
+          type="primary"
+          :loading="submitting"
+          :disabled="submitting"
+          @click="
+            form.dry_run = false
+            create()
+          "
+          >开始分析</el-button
+        >
       </div>
-      <el-button link @click="advancedVisible = !advancedVisible">{{ advancedVisible ? '收起高级设置' : '展开高级设置' }}</el-button>
+      <el-button link @click="advancedVisible = !advancedVisible">{{
+        advancedVisible ? '收起高级设置' : '展开高级设置'
+      }}</el-button>
       <div v-if="advancedVisible" class="advanced-settings">
         <label>最大并发 <el-input-number v-model="form.max_concurrency" :min="1" :max="8" /></label>
-        <label>每分钟请求上限 <el-input-number v-model="form.requests_per_minute" :min="1" :max="120" /></label>
-        <label>Token 上限 <el-input-number v-model="form.token_limit" :min="1" :step="10000" /></label>
-        <label>预算上限（元） <el-input-number v-model="form.cost_budget" :min="0" :precision="2" :step="1" /></label>
+        <label
+          >每分钟请求上限 <el-input-number v-model="form.requests_per_minute" :min="1" :max="120"
+        /></label>
+        <label
+          >Token 上限 <el-input-number v-model="form.token_limit" :min="1" :step="10000"
+        /></label>
+        <label
+          >预算上限（元）
+          <el-input-number v-model="form.cost_budget" :min="0" :precision="2" :step="1"
+        /></label>
         <p>预算依赖模型单价配置和后端累计计算，不能保证实际账单严格不超过该值。</p>
       </div>
-    </el-card
-    >
-    <el-alert v-if="preview" type="info" :closable="true" @close="preview = null" :title="`预估结果：${preview.matched_count} 条，约 ${preview.estimated_tokens} Token；${preview.cost_estimate_reliable ? '估算费用 ¥' + preview.estimated_cost : '费用未配置，无法可靠预估'}。未调用模型、未创建任务。`" />
+    </el-card>
+    <el-alert
+      v-if="preview"
+      type="info"
+      :closable="true"
+      @close="preview = null"
+      :title="`预估结果：${preview.matched_count} 条，约 ${preview.estimated_tokens} Token；${preview.cost_estimate_reliable ? '估算费用 ¥' + preview.estimated_cost : '费用未配置，无法可靠预估'}。未调用模型、未创建任务。`"
+    />
     <el-alert v-if="error" :title="error" type="error" /><el-table
       v-loading="loading"
       :data="batches.filter((batch) => !batch.dry_run)"
@@ -192,10 +229,10 @@ onUnmounted(() => {
         label="失败"
         width="80"
       /><el-table-column label="实际成本" width="120">
-        <template #default="{ row }">{{ Number(row.actual_cost) > 0 ? '¥' + Number(row.actual_cost).toFixed(4) : '—' }}</template>
-      </el-table-column><el-table-column
-        label="操作"
-        min-width="230"
+        <template #default="{ row }">{{
+          Number(row.actual_cost) > 0 ? '¥' + Number(row.actual_cost).toFixed(4) : '—'
+        }}</template> </el-table-column
+      ><el-table-column label="操作" min-width="230"
         ><template #default="{ row }"
           ><el-button v-if="['PENDING', 'RUNNING'].includes(row.status)" text @click="pause(row.id)"
             >暂停</el-button
@@ -267,9 +304,21 @@ onUnmounted(() => {
 small {
   color: #6b7280;
 }
-.advanced-settings { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
-.advanced-settings label { display: flex; align-items: center; gap: 8px; }
-.advanced-settings p { width: 100%; font-size: 12px; }
+.advanced-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+}
+.advanced-settings label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.advanced-settings p {
+  width: 100%;
+  font-size: 12px;
+}
 .form {
   display: grid;
   grid-template-columns: 1fr 1fr auto auto auto;

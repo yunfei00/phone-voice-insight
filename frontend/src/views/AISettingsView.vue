@@ -216,7 +216,8 @@ async function fetchAvailableModels(): Promise<void> {
   discovering.value = true
   try {
     availableModels.value = await getAssistantAvailableModels(selectedProfileId.value)
-    if (!availableModels.value.length) ElMessage.warning('接口已连接，但未返回可用模型；仍可手动输入')
+    if (!availableModels.value.length)
+      ElMessage.warning('接口已连接，但未返回可用模型；仍可手动输入')
     else ElMessage.success(`已获取 ${availableModels.value.length} 个模型`)
   } catch (error) {
     ElMessage.warning(error instanceof Error ? error.message : '获取模型列表失败，请手动输入')
@@ -296,137 +297,164 @@ onMounted(() => {
     />
 
     <div class="settings-layout" :class="{ 'single-column': !auth.isAdmin }">
-    <section v-if="auth.isAdmin" class="panel settings-panel model-library">
-      <h2>统一模型库</h2>
-      <p>选择左侧模型，在右侧编辑配置；新增模型也在右侧完成。</p>
-      <div class="model-actions">
-        <el-button
-          :type="selectedProfileId === null ? 'primary' : 'default'"
-          @click="choosePersonal"
-          >个人默认模型</el-button
-        >
-        <el-button
-          v-for="item in assistantModels?.results"
-          :key="item.id"
-          :type="selectedProfileId === item.id ? 'primary' : 'default'"
-          @click="editProfile(item)"
-        >{{ item.name }}</el-button>
-        <el-button type="success" plain @click="newProfile">+ 新增模型</el-button>
-      </div>
-      <el-divider />
-      <h3>智能助手使用模型</h3>
-      <div class="model-actions">
-        <el-select v-model="assistantSelection" placeholder="选择已保存的模型" style="width: 300px">
-          <el-option
-            v-for="item in assistantModels?.results.filter((profile) => profile.is_active)"
-            :key="item.id"
-            :label="`${item.name}（${item.provider} · ${item.model}）`"
-            :value="item.id"
-          />
-        </el-select>
-        <el-button type="primary" :loading="assigning" @click="assignAssistantModel"
-          >设为智能助手模型</el-button
-        >
-      </div>
-    </section>
-    <section class="panel settings-panel">
-      <h2>
-        {{
-          selectedProfileId === null
-            ? '个人默认模型'
-            : selectedProfileId === 0
-              ? '新增模型'
-              : '编辑模型'
-        }}
-      </h2>
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-        <el-form-item label="接口类型">
-          <el-select v-model="form.provider">
-            <el-option label="OpenAI 兼容接口" value="openai_compatible" />
-            <el-option label="本地 Ollama" value="ollama" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="API 地址" prop="base_url">
-          <el-input
-            v-model="form.base_url"
-            :placeholder="
-              form.provider === 'ollama'
-                ? 'http://host.docker.internal:11434'
-                : 'https://api.deepseek.com'
-            "
-          />
-        </el-form-item>
-        <el-form-item v-if="form.provider !== 'ollama'" label="API Key" prop="api_key">
-          <el-input
-            v-model="form.api_key"
-            type="password"
-            show-password
-            autocomplete="new-password"
-            :placeholder="maskedKey || '请输入 API Key'"
-          />
-        </el-form-item>
-        <el-form-item v-if="selectedProfileId !== null" label="显示名称（可选）">
-          <el-input v-model="displayName" :placeholder="form.model || '默认使用实际模型名称'" maxlength="80" />
-          <div class="field-hint">留空默认使用实际模型名称；模型列表和智能助手选择器显示此名称。</div>
-        </el-form-item>
-        <el-form-item label="实际模型名称" prop="model">
-          <el-select
-            v-if="form.provider === 'ollama' || availableModels.length"
-            v-model="form.model"
-            filterable
-            allow-create
-            default-first-option
-            placeholder="选择已安装模型或输入模型名称"
-          >
-            <el-option v-for="name in [...new Set([...ollamaModels, ...availableModels])]" :key="name" :label="name" :value="name" />
-          </el-select>
-          <el-input v-else v-model="form.model" placeholder="例如 deepseek-flash" />
-          <el-button v-if="selectedProfileId !== null" :loading="discovering" @click="fetchAvailableModels">获取模型列表</el-button>
+      <section v-if="auth.isAdmin" class="panel settings-panel model-library">
+        <h2>统一模型库</h2>
+        <p>选择左侧模型，在右侧编辑配置；新增模型也在右侧完成。</p>
+        <div class="model-actions">
           <el-button
-            v-if="form.provider === 'ollama' && selectedProfileId === null"
-            :loading="discovering"
-            @click="discoverOllamaModels"
-            >保存并获取本地模型列表</el-button
+            :type="selectedProfileId === null ? 'primary' : 'default'"
+            @click="choosePersonal"
+            >个人默认模型</el-button
           >
-        </el-form-item>
-        <div class="advanced-grid">
-          <el-form-item label="思考模式">
-            <el-select v-model="form.thinking_mode">
-              <el-option label="跟随模型默认" value="" />
-              <el-option label="启用" value="enabled" />
-              <el-option label="禁用" value="disabled" />
+          <el-button
+            v-for="item in assistantModels?.results"
+            :key="item.id"
+            :type="selectedProfileId === item.id ? 'primary' : 'default'"
+            @click="editProfile(item)"
+            >{{ item.name }}</el-button
+          >
+          <el-button type="success" plain @click="newProfile">+ 新增模型</el-button>
+        </div>
+        <el-divider />
+        <h3>智能助手使用模型</h3>
+        <div class="model-actions">
+          <el-select
+            v-model="assistantSelection"
+            placeholder="选择已保存的模型"
+            style="width: 300px"
+          >
+            <el-option
+              v-for="item in assistantModels?.results.filter((profile) => profile.is_active)"
+              :key="item.id"
+              :label="`${item.name}（${item.provider} · ${item.model}）`"
+              :value="item.id"
+            />
+          </el-select>
+          <el-button type="primary" :loading="assigning" @click="assignAssistantModel"
+            >设为智能助手模型</el-button
+          >
+        </div>
+      </section>
+      <section class="panel settings-panel">
+        <h2>
+          {{
+            selectedProfileId === null
+              ? '个人默认模型'
+              : selectedProfileId === 0
+                ? '新增模型'
+                : '编辑模型'
+          }}
+        </h2>
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
+          <el-form-item label="接口类型">
+            <el-select v-model="form.provider">
+              <el-option label="OpenAI 兼容接口" value="openai_compatible" />
+              <el-option label="本地 Ollama" value="ollama" />
             </el-select>
           </el-form-item>
-          <el-form-item label="请求超时（秒）">
-            <el-input-number v-model="form.timeout_seconds" :min="10" :max="300" />
+          <el-form-item label="API 地址" prop="base_url">
+            <el-input
+              v-model="form.base_url"
+              :placeholder="
+                form.provider === 'ollama'
+                  ? 'http://host.docker.internal:11434'
+                  : 'https://api.deepseek.com'
+              "
+            />
           </el-form-item>
-          <el-form-item label="Temperature">
-            <el-input-number v-model="form.temperature" :min="0" :max="2" :step="0.1" />
+          <el-form-item v-if="form.provider !== 'ollama'" label="API Key" prop="api_key">
+            <el-input
+              v-model="form.api_key"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              :placeholder="maskedKey || '请输入 API Key'"
+            />
           </el-form-item>
-          <el-form-item label="最大输出 Tokens">
-            <el-input-number v-model="form.max_output_tokens" :min="128" :max="32768" :step="128" />
+          <el-form-item v-if="selectedProfileId !== null" label="显示名称（可选）">
+            <el-input
+              v-model="displayName"
+              :placeholder="form.model || '默认使用实际模型名称'"
+              maxlength="80"
+            />
+            <div class="field-hint">
+              留空默认使用实际模型名称；模型列表和智能助手选择器显示此名称。
+            </div>
           </el-form-item>
-        </div>
-        <el-form-item label="启用配置">
-          <el-switch v-model="form.is_active" />
-        </el-form-item>
-        <div class="actions">
-          <el-button type="primary" :loading="saving" @click="saveConfiguration"
-            >保存配置</el-button
-          >
-          <el-button :loading="testing" @click="saveAndTest">保存并测试连接</el-button>
-          <el-button
-            v-if="selectedProfileId !== null && selectedProfileId > 0"
-            type="danger"
-            plain
-            @click="removeSelectedProfile"
-          >删除模型</el-button>
-        </div>
-      </el-form>
-      <p v-if="updatedAt && selectedProfileId === null" class="updated-at">
-        最后更新：{{ new Date(updatedAt).toLocaleString() }}
-      </p>
-    </section>
+          <el-form-item label="实际模型名称" prop="model">
+            <el-select
+              v-if="form.provider === 'ollama' || availableModels.length"
+              v-model="form.model"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="选择已安装模型或输入模型名称"
+            >
+              <el-option
+                v-for="name in [...new Set([...ollamaModels, ...availableModels])]"
+                :key="name"
+                :label="name"
+                :value="name"
+              />
+            </el-select>
+            <el-input v-else v-model="form.model" placeholder="例如 deepseek-flash" />
+            <el-button
+              v-if="selectedProfileId !== null"
+              :loading="discovering"
+              @click="fetchAvailableModels"
+              >获取模型列表</el-button
+            >
+            <el-button
+              v-if="form.provider === 'ollama' && selectedProfileId === null"
+              :loading="discovering"
+              @click="discoverOllamaModels"
+              >保存并获取本地模型列表</el-button
+            >
+          </el-form-item>
+          <div class="advanced-grid">
+            <el-form-item label="思考模式">
+              <el-select v-model="form.thinking_mode">
+                <el-option label="跟随模型默认" value="" />
+                <el-option label="启用" value="enabled" />
+                <el-option label="禁用" value="disabled" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="请求超时（秒）">
+              <el-input-number v-model="form.timeout_seconds" :min="10" :max="300" />
+            </el-form-item>
+            <el-form-item label="Temperature">
+              <el-input-number v-model="form.temperature" :min="0" :max="2" :step="0.1" />
+            </el-form-item>
+            <el-form-item label="最大输出 Tokens">
+              <el-input-number
+                v-model="form.max_output_tokens"
+                :min="128"
+                :max="32768"
+                :step="128"
+              />
+            </el-form-item>
+          </div>
+          <el-form-item label="启用配置">
+            <el-switch v-model="form.is_active" />
+          </el-form-item>
+          <div class="actions">
+            <el-button type="primary" :loading="saving" @click="saveConfiguration"
+              >保存配置</el-button
+            >
+            <el-button :loading="testing" @click="saveAndTest">保存并测试连接</el-button>
+            <el-button
+              v-if="selectedProfileId !== null && selectedProfileId > 0"
+              type="danger"
+              plain
+              @click="removeSelectedProfile"
+              >删除模型</el-button
+            >
+          </div>
+        </el-form>
+        <p v-if="updatedAt && selectedProfileId === null" class="updated-at">
+          最后更新：{{ new Date(updatedAt).toLocaleString() }}
+        </p>
+      </section>
     </div>
   </div>
 </template>
@@ -451,13 +479,31 @@ onMounted(() => {
   gap: 20px;
   max-width: 1440px;
 }
-.settings-layout.single-column { grid-template-columns: minmax(0, 920px); }
-.settings-panel { min-width: 0; }
-.model-library { position: sticky; top: 16px; }
-.model-library .model-actions { align-items: stretch; flex-direction: column; }
-.model-library .model-actions .el-button { margin-left: 0; width: 100%; justify-content: flex-start; }
-.model-library .model-actions .el-select { width: 100% !important; }
-.model-library .model-actions .el-button + .el-button { margin-left: 0; }
+.settings-layout.single-column {
+  grid-template-columns: minmax(0, 920px);
+}
+.settings-panel {
+  min-width: 0;
+}
+.model-library {
+  position: sticky;
+  top: 16px;
+}
+.model-library .model-actions {
+  align-items: stretch;
+  flex-direction: column;
+}
+.model-library .model-actions .el-button {
+  margin-left: 0;
+  width: 100%;
+  justify-content: flex-start;
+}
+.model-library .model-actions .el-select {
+  width: 100% !important;
+}
+.model-library .model-actions .el-button + .el-button {
+  margin-left: 0;
+}
 .advanced-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -483,7 +529,11 @@ onMounted(() => {
   }
 }
 @media (max-width: 980px) {
-  .settings-layout { grid-template-columns: minmax(0, 1fr); }
-  .model-library { position: static; }
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .model-library {
+    position: static;
+  }
 }
 </style>

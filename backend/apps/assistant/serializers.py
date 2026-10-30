@@ -49,7 +49,9 @@ class AssistantModelProfileSerializer(serializers.ModelSerializer):
         provider = attrs.get("provider", getattr(instance, "provider", AIProviderName.OPENAI_COMPATIBLE))
         base_url = str(attrs.get("base_url", getattr(instance, "base_url", "")))
         model = str(attrs.get("model", getattr(instance, "model", ""))).strip()
-        has_key = bool(attrs.get("api_key") or (instance and instance.api_key_ciphertext) or self.context.get("duplicate_has_key"))
+        has_key = bool(
+            attrs.get("api_key") or (instance and instance.api_key_ciphertext) or self.context.get("duplicate_has_key")
+        )
         if provider == AIProviderName.FAKE:
             if not settings.DEBUG and not settings.AI_ALLOW_FAKE_PROVIDER:
                 raise serializers.ValidationError({"provider": "生产环境不允许使用测试 Provider。"})

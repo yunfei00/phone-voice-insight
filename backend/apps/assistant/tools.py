@@ -233,7 +233,17 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     if model is None or handler is None:
         raise ValueError("不支持的业务工具")
     arguments = dict(arguments)
-    if "limit" in model.model_fields and isinstance(arguments.get("limit"), (int, float)) and not isinstance(arguments["limit"], bool):
-        arguments["limit"] = max(1, min(int(arguments["limit"]), 50 if name == "get_issue_statistics" else 30 if name == "search_feedback" else 20))
+    if (
+        "limit" in model.model_fields
+        and isinstance(arguments.get("limit"), (int, float))
+        and not isinstance(arguments["limit"], bool)
+    ):
+        arguments["limit"] = max(
+            1,
+            min(
+                int(arguments["limit"]),
+                50 if name == "get_issue_statistics" else 30 if name == "search_feedback" else 20,
+            ),
+        )
     validated = model.model_validate(arguments)
     return handler(validated)

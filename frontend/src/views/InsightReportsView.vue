@@ -104,7 +104,10 @@ onMounted(async () => {
           ><el-tag size="small" :type="item.status === 'READY' ? 'success' : 'warning'">{{
             item.status
           }}</el-tag></button
-        ><el-empty v-if="!reports.length" description="暂无报告，可点击立即生成报告（需管理员权限）" />
+        ><el-empty
+          v-if="!reports.length"
+          description="暂无报告，可点击立即生成报告（需管理员权限）"
+        />
       </aside>
       <article class="tech-panel report-content">
         <template v-if="selected?.snapshot"

@@ -166,7 +166,12 @@ onMounted(async () => {
 
 <template>
   <div class="reviews-page">
-    <header class="page-header"><div><h1 class="page-title">原始数据</h1><p class="page-description">查看、筛选与检索已采集的原始反馈数据</p></div></header>
+    <header class="page-header">
+      <div>
+        <h1 class="page-title">原始数据</h1>
+        <p class="page-description">查看、筛选与检索已采集的原始反馈数据</p>
+      </div>
+    </header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
     <div class="panel data-panel">
       <div class="filters">

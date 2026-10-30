@@ -556,7 +556,12 @@ onUnmounted(() => {
         ><span>有效分析量</span><strong>{{ quality?.successful_runs || 0 }}</strong></el-card
       >
       <el-card shadow="never"
-        ><span>Schema 合法率</span><strong>{{ quality?.schema_valid_rate == null ? '尚无数据' : (quality.schema_valid_rate * 100).toFixed(1) + '%' }}</strong></el-card
+        ><span>Schema 合法率</span
+        ><strong>{{
+          quality?.schema_valid_rate == null
+            ? '尚无数据'
+            : (quality.schema_valid_rate * 100).toFixed(1) + '%'
+        }}</strong></el-card
       >
       <el-card shadow="never"
         ><span>待人工复核</span><strong>{{ quality?.review_required ?? 0 }}</strong></el-card

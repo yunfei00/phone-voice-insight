@@ -450,7 +450,12 @@ export const createStructuredBatch = async (payload: {
   celery_task_id: string | null
   matched_content_ids: number[]
   dry_run?: boolean
-  preview?: { matched_count: number; estimated_tokens: number; estimated_cost: string; cost_estimate_reliable: boolean }
+  preview?: {
+    matched_count: number
+    estimated_tokens: number
+    estimated_cost: string
+    cost_estimate_reliable: boolean
+  }
 }> => (await apiClient.post('/structured-batches/', payload)).data
 
 export const cancelStructuredBatch = async (id: number): Promise<StructuredBatch> =>
@@ -723,7 +728,9 @@ export const getInsightReports = async (
 ): Promise<PaginatedResponse<InsightReport>> =>
   (await apiClient.get<PaginatedResponse<InsightReport>>('/dashboard/reports/', { params })).data
 
-export const generateInsightReport = async (report_type: 'DAILY' | 'WEEKLY'): Promise<{ task_id: string; status: string }> =>
+export const generateInsightReport = async (
+  report_type: 'DAILY' | 'WEEKLY',
+): Promise<{ task_id: string; status: string }> =>
   (await apiClient.post('/dashboard/reports/generate/', { report_type })).data
 
 export const getInsightReport = async (id: number): Promise<InsightReport> =>
@@ -778,7 +785,8 @@ export const testAssistantModel = async (
   ).data
 
 export const getAssistantAvailableModels = async (id: number): Promise<string[]> =>
-  (await apiClient.get<{ models: string[] }>(`/assistant/models/${id}/available-models/`)).data.models
+  (await apiClient.get<{ models: string[] }>(`/assistant/models/${id}/available-models/`)).data
+    .models
 
 export const getAssistantOllamaModels = async (id: number): Promise<string[]> =>
   (await apiClient.get<{ models: string[] }>(`/assistant/models/${id}/ollama-models/`)).data.models

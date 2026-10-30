@@ -89,7 +89,9 @@ urlpatterns = [
         name="dashboard-issue-detail",
     ),
     path("api/v1/dashboard/reports/", DashboardReportListView.as_view(), name="dashboard-reports"),
-    path("api/v1/dashboard/reports/generate/", DashboardReportGenerateView.as_view(), name="dashboard-reports-generate"),
+    path(
+        "api/v1/dashboard/reports/generate/", DashboardReportGenerateView.as_view(), name="dashboard-reports-generate"
+    ),
     path(
         "api/v1/dashboard/reports/<int:report_id>/",
         DashboardReportDetailView.as_view(),

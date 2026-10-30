@@ -127,7 +127,9 @@ class StructuredBatchViewSet(ViewSet):
                         "matched_count": len(content_ids),
                         "estimated_tokens": estimated_tokens,
                         "estimated_cost": str(estimated_cost),
-                        "cost_estimate_reliable": bool(values["input_cost_per_million"] or values["output_cost_per_million"]),
+                        "cost_estimate_reliable": bool(
+                            values["input_cost_per_million"] or values["output_cost_per_million"]
+                        ),
                     },
                     "matched_content_ids": content_ids,
                     "batch": None,

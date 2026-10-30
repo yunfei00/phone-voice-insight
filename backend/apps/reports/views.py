@@ -153,11 +153,14 @@ class DashboardReportGenerateView(APIView):
         if report_type not in ("DAILY", "WEEKLY"):
             return Response({"message": "报告类型无效"}, status=status.HTTP_400_BAD_REQUEST)
         from apps.reports.tasks import generate_insight_reports
+
         try:
             task = generate_insight_reports.delay(report_type)
         except Exception:
             return Response({"message": "任务提交失败，请检查 Celery 服务"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        return Response({"task_id": task.id, "report_type": report_type, "status": "QUEUED"}, status=status.HTTP_202_ACCEPTED)
+        return Response(
+            {"task_id": task.id, "report_type": report_type, "status": "QUEUED"}, status=status.HTTP_202_ACCEPTED
+        )
 
 
 class DashboardReportDetailView(APIView):
@@ -190,7 +193,11 @@ class SystemResourcesView(APIView):
             total, available = 0, 0
         try:
             disk = shutil.disk_usage("/")
-            disk_info = {"total": disk.total, "used": disk.used, "percent": round(disk.used / disk.total * 100, 1) if disk.total else None}
+            disk_info = {
+                "total": disk.total,
+                "used": disk.used,
+                "percent": round(disk.used / disk.total * 100, 1) if disk.total else None,
+            }
         except OSError:
             disk_info = None
         cpu_count = os.cpu_count() or 1
@@ -201,16 +208,23 @@ class SystemResourcesView(APIView):
             cpu_load = None
         from django.contrib.auth import get_user_model
         from django.core.cache import cache
+
         user_ids = get_user_model().objects.filter(is_active=True).values_list("pk", flat=True)
         online = sum(bool(cache.get(f"presence:user:{user_id}")) for user_id in user_ids)
-        return Response({
-            "scope": "backend_container",
-            "cpu": {"cores": cpu_count, "load_percent": cpu_load, "metric": "1分钟负载/核心数（非CPU使用率）"},
-            "memory": {"total": total, "used": max(0, total - available), "percent": round((total - available) / total * 100, 1) if total else None},
-            "disk": disk_info,
-            "online": {"count": online, "definition": "最近120秒有活动心跳的独立账号数"},
-            "sampled_at": timezone.now().isoformat(),
-        })
+        return Response(
+            {
+                "scope": "backend_container",
+                "cpu": {"cores": cpu_count, "load_percent": cpu_load, "metric": "1分钟负载/核心数（非CPU使用率）"},
+                "memory": {
+                    "total": total,
+                    "used": max(0, total - available),
+                    "percent": round((total - available) / total * 100, 1) if total else None,
+                },
+                "disk": disk_info,
+                "online": {"count": online, "definition": "最近120秒有活动心跳的独立账号数"},
+                "sampled_at": timezone.now().isoformat(),
+            }
+        )
 
 
 class DashboardOperationsView(APIView):
