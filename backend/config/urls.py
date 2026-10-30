@@ -14,6 +14,7 @@ from apps.accounts.views import (
     login,
     logout,
     me,
+    presence_heartbeat,
 )
 from apps.analysis.structured_views import (
     StructuredAnalysisViewSet,
@@ -94,6 +95,7 @@ urlpatterns = [
     ),
     path("api/v1/dashboard/operations/", DashboardOperationsView.as_view(), name="dashboard-operations"),
     path("api/v1/system/resources/", SystemResourcesView.as_view(), name="system-resources"),
+    path("api/v1/presence/heartbeat/", presence_heartbeat, name="presence-heartbeat"),
     path("api/v1/", include(router.urls)),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
