@@ -81,6 +81,7 @@ describe('AI 智能助手工作台', () => {
     document.body.innerHTML = ''
     vi.stubGlobal('crypto', { randomUUID: vi.fn(() => `request-${Math.random()}`) })
     vi.mocked(getAssistantModels).mockResolvedValue({
+      assistant_model_id: 8,
       default_model: {
         id: null,
         name: '使用个人默认模型',
@@ -183,15 +184,13 @@ describe('AI 智能助手工作台', () => {
     app.unmount()
   })
 
-  it('模型选择更新会话且模型管理器可打开', async () => {
+  it('客户对话界面不显示模型管理或模型选择', async () => {
     const { app, container } = mount()
     await flush()
-    const manage = [...container.querySelectorAll('button')].find((item) =>
-      item.textContent?.includes('模型管理'),
-    )
-    manage?.click()
-    await nextTick()
-    expect(document.body.textContent).toContain('助手模型管理')
+    expect(container.textContent).toContain('AI 智能助手')
+    expect(container.textContent).not.toContain('助手模型管理')
+    expect(container.textContent).not.toContain('选择模型')
+    expect(getAssistantModels).not.toHaveBeenCalled()
     app.unmount()
   })
 })
