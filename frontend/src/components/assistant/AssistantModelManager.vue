@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, reactive, ref, watch } from 'vue'
+import axios from 'axios'
 
 import {
   createAssistantModel,
@@ -49,6 +50,20 @@ function reset(item?: AssistantModelProfile) {
   })
 }
 
+function describeError(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as Record<string, unknown> | undefined
+    if (data) {
+      const details = Object.entries(data)
+        .map(([field, value]) => `${field}: ${Array.isArray(value) ? value.join('；') : String(value)}`)
+        .join('；')
+      if (details) return details
+    }
+    return error.message
+  }
+  return error instanceof Error ? error.message : '请求失败，请检查服务配置'
+}
+
 async function save() {
   if (!form.name.trim() || !form.model.trim()) return ElMessage.warning('请填写配置名称和模型名称')
   saving.value = true
@@ -60,6 +75,8 @@ async function save() {
     ElMessage.success('模型配置已保存')
     reset()
     emit('refresh')
+  } catch (error) {
+    ElMessage.error(`保存失败：${describeError(error)}`)
   } finally {
     saving.value = false
   }
@@ -70,6 +87,8 @@ async function test(item: AssistantModelProfile) {
   try {
     const result = await testAssistantModel(item.id)
     ElMessage.success(`连接成功，耗时 ${result.latency_ms}ms`)
+  } catch (error) {
+    ElMessage.error(`模型连接失败：${describeError(error)}`)
   } finally {
     testingId.value = undefined
   }
