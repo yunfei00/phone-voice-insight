@@ -149,6 +149,53 @@ class DashboardReportDetailView(APIView):
         return Response(_report_payload(report, include_snapshot=True))
 
 
+class SystemResourcesView(APIView):
+    """Container-scoped runtime metrics; host-wide usage requires a host agent."""
+
+    def get(self, request: Request) -> Response:
+        import os
+        import shutil
+        import time
+        from pathlib import Path
+
+        def memory() -> tuple[int, int]:
+            values = {}
+            with open("/proc/meminfo", encoding="utf-8") as stream:
+                for line in stream:
+                    key, _, value = line.partition(":")
+                    if key in {"MemTotal", "MemAvailable"}:
+                        values[key] = int(value.strip().split()[0]) * 1024
+            return values.get("MemTotal", 0), values.get("MemAvailable", 0)
+
+        try:
+            total, available = memory()
+        except (OSError, ValueError):
+            total, available = 0, 0
+        try:
+            disk = shutil.disk_usage("/")
+            disk_info = {"total": disk.total, "used": disk.used, "percent": round(disk.used / disk.total * 100, 1) if disk.total else None}
+        except OSError:
+            disk_info = None
+        cpu_count = os.cpu_count() or 1
+        try:
+            load = os.getloadavg()[0]
+            cpu_load = round(load / cpu_count * 100, 1)
+        except (OSError, AttributeError):
+            cpu_load = None
+        from datetime import timedelta
+        from django.contrib.auth import get_user_model
+        since = timezone.now() - timedelta(minutes=5)
+        online = get_user_model().objects.filter(last_login__gte=since, is_active=True).count()
+        return Response({
+            "scope": "backend_container",
+            "cpu": {"cores": cpu_count, "load_percent": cpu_load, "metric": "1分钟负载/核心数（非CPU使用率）"},
+            "memory": {"total": total, "used": max(0, total - available), "percent": round((total - available) / total * 100, 1) if total else None},
+            "disk": disk_info,
+            "online": {"count": online, "definition": "最近5分钟登录用户数（非实时在线人数）"},
+            "sampled_at": timezone.now().isoformat(),
+        })
+
+
 class DashboardOperationsView(APIView):
     def get(self, request: Request) -> Response:
         role = get_user_role(request.user)
