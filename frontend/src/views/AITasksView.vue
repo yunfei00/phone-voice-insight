@@ -171,7 +171,9 @@ onUnmounted(() => {
         <p>预算依赖模型单价配置和后端累计计算，不能保证实际账单严格不超过该值。</p>
       </div>
     </el-card
-    ><el-alert v-if="error" :title="error" type="error" /><el-table
+    >
+    <el-alert v-if="preview" type="info" :closable="true" @close="preview = null" :title="`预估结果：${preview.matched_count} 条，约 ${preview.estimated_tokens} Token；${preview.cost_estimate_reliable ? '估算费用 ¥' + preview.estimated_cost : '费用未配置，无法可靠预估'}。未调用模型、未创建任务。`" />
+    <el-alert v-if="error" :title="error" type="error" /><el-table
       v-loading="loading"
       :data="batches.filter((batch) => !batch.dry_run)"
       empty-text="暂无 V1 任务"
@@ -279,8 +281,4 @@ small {
     grid-template-columns: 1fr;
   }
 }
-</style>      ><el-table-column prop="skipped_count" label="跳过" width="75" v-if="false" />
-      <el-table-column label="实际成本" width="110">
-        <template #default="{ row }">{{ Number(row.actual_cost) > 0 ? '¥' + Number(row.actual_cost).toFixed(4) : '—' }}</template>
-      </el-table-column
-
+</style>
