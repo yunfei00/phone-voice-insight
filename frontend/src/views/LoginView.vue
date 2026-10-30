@@ -65,7 +65,7 @@ async function submit(): Promise<void> {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: linear-gradient(135deg, #111a2d, #263a65);
+  background: linear-gradient(145deg, #f2f6fc 0%, #e8eef8 55%, #dfe9f6 100%);
 }
 
 .login-card {
@@ -74,7 +74,8 @@ async function submit(): Promise<void> {
   text-align: center;
   background: #fff;
   border-radius: 18px;
-  box-shadow: 0 24px 70px rgb(0 0 0 / 25%);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 20px 60px rgb(30 58 98 / 10%);
 }
 
 .login-brand {
@@ -86,19 +87,36 @@ async function submit(): Promise<void> {
   color: #fff;
   font-weight: 800;
   font-size: 20px;
-  background: #3b82f6;
+  background: #2459a6;
   border-radius: 15px;
 }
 
 h1 {
   margin: 0;
+  color: #1d3554;
   font-size: 24px;
 }
 p {
   margin: 8px 0 28px;
-  color: #7b8498;
+  color: #64748b;
 }
 .login-button {
   width: 100%;
+  background: #2459a6;
+  border-color: #2459a6;
+}
+.login-card :deep(.el-input__wrapper) {
+  background: #f8fafc;
+  box-shadow: 0 0 0 1px #d8e1ec inset;
+}
+.login-card :deep(.el-input__inner) {
+  color: #1d3554;
+}
+.login-card :deep(.el-input__inner::placeholder),
+.login-card :deep(.el-input__prefix) {
+  color: #8493a7;
+}
+.login-card :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #2459a6 inset;
 }
 </style>
