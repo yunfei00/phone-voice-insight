@@ -758,6 +758,9 @@ export const testAssistantModel = async (
     )
   ).data
 
+export const getAssistantAvailableModels = async (id: number): Promise<string[]> =>
+  (await apiClient.get<{ models: string[] }>(`/assistant/models/${id}/available-models/`)).data.models
+
 export const getAssistantOllamaModels = async (id: number): Promise<string[]> =>
   (await apiClient.get<{ models: string[] }>(`/assistant/models/${id}/ollama-models/`)).data.models
 
