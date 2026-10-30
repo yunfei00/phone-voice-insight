@@ -3,10 +3,10 @@ from typing import Any, cast
 import httpx
 from ai.providers import AIProviderError
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import update_last_login
 from django.contrib.auth.models import User as DjangoUser
-from django.db import transaction
+from django.contrib.auth.models import update_last_login
 from django.core.cache import cache
+from django.db import transaction
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action, api_view, permission_classes

@@ -142,7 +142,7 @@ class AssistantOrchestrator:
                     "total_tokens": self.response_message.total_tokens,
                 },
             }
-        except (ValueError, ValidationError) as exc:
+        except (ValueError, ValidationError):
             yield from self._fail(
                 "ASSISTANT_TOOL_ARGUMENT_INVALID", "查询条件未能正确识别，请调整时间范围或筛选条件后重试。"
             )

@@ -33,13 +33,13 @@ from apps.reports.views import (
     DashboardIssueDetailView,
     DashboardIssueListView,
     DashboardOperationsView,
-    SystemResourcesView,
     DashboardOverviewView,
     DashboardProductsView,
     DashboardReportDetailView,
     DashboardReportGenerateView,
     DashboardReportListView,
     DashboardTrendsView,
+    SystemResourcesView,
 )
 from apps.reviews.ai_views import GovernanceAIViewSet
 from apps.reviews.views import ReviewQualityViewSet, ReviewRecordViewSet, ThreadTreeViewSet

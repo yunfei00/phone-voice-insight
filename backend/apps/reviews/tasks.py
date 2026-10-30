@@ -15,7 +15,6 @@ from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, Governanc
 from apps.reviews.services.ai_governance import review_quality_with_ai
 from apps.reviews.services.governance_pipeline import GovernanceProcessor, process_reviews
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -282,9 +281,9 @@ def recover_stale_governance_ai_batches(stale_seconds: int = 300) -> dict[str, i
 
 @shared_task(name="run_automatic_voice_pipeline", autoretry_for=(), max_retries=0)
 def run_automatic_voice_pipeline(product_id: int, source_id: int | None = None) -> dict[str, object]:
-    from apps.reviews.services.automatic_pipeline import run_automatic_pipeline
-
     from django.core.cache import cache
+
+    from apps.reviews.services.automatic_pipeline import run_automatic_pipeline
 
     lock_key = f"automatic-voice-pipeline:{product_id}"
     if not cache.add(lock_key, "running", timeout=3600):

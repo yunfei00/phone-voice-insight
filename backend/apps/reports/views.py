@@ -175,8 +175,6 @@ class SystemResourcesView(APIView):
     def get(self, _request: Request) -> Response:
         import os
         import shutil
-        import time
-        from pathlib import Path
 
         def memory() -> tuple[int, int]:
             values = {}
