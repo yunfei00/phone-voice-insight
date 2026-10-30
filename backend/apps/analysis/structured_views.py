@@ -7,6 +7,7 @@ from typing import Any, cast
 from ai.taxonomy import load_taxonomy
 from ai.validation import validate_structured_payload
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Q, QuerySet
 from django.db.models.functions import TruncDate
@@ -17,6 +18,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet, ViewSet
 
+from apps.accounts.ai_service import get_user_ai_provider
 from apps.accounts.permissions import IsAnalystOrAdministrator
 from apps.analysis.models import (
     AnalysisBatch,
@@ -201,9 +203,6 @@ class StructuredBatchViewSet(ViewSet):
         product_id = request.data.get("product_id")
         if not isinstance(product_id, int) or product_id <= 0:
             return Response({"error_code": "PRODUCT_REQUIRED"}, status=status.HTTP_400_BAD_REQUEST)
-        from django.core.cache import cache
-        from apps.accounts.ai_service import get_user_ai_provider
-
         lock_key = f"structured-dispatch:{request.user.pk}:{product_id}"
         if not cache.add(lock_key, "1", timeout=240):
             return Response({"error_code": "DISPATCH_BUSY"}, status=status.HTTP_409_CONFLICT)
