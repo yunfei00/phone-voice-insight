@@ -202,7 +202,7 @@ class StructuredBatchViewSet(ViewSet):
         if not isinstance(product_id, int) or product_id <= 0:
             return Response({"error_code": "PRODUCT_REQUIRED"}, status=status.HTTP_400_BAD_REQUEST)
         from django.core.cache import cache
-        from apps.accounts.services.ai_provider import get_user_ai_provider
+        from apps.accounts.ai_service import get_user_ai_provider
 
         lock_key = f"structured-dispatch:{request.user.pk}:{product_id}"
         if not cache.add(lock_key, "1", timeout=240):
