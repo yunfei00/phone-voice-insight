@@ -37,7 +37,7 @@ def login(request: Request) -> Response:
     serializer.is_valid(raise_exception=True)
     user = serializer.validated_data["user"]
     token, _ = Token.objects.get_or_create(user=user)
-    update_last_login(None, user)
+    update_last_login(DjangoUser, user)
     return Response({"token": token.key, "user": UserSerializer(user).data})
 
 
