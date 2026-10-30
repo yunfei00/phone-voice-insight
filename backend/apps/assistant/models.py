@@ -65,9 +65,7 @@ class AssistantModelSelection(models.Model):
     """One platform-wide assistant model, selected by an administrator."""
 
     slot = models.CharField(max_length=32, primary_key=True, default="assistant")
-    profile = models.ForeignKey(
-        AssistantModelProfile, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    profile = models.ForeignKey(AssistantModelProfile, on_delete=models.SET_NULL, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
 
