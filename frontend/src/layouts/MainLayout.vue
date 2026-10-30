@@ -14,7 +14,6 @@ import {
   TrendCharts,
   Warning,
   Notebook,
-  Operation,
   Setting,
   UserFilled,
 } from '@element-plus/icons-vue'
