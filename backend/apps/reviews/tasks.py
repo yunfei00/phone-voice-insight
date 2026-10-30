@@ -284,7 +284,15 @@ def recover_stale_governance_ai_batches(stale_seconds: int = 300) -> dict[str, i
 def run_automatic_voice_pipeline(product_id: int, source_id: int | None = None) -> dict[str, object]:
     from apps.reviews.services.automatic_pipeline import run_automatic_pipeline
 
-    return run_automatic_pipeline(product_id, source_id).as_dict()
+    from django.core.cache import cache
+
+    lock_key = f"automatic-voice-pipeline:{product_id}"
+    if not cache.add(lock_key, "running", timeout=3600):
+        return {"status": "ALREADY_RUNNING", "product_id": product_id, "source_id": source_id}
+    try:
+        return run_automatic_pipeline(product_id, source_id).as_dict()
+    finally:
+        cache.delete(lock_key)
 
 
 @shared_task(name="reconcile_automatic_voice_pipeline", time_limit=120, autoretry_for=(), max_retries=0)
