@@ -64,18 +64,16 @@ class AssistantModelProfileViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=("post",), url_path="duplicate")
-    def duplicate(self, request: Request, pk: str | None = None) -> Response:
+    def duplicate(self, request: Request, pk: str | None = None) -> Response:  # noqa: ARG002
         source = self.get_object()
         data = request.data.copy()
         data["provider"] = source.provider
         data["base_url"] = source.base_url
+        if not data.get("api_key") and source.api_key_ciphertext:
+            data["api_key"] = source.get_api_key()
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         profile = serializer.save()
-        if not data.get("api_key") and source.api_key_ciphertext:
-            profile.api_key_ciphertext = source.api_key_ciphertext
-            profile.api_key_last4 = source.api_key_last4
-            profile.save(update_fields=["api_key_ciphertext", "api_key_last4", "updated_at"])
         return Response(self.get_serializer(profile).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=("post",), url_path="select-assistant")
