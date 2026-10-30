@@ -131,6 +131,13 @@ function onSortChange(sort: {
   void loadReviews()
 }
 
+function onPageSizeChange(size: number): void {
+  if (filters.page_size === size) return
+  filters.page_size = size
+  filters.page = 1
+  void loadReviews()
+}
+
 function applyFilters(): void {
   filters.page = 1
   void Promise.all([loadReviews(), loadMetadata()])
@@ -159,6 +166,12 @@ onMounted(async () => {
 
 <template>
   <div class="reviews-page">
+    <header class="page-header">
+      <div>
+        <h1 class="page-title">原始数据</h1>
+        <p class="page-description">查看、筛选与检索已采集的原始反馈数据</p>
+      </div>
+    </header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
     <div class="panel data-panel">
       <div class="filters">
@@ -278,14 +291,18 @@ onMounted(async () => {
         >
       </el-table>
 
-      <el-pagination
-        v-model:current-page="filters.page"
-        v-model:page-size="filters.page_size"
-        class="pagination"
-        layout="total, prev, pager, next"
-        :total="total"
-        @current-change="loadReviews"
-      />
+      <div class="reviews-pagination">
+        <el-pagination
+          v-model:current-page="filters.page"
+          class="pagination"
+          layout="total, sizes, prev, pager, next, jumper"
+          :page-size="filters.page_size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          @size-change="onPageSizeChange"
+          @current-change="loadReviews"
+        />
+      </div>
     </div>
 
     <el-drawer
@@ -402,9 +419,16 @@ pre {
   }
 }
 
+.reviews-pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  overflow-x: auto;
+  margin-top: 18px;
+}
+
 .pagination {
   justify-content: flex-end;
-  margin-top: 18px;
 }
 
 @media (max-width: 900px) {

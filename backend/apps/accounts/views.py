@@ -4,6 +4,8 @@ import httpx
 from ai.providers import AIProviderError
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User as DjangoUser
+from django.contrib.auth.models import update_last_login
+from django.core.cache import cache
 from django.db import transaction
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -35,6 +37,7 @@ def login(request: Request) -> Response:
     serializer.is_valid(raise_exception=True)
     user = serializer.validated_data["user"]
     token, _ = Token.objects.get_or_create(user=user)
+    update_last_login(DjangoUser, user)
     return Response({"token": token.key, "user": UserSerializer(user).data})
 
 
@@ -43,7 +46,15 @@ def login(request: Request) -> Response:
 def logout(request: Request) -> Response:
     user = cast(DjangoUser, request.user)
     Token.objects.filter(user=user).delete()
+    cache.delete(f"presence:user:{user.pk}")
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def presence_heartbeat(request: Request) -> Response:
+    cache.set(f"presence:user:{request.user.pk}", True, timeout=120)
+    return Response({"status": "ok"})
 
 
 @api_view(["GET"])

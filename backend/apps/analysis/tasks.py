@@ -109,7 +109,10 @@ def run_structured_analysis_batch_task(
         batch.status = AnalysisBatchStatus.PARTIAL if batch.failed_count else AnalysisBatchStatus.SUCCESS
     batch.finished_at = timezone.now()
     batch.save()
-    dispatch_pending_structured_reviews.delay(batch.created_by_id, batch.product_id)
+    try:
+        dispatch_pending_structured_reviews.delay(batch.created_by_id, batch.product_id)
+    except Exception:
+        logger.exception("structured_followup_dispatch_failed batch_id=%s", batch.id)
     return {"batch_id": batch.id, "status": batch.status, "success": batch.success_count, "failed": batch.failed_count}
 
 
@@ -155,12 +158,21 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
                 is_current=True,
                 status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
             ).values("content_id")
-            failed = AnalysisRun.objects.filter(
-                is_current=True,
-                status=StructuredRunStatus.FAILED,
-                provider=provider.provider_name,
-                model=provider.model,
-            ).values("content_id")
+            # Retry model failures on later dispatch cycles, but never loop forever.
+            # Count historical runs because each retry replaces the current run.
+            from django.db.models import Count
+
+            failed = (
+                AnalysisRun.objects.filter(
+                    status=StructuredRunStatus.FAILED,
+                    provider=provider.provider_name,
+                    model=provider.model,
+                )
+                .values("content_id")
+                .annotate(failures=Count("id"))
+                .filter(failures__gte=3)
+                .values("content_id")
+            )
             corpus = final_corpus_reviews().exclude(pk__in=completed).exclude(pk__in=failed)
             if product_id is not None:
                 corpus = corpus.filter(product_id=product_id)

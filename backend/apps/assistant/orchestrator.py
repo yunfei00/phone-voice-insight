@@ -12,11 +12,11 @@ from django.db import transaction
 from django.utils import timezone
 from pydantic import ValidationError
 
-from apps.accounts.ai_service import get_user_ai_configuration, provider_settings_from_model
 from apps.assistant.models import (
     AssistantConversation,
     AssistantMessage,
     AssistantModelProfile,
+    AssistantModelSelection,
     ConversationStatus,
     MessageStatus,
 )
@@ -142,8 +142,10 @@ class AssistantOrchestrator:
                     "total_tokens": self.response_message.total_tokens,
                 },
             }
-        except (ValueError, ValidationError) as exc:
-            yield from self._fail("ASSISTANT_TOOL_ARGUMENT_INVALID", f"查询参数无效：{exc}")
+        except (ValueError, ValidationError):
+            yield from self._fail(
+                "ASSISTANT_TOOL_ARGUMENT_INVALID", "查询条件未能正确识别，请调整时间范围或筛选条件后重试。"
+            )
         except AIProviderError as exc:
             yield from self._fail(exc.code, exc.safe_message)
         except Exception:
@@ -226,36 +228,13 @@ class AssistantOrchestrator:
         yield {"type": "error", "code": code, "message": message}
 
 
-def _resolve_settings(conversation: AssistantConversation) -> tuple[AssistantProviderSettings, int | None]:
-    if conversation.use_default_model:
-        source = provider_settings_from_model(get_user_ai_configuration(conversation.user))
-        settings = AssistantProviderSettings(
-            **{
-                **source.__dict__,
-                "timeout_seconds": min(source.timeout_seconds, django_settings.ASSISTANT_MAX_EXECUTION_SECONDS),
-            }
-        )
-        profile_id = None
-    else:
-        if conversation.model_profile_id is None:
-            raise AIProviderError("AI_NOT_CONFIGURED", "当前会话未选择可用的模型配置。")
-        profile = AssistantModelProfile.objects.get(
-            pk=conversation.model_profile_id, user=conversation.user, is_active=True
-        )
-        settings = AssistantProviderSettings(
-            provider=profile.provider,
-            base_url=profile.base_url,
-            api_key=profile.get_api_key(),
-            model=profile.model,
-            thinking_mode=profile.thinking_mode,
-            timeout_seconds=min(profile.timeout_seconds, django_settings.ASSISTANT_MAX_EXECUTION_SECONDS),
-            temperature=float(profile.temperature),
-            max_output_tokens=profile.max_output_tokens,
-        )
-        profile_id = profile.id
-    if settings.provider != "fake":
-        validate_ai_endpoint(settings.base_url, provider=settings.provider)
-    return settings, profile_id
+def _resolve_settings(conversation: AssistantConversation) -> tuple[AssistantProviderSettings, int | None]:  # noqa: ARG001
+    """Resolve the administrator-selected model for every customer chat."""
+    selection = AssistantModelSelection.objects.select_related("profile").filter(slot="assistant").first()
+    profile = selection.profile if selection else None
+    if profile is None or not profile.is_active:
+        raise AIProviderError("AI_NOT_CONFIGURED", "管理员尚未在 AI 配置中选择可用的智能助手模型。")
+    return settings_from_profile(profile), profile.id
 
 
 def settings_from_profile(profile: AssistantModelProfile) -> AssistantProviderSettings:

@@ -122,21 +122,13 @@ const expectedNavigationLabels = [
   '产品对比中心',
   '用户问题洞察',
   'AI洞察报告',
-  '数据运行监控',
   '手机产品',
   '帖子视图',
   '原始数据',
   '数据质量',
   'AI结构化分析',
 ]
-const advancedNavigationLabels = [
-  ...expectedNavigationLabels,
-  'AI质量中心',
-  'AI任务中心',
-  '历史AI分析',
-  'AI配置',
-  '系统状态',
-]
+const advancedNavigationLabels = [...expectedNavigationLabels, 'AI任务中心', '运行监控']
 
 async function mountApp(path = '/dashboard', role: 'ADMIN' | 'ANALYST' | 'VIEWER' = 'VIEWER') {
   const container = document.createElement('div')
@@ -233,19 +225,20 @@ describe('App', () => {
     app.unmount()
   })
 
-  it('历史分析路由刷新后只高亮历史 AI 分析', async () => {
+  it('旧分析路由刷新后安全回退驾驶舱', async () => {
     const { app, container } = await mountApp('/analysis', 'ANALYST')
     await new Promise((resolve) => setTimeout(resolve, 0))
     await nextTick()
 
     const activeItems = Array.from(container.querySelectorAll('.nav-menu .el-menu-item.is-active'))
     expect(activeItems).toHaveLength(1)
-    expect(activeItems[0]?.textContent?.trim()).toBe('历史AI分析')
+    expect(activeItems[0]?.textContent?.trim()).toBe('智能驾驶舱')
 
     const navigationLabels = Array.from(container.querySelectorAll('.nav-menu .el-menu-item')).map(
       (item) => item.textContent?.trim(),
     )
     expect(navigationLabels).toEqual(advancedNavigationLabels)
+    expect(navigationLabels).not.toContain('AI配置')
 
     app.unmount()
   })
@@ -270,7 +263,7 @@ describe('App', () => {
     expect(container.textContent).toContain('98.00%')
     expect(container.textContent).toContain('公开 IP 属地完整率')
     expect(container.textContent).not.toContain('用户填写地区完整率')
-    expect(container.querySelector('.page-title')).toBeNull()
+    expect(container.querySelector('.page-title')).not.toBeNull()
     expect(container.querySelector('.metadata-strip')).not.toBeNull()
     expect(container.querySelectorAll('.metadata-strip > span')).toHaveLength(2)
 

@@ -10,7 +10,6 @@ import {
   deleteAssistantConversation,
   getAssistantConversations,
   getAssistantMessages,
-  getAssistantModels,
   getProducts,
   getSources,
   streamAssistantChat,
@@ -19,25 +18,15 @@ import {
 import AssistantComposer from '@/components/assistant/AssistantComposer.vue'
 import AssistantEvidence from '@/components/assistant/AssistantEvidence.vue'
 import AssistantMarkdown from '@/components/assistant/AssistantMarkdown.vue'
-import AssistantModelManager from '@/components/assistant/AssistantModelManager.vue'
-import AssistantModelSelector from '@/components/assistant/AssistantModelSelector.vue'
 import AssistantSidebar from '@/components/assistant/AssistantSidebar.vue'
-import type {
-  AssistantConversation,
-  AssistantMessage,
-  AssistantModelList,
-  DataSource,
-  Product,
-} from '@/types/api'
+import type { AssistantConversation, AssistantMessage, DataSource, Product } from '@/types/api'
 
 const route = useRoute()
 const conversations = ref<AssistantConversation[]>([])
 const activeId = ref('')
 const messages = ref<AssistantMessage[]>([])
-const models = ref<AssistantModelList>()
 const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
-const selectedModel = ref<number | null>(null)
 const productId = ref<number>()
 const sourceId = ref<number>()
 const dateRange = ref<[string, string]>()
@@ -45,7 +34,6 @@ const draft = ref('')
 const loading = ref(false)
 const messagesLoading = ref(false)
 const generating = ref(false)
-const managerVisible = ref(false)
 const chatScroll = ref<HTMLElement>()
 let controller: AbortController | undefined
 
@@ -67,13 +55,11 @@ function queryString(name: string): string | undefined {
 async function loadBase() {
   loading.value = true
   try {
-    const [modelData, conversationData, productData, sourceData] = await Promise.all([
-      getAssistantModels(),
+    const [conversationData, productData, sourceData] = await Promise.all([
       getAssistantConversations(),
       getProducts({ page_size: 100 }),
       getSources({ page_size: 100 }),
     ])
-    models.value = modelData
     conversations.value = conversationData
     products.value = productData.results
     sources.value = sourceData.results
@@ -88,10 +74,6 @@ async function loadBase() {
   } finally {
     loading.value = false
   }
-}
-
-async function refreshModels() {
-  models.value = await getAssistantModels()
 }
 
 async function refreshConversations() {
@@ -113,24 +95,10 @@ async function selectConversation(id: string) {
   messagesLoading.value = true
   try {
     messages.value = await getAssistantMessages(id)
-    const item = conversations.value.find((conversation) => conversation.id === id)
-    selectedModel.value = item?.use_default_model ? null : item?.model_profile || null
     await scrollToBottom()
   } finally {
     messagesLoading.value = false
   }
-}
-
-async function changeModel(value: number | null) {
-  if (!activeId.value || generating.value) return
-  selectedModel.value = value
-  const updated = await updateAssistantConversation(activeId.value, {
-    use_default_model: value === null,
-    model_profile: value,
-  })
-  const index = conversations.value.findIndex((item) => item.id === updated.id)
-  if (index >= 0) conversations.value[index] = updated
-  ElMessage.success('后续消息将使用所选模型')
 }
 
 async function renameConversation(item: AssistantConversation) {
@@ -152,13 +120,28 @@ async function removeConversation(item: AssistantConversation) {
   }
 }
 
+function makeUuid(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = ((bytes[6] ?? 0) & 15) | 64
+  bytes[8] = ((bytes[8] ?? 0) & 63) | 128
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join('-')
+}
+
 function optimisticMessage(
   role: 'USER' | 'ASSISTANT',
   content: string,
   requestId: string | null,
 ): AssistantMessage {
   return {
-    id: crypto.randomUUID(),
+    id: makeUuid(),
     role,
     content,
     request_id: requestId,
@@ -179,7 +162,7 @@ function optimisticMessage(
 async function send() {
   const content = draft.value.trim()
   if (!content || !activeId.value || generating.value) return
-  const requestId = crypto.randomUUID()
+  const requestId = makeUuid()
   const user = optimisticMessage('USER', content, null)
   const answer = optimisticMessage('ASSISTANT', '', requestId)
   messages.value.push(user, answer)
@@ -205,6 +188,7 @@ async function send() {
           answer.status = 'FAILED'
           answer.error_code = event.code || 'ASSISTANT_ERROR'
           answer.error_message = event.message || '助手处理失败'
+          ElMessage.error(answer.error_message)
         }
         if (event.type === 'cancelled') answer.status = 'CANCELLED'
         if (event.type === 'done') answer.status = 'COMPLETED'
@@ -221,7 +205,15 @@ async function send() {
   } finally {
     generating.value = false
     controller = undefined
-    await Promise.all([selectConversation(activeId.value), refreshConversations()])
+    try {
+      if (answer.status !== 'FAILED') {
+        await Promise.all([selectConversation(activeId.value), refreshConversations()])
+      } else {
+        await refreshConversations()
+      }
+    } catch {
+      // Keep the visible local error when refreshing conversation history fails.
+    }
   }
 }
 
@@ -266,13 +258,6 @@ onMounted(loadBase)
           </h1>
           <p>基于真实用户声音数据回答，统计结论均可追溯</p>
         </div>
-        <AssistantModelSelector
-          :model-value="selectedModel"
-          :models="models"
-          :disabled="generating"
-          @update:model-value="changeModel"
-          @manage="managerVisible = true"
-        />
       </header>
       <section class="assistant-filters">
         <el-select v-model="productId" clearable placeholder="全部产品"
@@ -345,7 +330,6 @@ onMounted(loadBase)
         @stop="stop"
       />
     </main>
-    <AssistantModelManager v-model="managerVisible" :models="models" @refresh="refreshModels" />
   </div>
 </template>
 
@@ -353,8 +337,8 @@ onMounted(loadBase)
 .assistant-page {
   display: grid;
   grid-template-columns: 270px minmax(0, 1fr);
-  height: calc(100vh - 104px);
-  min-height: 660px;
+  height: calc(100dvh - 120px);
+  min-height: 360px;
   overflow: hidden;
   border: 1px solid #29435c;
   border-radius: 14px;
@@ -363,8 +347,12 @@ onMounted(loadBase)
 }
 .assistant-workspace {
   display: flex;
+  min-height: 0;
   min-width: 0;
   flex-direction: column;
+}
+.assistant-workspace > :not(.chat-scroll) {
+  flex-shrink: 0;
 }
 .assistant-header {
   display: flex;
@@ -411,8 +399,10 @@ onMounted(loadBase)
 }
 .chat-scroll {
   min-height: 0;
-  flex: 1;
-  overflow: auto;
+  flex: 1 1 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   padding: 24px max(22px, calc((100% - 900px) / 2));
 }
 .empty-chat {
@@ -522,17 +512,18 @@ onMounted(loadBase)
 @media (max-width: 900px) {
   .assistant-page {
     grid-template-columns: 1fr;
-    height: auto;
-    min-height: calc(100vh - 90px);
-    overflow: visible;
+    height: calc(100dvh - 90px);
+    min-height: 360px;
+    overflow: hidden;
   }
   .assistant-page :deep(.conversation-sidebar) {
-    max-height: 220px;
+    max-height: 140px;
+    flex-shrink: 0;
     border-right: 0;
     border-bottom: 1px solid #29435c;
   }
   .assistant-workspace {
-    min-height: 720px;
+    min-height: 0;
   }
   .assistant-header,
   .assistant-filters {

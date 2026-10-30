@@ -374,6 +374,27 @@ export const getStructuredAggregates = async (
     })
   ).data
 
+export interface StructuredFailure {
+  id: number
+  content: number
+  content_excerpt: string
+  status: string
+  error_code: string
+  error_message: string
+  attempt_count: number
+  created_at: string
+}
+
+export const getStructuredBatchFailures = async (
+  batchId: number,
+): Promise<PaginatedResponse<StructuredFailure>> =>
+  (
+    await apiClient.get<PaginatedResponse<StructuredFailure>>('/structured-runs/', {
+      params: { batch: batchId, status: 'FAILED', page_size: 100 },
+      timeout: 30_000,
+    })
+  ).data
+
 export const getStructuredBatches = async (
   params: PageParams = {},
   options: StructuredRequestOptions = {},
@@ -409,6 +430,11 @@ export const runAllStructuredAnalysis = async (
 ): Promise<{ queued: number; batch_id?: number; celery_task_id?: string; error_code?: string }> =>
   (await apiClient.post('/structured-batches/run-all/', { product_id: productId })).data
 
+export const retryRemainingStructuredAnalysis = async (
+  productId: number,
+): Promise<{ queued: number; batch_ids: number[] }> =>
+  (await apiClient.post('/structured-batches/retry-remaining/', { product_id: productId })).data
+
 export const createStructuredBatch = async (payload: {
   product_id?: number | null
   source_id?: number | null
@@ -420,9 +446,16 @@ export const createStructuredBatch = async (payload: {
   token_limit?: number
   cost_budget?: number
 }): Promise<{
-  batch: StructuredBatch
+  batch: StructuredBatch | null
   celery_task_id: string | null
   matched_content_ids: number[]
+  dry_run?: boolean
+  preview?: {
+    matched_count: number
+    estimated_tokens: number
+    estimated_cost: string
+    cost_estimate_reliable: boolean
+  }
 }> => (await apiClient.post('/structured-batches/', payload)).data
 
 export const cancelStructuredBatch = async (id: number): Promise<StructuredBatch> =>
@@ -695,11 +728,34 @@ export const getInsightReports = async (
 ): Promise<PaginatedResponse<InsightReport>> =>
   (await apiClient.get<PaginatedResponse<InsightReport>>('/dashboard/reports/', { params })).data
 
+export const generateInsightReport = async (
+  report_type: 'DAILY' | 'WEEKLY',
+): Promise<{ task_id: string; status: string }> =>
+  (await apiClient.post('/dashboard/reports/generate/', { report_type })).data
+
 export const getInsightReport = async (id: number): Promise<InsightReport> =>
   (await apiClient.get<InsightReport>(`/dashboard/reports/${id}/`)).data
 
+export interface SystemResources {
+  scope: string
+  cpu: { cores: number; load_percent: number | null; metric: string }
+  memory: { total: number; used: number; percent: number | null }
+  disk: { total: number; used: number; percent: number | null } | null
+  online: { count: number; definition: string }
+  sampled_at: string
+}
+export const sendPresenceHeartbeat = async (): Promise<void> => {
+  await apiClient.post('/presence/heartbeat/')
+}
+export const getSystemResources = async (): Promise<SystemResources> =>
+  (await apiClient.get<SystemResources>('/system/resources/')).data
+
 export const getOperationsStatus = async (): Promise<OperationsStatus> =>
   (await apiClient.get<OperationsStatus>('/dashboard/operations/')).data
+
+export const selectAssistantModel = async (modelId: number): Promise<void> => {
+  await apiClient.post('/assistant/models/select-assistant/', { model_id: modelId })
+}
 
 export const getAssistantModels = async (): Promise<AssistantModelList> =>
   (await apiClient.get<AssistantModelList>('/assistant/models/')).data
@@ -727,6 +783,10 @@ export const testAssistantModel = async (
       `/assistant/models/${id}/test/`,
     )
   ).data
+
+export const getAssistantAvailableModels = async (id: number): Promise<string[]> =>
+  (await apiClient.get<{ models: string[] }>(`/assistant/models/${id}/available-models/`)).data
+    .models
 
 export const getAssistantOllamaModels = async (id: number): Promise<string[]> =>
   (await apiClient.get<{ models: string[] }>(`/assistant/models/${id}/ollama-models/`)).data.models
@@ -773,8 +833,10 @@ export const cancelAssistantChat = async (
   ).data
 
 function assistantApiUrl(path: string): string {
-  const base = import.meta.env.DEV ? '/api/v1' : import.meta.env.VITE_API_BASE_URL || '/api/v1'
-  return `${base}${path}`
+  const base = import.meta.env.DEV
+    ? '/api/v1'
+    : import.meta.env.VITE_API_BASE_URL || `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/v1`
+  return `${base.replace(/\/$/, '')}${path}`
 }
 
 export async function streamAssistantChat(

@@ -3,7 +3,7 @@ import { CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { onMounted, ref } from 'vue'
 
-import { getInsightReport, getInsightReports, getProducts } from '@/api'
+import { generateInsightReport, getInsightReport, getInsightReports, getProducts } from '@/api'
 import type { InsightReport, Product } from '@/types/api'
 
 const products = ref<Product[]>([])
@@ -12,6 +12,7 @@ const productId = ref<number>()
 const reports = ref<InsightReport[]>([])
 const selected = ref<InsightReport>()
 const loading = ref(false)
+const generating = ref(false)
 const error = ref('')
 async function load(): Promise<void> {
   loading.value = true
@@ -23,11 +24,24 @@ async function load(): Promise<void> {
       page_size: 30,
     })
     reports.value = data.results
+    selected.value = undefined
     if (data.results[0]) await select(data.results[0])
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : '报告加载失败'
   } finally {
     loading.value = false
+  }
+}
+async function generateNow(): Promise<void> {
+  if (generating.value) return
+  generating.value = true
+  try {
+    await generateInsightReport(reportType.value)
+    ElMessage.success('报告生成任务已提交，完成后刷新列表即可查看')
+  } catch {
+    ElMessage.error('提交失败，请确认管理员权限及后台任务服务')
+  } finally {
+    generating.value = false
   }
 }
 async function select(item: InsightReport): Promise<void> {
@@ -62,6 +76,7 @@ onMounted(async () => {
         <h1 class="page-title">AI 智能洞察报告</h1>
         <p class="page-description">确定性数据库聚合与模板生成，默认不额外调用付费模型</p>
       </div>
+      <el-button type="primary" :loading="generating" @click="generateNow">立即生成报告</el-button>
       <el-button :icon="CopyDocument" :disabled="!selected" @click="copySummary"
         >复制摘要</el-button
       >
@@ -89,7 +104,10 @@ onMounted(async () => {
           ><el-tag size="small" :type="item.status === 'READY' ? 'success' : 'warning'">{{
             item.status
           }}</el-tag></button
-        ><el-empty v-if="!reports.length" description="定时任务尚未生成报告" />
+        ><el-empty
+          v-if="!reports.length"
+          description="暂无报告，可点击立即生成报告（需管理员权限）"
+        />
       </aside>
       <article class="tech-panel report-content">
         <template v-if="selected?.snapshot"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 from django.conf import settings
 from django.db import transaction
@@ -12,6 +12,7 @@ from apps.assistant.security import validate_ai_endpoint
 
 
 class AssistantModelProfileSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(required=False, allow_blank=True, max_length=80)
     api_key = serializers.CharField(write_only=True, required=False, allow_blank=False, trim_whitespace=True)
     api_key_configured = serializers.SerializerMethodField()
     api_key_masked = serializers.SerializerMethodField()
@@ -48,7 +49,9 @@ class AssistantModelProfileSerializer(serializers.ModelSerializer):
         provider = attrs.get("provider", getattr(instance, "provider", AIProviderName.OPENAI_COMPATIBLE))
         base_url = str(attrs.get("base_url", getattr(instance, "base_url", "")))
         model = str(attrs.get("model", getattr(instance, "model", ""))).strip()
-        has_key = bool(attrs.get("api_key") or (instance and instance.api_key_ciphertext))
+        has_key = bool(
+            attrs.get("api_key") or (instance and instance.api_key_ciphertext) or self.context.get("duplicate_has_key")
+        )
         if provider == AIProviderName.FAKE:
             if not settings.DEBUG and not settings.AI_ALLOW_FAKE_PROVIDER:
                 raise serializers.ValidationError({"provider": "生产环境不允许使用测试 Provider。"})
@@ -59,7 +62,12 @@ class AssistantModelProfileSerializer(serializers.ModelSerializer):
             if provider == AIProviderName.OPENAI_COMPATIBLE and not has_key:
                 raise serializers.ValidationError({"api_key": "OpenAI 兼容接口必须配置 API Key。"})
         if not model:
-            raise serializers.ValidationError({"model": "请输入模型名称。"})
+            raise serializers.ValidationError({"model": "请输入实际模型标识。"})
+        attrs["model"] = model
+        if "name" in attrs:
+            attrs["name"] = str(attrs["name"]).strip() or model
+        elif instance is None:
+            attrs["name"] = model
         return attrs
 
     @transaction.atomic
@@ -105,9 +113,7 @@ class AssistantMessageSerializer(serializers.ModelSerializer):
 
 
 class AssistantConversationSerializer(serializers.ModelSerializer):
-    model_profile = serializers.PrimaryKeyRelatedField(
-        queryset=AssistantModelProfile.objects.none(), required=False, allow_null=True
-    )
+    model_profile = serializers.IntegerField(source="model_profile_id", read_only=True, allow_null=True)
     model_display = serializers.SerializerMethodField()
     message_count = serializers.IntegerField(read_only=True, default=0)
 
@@ -128,14 +134,6 @@ class AssistantConversationSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("id", "status", "last_message_at", "created_at", "updated_at")
 
-    def get_fields(self) -> dict[str, serializers.Field]:
-        fields = super().get_fields()
-        request = self.context.get("request")
-        if request and request.user.is_authenticated:
-            profile_field = cast(serializers.PrimaryKeyRelatedField, fields["model_profile"])
-            profile_field.queryset = AssistantModelProfile.objects.filter(user=request.user, is_active=True)
-        return fields
-
     def get_model_display(self, obj: AssistantConversation) -> str:
         if obj.use_default_model:
             return obj.model_name_snapshot or "个人默认模型"
@@ -144,12 +142,8 @@ class AssistantConversationSerializer(serializers.ModelSerializer):
         return obj.model_name_snapshot or "已删除的模型配置"
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
-        use_default = attrs.get("use_default_model", getattr(self.instance, "use_default_model", True))
-        profile = attrs.get("model_profile", getattr(self.instance, "model_profile", None))
-        if use_default and profile is not None:
-            attrs["model_profile"] = None
-        if not use_default and profile is None:
-            raise serializers.ValidationError({"model_profile": "请选择当前用户保存的模型配置。"})
+        attrs["use_default_model"] = True
+        attrs["model_profile"] = None
         return attrs
 
     def create(self, validated_data: dict[str, Any]) -> AssistantConversation:

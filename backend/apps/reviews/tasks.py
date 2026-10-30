@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from celery import shared_task
@@ -10,9 +11,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.ai_service import get_user_ai_provider
-from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewRecord
+from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewQuality, ReviewRecord
 from apps.reviews.services.ai_governance import review_quality_with_ai
 from apps.reviews.services.governance_pipeline import GovernanceProcessor, process_reviews
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task(name="process_review_quality")
@@ -278,18 +281,60 @@ def recover_stale_governance_ai_batches(stale_seconds: int = 300) -> dict[str, i
 
 @shared_task(name="run_automatic_voice_pipeline", autoretry_for=(), max_retries=0)
 def run_automatic_voice_pipeline(product_id: int, source_id: int | None = None) -> dict[str, object]:
+    from django.core.cache import cache
+
     from apps.reviews.services.automatic_pipeline import run_automatic_pipeline
 
-    return run_automatic_pipeline(product_id, source_id).as_dict()
+    lock_key = f"automatic-voice-pipeline:{product_id}"
+    if not cache.add(lock_key, "running", timeout=3600):
+        return {"status": "ALREADY_RUNNING", "product_id": product_id, "source_id": source_id}
+    try:
+        return run_automatic_pipeline(product_id, source_id).as_dict()
+    finally:
+        cache.delete(lock_key)
 
 
 @shared_task(name="reconcile_automatic_voice_pipeline", time_limit=120, autoretry_for=(), max_retries=0)
 def reconcile_automatic_voice_pipeline() -> dict[str, int | str]:
     if not settings.AI_AUTOMATION_ENABLED:
         return {"status": "disabled", "queued": 0}
-    pairs = list(
+    # Reconcile unfinished governance and AI failures with a bounded retry
+    # budget. Do not requeue terminal AI decisions or exhausted failures.
+    from django.db.models import Count, Q
+
+    ungoverned = list(
         ReviewRecord.objects.filter(quality__isnull=True).values_list("product_id", "source_id").distinct()[:20]
     )
+    terminal = (
+        GovernanceAIReview.Status.ACCEPTED,
+        GovernanceAIReview.Status.REJECTED,
+        GovernanceAIReview.Status.UNCERTAIN,
+        GovernanceAIReview.Status.SUCCEEDED,
+        GovernanceAIReview.Status.REVIEW_REQUIRED,
+    )
+    ai_pending = (
+        ReviewQuality.objects.filter(eligible_for_ai=True)
+        .exclude(ai_reviews__status__in=terminal)
+        .annotate(
+            error_attempts=Count(
+                "ai_reviews",
+                filter=Q(ai_reviews__status__in=(GovernanceAIReview.Status.ERROR, GovernanceAIReview.Status.FAILED)),
+            )
+        )
+        .filter(error_attempts__lt=settings.AI_AUTOMATION_MAX_ATTEMPTS)
+        .values_list("review__product_id", "review__source_id")
+        .distinct()[:20]
+    )
+    pairs = list(dict.fromkeys([*ungoverned, *list(ai_pending)]))[:20]
+    queued = 0
+    failed = 0
     for product_id, source_id in pairs:
-        run_automatic_voice_pipeline.delay(product_id, source_id)
-    return {"status": "queued", "queued": len(pairs)}
+        try:
+            run_automatic_voice_pipeline.delay(product_id, source_id)
+            queued += 1
+        except Exception:
+            logger.exception(
+                "automatic_pipeline_reconcile_dispatch_failed product_id=%s source_id=%s", product_id, source_id
+            )
+            failed += 1
+    return {"status": "partial" if failed else "queued", "queued": queued, "dispatch_failed": failed}

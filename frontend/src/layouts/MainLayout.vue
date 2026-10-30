@@ -14,7 +14,6 @@ import {
   TrendCharts,
   Warning,
   Notebook,
-  Operation,
   Setting,
   UserFilled,
 } from '@element-plus/icons-vue'
@@ -53,21 +52,20 @@ const baseNavigationItems = [
   { path: '/comparison', label: '产品对比中心', icon: TrendCharts },
   { path: '/issues', label: '用户问题洞察', icon: Warning },
   { path: '/insight-reports', label: 'AI洞察报告', icon: Notebook },
-  { path: '/operations', label: '数据运行监控', icon: Operation },
   { path: '/products', label: '手机产品', icon: Iphone },
   { path: '/threads', label: '帖子视图', icon: ChatLineSquare },
   { path: '/reviews', label: '原始数据', icon: Document },
   { path: '/data-quality', label: '数据质量', icon: CircleCheck },
   { path: '/structured-analysis', label: 'AI结构化分析', icon: DataAnalysis },
-  { path: '/ai-quality', label: 'AI质量中心', icon: CircleCheck, advanced: true },
   { path: '/ai-tasks', label: 'AI任务中心', icon: List, advanced: true },
-  { path: '/analysis', label: '历史AI分析', icon: DataAnalysis, advanced: true },
   { path: '/ai-settings', label: 'AI配置', icon: Setting, advanced: true },
-  { path: '/system', label: '系统状态', icon: Cpu, advanced: true },
+  { path: '/system', label: '运行监控', icon: Cpu, advanced: true },
 ]
 const navigationItems = computed(() => [
   ...baseNavigationItems
-    .filter((item) => !item.advanced || auth.canWrite)
+    .filter((item) =>
+      item.path === '/ai-settings' ? auth.isAdmin : !item.advanced || auth.canWrite,
+    )
     .flatMap((item) =>
       item.path === '/products' && auth.isAdmin
         ? [item, { path: '/collection-tasks', label: '采集任务', icon: List }]

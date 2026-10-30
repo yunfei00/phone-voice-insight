@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 
 import {
   createStructuredBatch,
-  runAllStructuredAnalysis,
+  retryRemainingStructuredAnalysis,
   getStructuredCorpusProgress,
   getProducts,
   getStructuredAggregates,
@@ -362,10 +362,10 @@ async function startAll() {
   if (!selectedProduct.value || startingAll.value || corpusProgress.value?.active) return
   startingAll.value = true
   try {
-    const result = await runAllStructuredAnalysis(selectedProduct.value)
+    const result = await retryRemainingStructuredAnalysis(selectedProduct.value)
     ElMessage.success(
-      result.batch_id
-        ? `已创建批次 #${result.batch_id}，本批 ${result.queued} 条`
+      result.queued
+        ? `已提交 ${result.queued} 条剩余语料（包含历史失败项）`
         : '没有待分析的有效评论',
     )
     await load()
@@ -489,7 +489,7 @@ onUnmounted(() => {
           :loading="startingAll"
           :disabled="!selectedProduct || startingAll || starting || corpusProgress?.active"
           @click="startAll"
-          >一键分析全部剩余数据</el-button
+          >一键补齐全部剩余（含历史失败）</el-button
         >
         <el-button @click="load">刷新结果与任务进度</el-button>
       </div>
@@ -529,6 +529,17 @@ onUnmounted(() => {
           corpusProgress.batch.skipped_count
         }}/{{ corpusProgress.batch.requested_count }}
       </p>
+      <p v-if="corpusProgress.batch">
+        <el-tag type="success" effect="plain">成功 {{ corpusProgress.batch.success_count }}</el-tag>
+        <el-tag type="danger" effect="plain">失败 {{ corpusProgress.batch.failed_count }}</el-tag>
+        <el-tag type="info" effect="plain">跳过 {{ corpusProgress.batch.skipped_count }}</el-tag>
+      </p>
+      <el-alert
+        v-if="corpusProgress.batch?.error_message"
+        :title="corpusProgress.batch.error_message"
+        type="error"
+        :closable="false"
+      />
       <p v-if="corpusProgress.active">任务执行中，已禁止重复提交。</p>
       <el-button v-if="corpusProgress.batch" type="primary" plain @click="router.push('/ai-tasks')"
         >查看任务中心</el-button
@@ -543,6 +554,17 @@ onUnmounted(() => {
       >
       <el-card shadow="never"
         ><span>有效分析量</span><strong>{{ quality?.successful_runs || 0 }}</strong></el-card
+      >
+      <el-card shadow="never"
+        ><span>Schema 合法率</span
+        ><strong>{{
+          quality?.schema_valid_rate == null
+            ? '尚无数据'
+            : (quality.schema_valid_rate * 100).toFixed(1) + '%'
+        }}</strong></el-card
+      >
+      <el-card shadow="never"
+        ><span>待人工复核</span><strong>{{ quality?.review_required ?? 0 }}</strong></el-card
       >
       <el-card shadow="never"
         ><span>明确问题/观点</span><strong>{{ aggregates?.opinion_count || 0 }}</strong></el-card
@@ -705,6 +727,11 @@ onUnmounted(() => {
         >
         <el-table-column prop="success_count" label="成功" width="85" />
         <el-table-column prop="failed_count" label="失败" width="85" />
+        <el-table-column label="失败原因" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">{{
+            row.error_message || (row.failed_count ? '在任务中心查看失败帖子' : '—')
+          }}</template>
+        </el-table-column>
         <el-table-column prop="total_tokens" label="Token" width="100" />
       </el-table>
       <el-pagination

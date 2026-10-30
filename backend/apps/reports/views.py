@@ -143,10 +143,86 @@ class DashboardReportListView(APIView):
         )
 
 
+class DashboardReportGenerateView(APIView):
+    """Admin-triggered generation; scheduled Beat jobs remain unchanged."""
+
+    def post(self, request: Request) -> Response:
+        if not request.user.is_authenticated or get_user_role(request.user) != UserRole.ADMIN:
+            return Response({"message": "仅管理员可以生成报告"}, status=status.HTTP_403_FORBIDDEN)
+        report_type = request.data.get("report_type")
+        if report_type not in ("DAILY", "WEEKLY"):
+            return Response({"message": "报告类型无效"}, status=status.HTTP_400_BAD_REQUEST)
+        from apps.reports.tasks import generate_insight_reports
+
+        try:
+            task = generate_insight_reports.delay(report_type)
+        except Exception:
+            return Response({"message": "任务提交失败, 请检查 Celery 服务"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response(
+            {"task_id": task.id, "report_type": report_type, "status": "QUEUED"}, status=status.HTTP_202_ACCEPTED
+        )
+
+
 class DashboardReportDetailView(APIView):
     def get(self, _request: Request, report_id: int) -> Response:
         report = get_object_or_404(AggregateReport.objects.select_related("product", "source"), pk=report_id)
         return Response(_report_payload(report, include_snapshot=True))
+
+
+class SystemResourcesView(APIView):
+    """Container-scoped runtime metrics; host-wide usage requires a host agent."""
+
+    def get(self, _request: Request) -> Response:
+        import os
+        import shutil
+
+        def memory() -> tuple[int, int]:
+            values = {}
+            with open("/proc/meminfo", encoding="utf-8") as stream:
+                for line in stream:
+                    key, _, value = line.partition(":")
+                    if key in {"MemTotal", "MemAvailable"}:
+                        values[key] = int(value.strip().split()[0]) * 1024
+            return values.get("MemTotal", 0), values.get("MemAvailable", 0)
+
+        try:
+            total, available = memory()
+        except (OSError, ValueError):
+            total, available = 0, 0
+        try:
+            disk = shutil.disk_usage("/")
+            disk_info = {
+                "total": disk.total,
+                "used": disk.used,
+                "percent": round(disk.used / disk.total * 100, 1) if disk.total else None,
+            }
+        except OSError:
+            disk_info = None
+        cpu_count = os.cpu_count() or 1
+        try:
+            load = os.getloadavg()[0]
+            cpu_load = round(load / cpu_count * 100, 1)
+        except (OSError, AttributeError):
+            cpu_load = None
+        from django.contrib.auth import get_user_model
+        from django.core.cache import cache
+
+        user_ids = get_user_model().objects.filter(is_active=True).values_list("pk", flat=True)
+        online = sum(bool(cache.get(f"presence:user:{user_id}")) for user_id in user_ids)
+        return Response(
+            {
+                "scope": "backend_container",
+                "cpu": {"cores": cpu_count, "load_percent": cpu_load, "metric": "1分钟负载/核心数 (非CPU使用率)"},
+                "memory": {
+                    "total": total,
+                    "used": max(0, total - available),
+                    "percent": round((total - available) / total * 100, 1) if total else None,
+                },
+                "disk": disk_info,
+                "online": {"count": online, "definition": "最近120秒有活动心跳的独立账号数"},
+                "sampled_at": timezone.now().isoformat(),
+            }
+        )
 
 
 class DashboardOperationsView(APIView):
@@ -254,4 +330,13 @@ class DashboardOperationsView(APIView):
                 },
             }
         )
+        from apps.assistant.models import AssistantMessage, MessageRole, MessageStatus
+
+        assistant_messages = AssistantMessage.objects.filter(role=MessageRole.ASSISTANT)
+        summary["assistant"] = {
+            "running": assistant_messages.filter(status=MessageStatus.RUNNING).count(),
+            "completed": assistant_messages.filter(status=MessageStatus.COMPLETED).count(),
+            "failed": assistant_messages.filter(status=MessageStatus.FAILED).count(),
+            "cancelled": assistant_messages.filter(status=MessageStatus.CANCELLED).count(),
+        }
         return Response(summary)

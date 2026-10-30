@@ -54,9 +54,7 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: 'operations',
-        name: 'operations',
-        component: () => import('@/views/OperationsView.vue'),
-        meta: { title: '数据运行监控' },
+        redirect: '/system',
       },
       {
         path: 'products',
@@ -95,34 +93,22 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 结构化分析' },
       },
       {
-        path: 'ai-quality',
-        name: 'ai-quality',
-        component: () => import('@/views/AIQualityView.vue'),
-        meta: { title: 'AI 质量中心', writeOnly: true },
-      },
-      {
         path: 'ai-tasks',
         name: 'ai-tasks',
         component: () => import('@/views/AITasksView.vue'),
         meta: { title: 'AI 任务中心', writeOnly: true },
       },
       {
-        path: 'analysis',
-        name: 'analysis',
-        component: () => import('@/views/AnalysisView.vue'),
-        meta: { title: '历史 AI 分析', writeOnly: true },
-      },
-      {
         path: 'ai-settings',
         name: 'ai-settings',
         component: () => import('@/views/AISettingsView.vue'),
-        meta: { title: 'AI 配置', writeOnly: true },
+        meta: { title: 'AI 配置', adminOnly: true },
       },
       {
         path: 'system',
         name: 'system',
         component: () => import('@/views/SystemView.vue'),
-        meta: { title: '系统状态', writeOnly: true },
+        meta: { title: '运行监控', writeOnly: true },
       },
     ],
   },

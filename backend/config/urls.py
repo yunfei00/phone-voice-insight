@@ -14,6 +14,7 @@ from apps.accounts.views import (
     login,
     logout,
     me,
+    presence_heartbeat,
 )
 from apps.analysis.structured_views import (
     StructuredAnalysisViewSet,
@@ -35,8 +36,10 @@ from apps.reports.views import (
     DashboardOverviewView,
     DashboardProductsView,
     DashboardReportDetailView,
+    DashboardReportGenerateView,
     DashboardReportListView,
     DashboardTrendsView,
+    SystemResourcesView,
 )
 from apps.reviews.ai_views import GovernanceAIViewSet
 from apps.reviews.views import ReviewQualityViewSet, ReviewRecordViewSet, ThreadTreeViewSet
@@ -87,11 +90,16 @@ urlpatterns = [
     ),
     path("api/v1/dashboard/reports/", DashboardReportListView.as_view(), name="dashboard-reports"),
     path(
+        "api/v1/dashboard/reports/generate/", DashboardReportGenerateView.as_view(), name="dashboard-reports-generate"
+    ),
+    path(
         "api/v1/dashboard/reports/<int:report_id>/",
         DashboardReportDetailView.as_view(),
         name="dashboard-report-detail",
     ),
     path("api/v1/dashboard/operations/", DashboardOperationsView.as_view(), name="dashboard-operations"),
+    path("api/v1/system/resources/", SystemResourcesView.as_view(), name="system-resources"),
+    path("api/v1/presence/heartbeat/", presence_heartbeat, name="presence-heartbeat"),
     path("api/v1/", include(router.urls)),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
