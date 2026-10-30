@@ -1,0 +1,29 @@
+name: Final frontend format
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  format:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/system-fixes
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - run: npx prettier --write src/views/AITasksView.vue
+        working-directory: frontend
+      - run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add frontend/src/views/AITasksView.vue
+            git commit -m "style: format AI task click handlers"
+            git push origin HEAD:work/system-fixes
+          fi
