@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
 
 import {
   getPersonalAIConfiguration,
   getAssistantModels,
   createAssistantModel,
+  deleteAssistantModel,
   updateAssistantModel,
   testAssistantModel,
   selectAssistantModel,
@@ -120,6 +121,26 @@ function newProfile(): void {
     max_output_tokens: 1500,
     is_active: true,
   })
+}
+
+async function removeProfile(profile: AssistantModelProfile): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除模型“${profile.name}”吗？删除后无法恢复，历史对话仍保留原有记录。`,
+      '删除模型',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteAssistantModel(profile.id)
+    if (selectedProfileId.value === profile.id) await choosePersonal()
+    await loadAssistantModels()
+    ElMessage.success('模型已删除')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '删除模型失败')
+  }
 }
 
 async function choosePersonal(): Promise<void> {
@@ -256,13 +277,13 @@ onMounted(() => {
           @click="choosePersonal"
           >个人默认模型</el-button
         >
-        <el-button
-          v-for="item in assistantModels?.results"
-          :key="item.id"
-          :type="selectedProfileId === item.id ? 'primary' : 'default'"
-          @click="editProfile(item)"
-          >{{ item.name }}</el-button
-        >
+        <div v-for="item in assistantModels?.results" :key="item.id" class="model-entry">
+          <el-button
+            :type="selectedProfileId === item.id ? 'primary' : 'default'"
+            @click="editProfile(item)"
+          >{{ item.name }}</el-button>
+          <el-button type="danger" plain size="small" aria-label="删除模型" @click="removeProfile(item)">删除</el-button>
+        </div>
         <el-button type="success" plain @click="newProfile">+ 新增模型</el-button>
       </div>
       <el-divider />
@@ -415,4 +436,5 @@ onMounted(() => {
     flex-direction: column;
   }
 }
+ .model-entry { display: inline-flex; align-items: center; gap: 4px; }
 </style>
