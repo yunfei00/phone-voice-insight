@@ -374,6 +374,27 @@ export const getStructuredAggregates = async (
     })
   ).data
 
+export interface StructuredFailure {
+  id: number
+  content: number
+  content_excerpt: string
+  status: string
+  error_code: string
+  error_message: string
+  attempt_count: number
+  created_at: string
+}
+
+export const getStructuredBatchFailures = async (
+  batchId: number,
+): Promise<PaginatedResponse<StructuredFailure>> =>
+  (
+    await apiClient.get<PaginatedResponse<StructuredFailure>>('/structured-runs/', {
+      params: { batch: batchId, status: 'FAILED', page_size: 100 },
+      timeout: 30_000,
+    })
+  ).data
+
 export const getStructuredBatches = async (
   params: PageParams = {},
   options: StructuredRequestOptions = {},
