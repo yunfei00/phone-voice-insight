@@ -17,6 +17,9 @@ const submitting = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 const error = ref('')
 const batches = ref<StructuredBatch[]>([])
+const page = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
 const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
 const form = reactive({
@@ -34,11 +37,12 @@ async function load() {
   error.value = ''
   try {
     const [b, p, s] = await Promise.all([
-      getStructuredBatches(),
+      getStructuredBatches({ page: page.value, page_size: pageSize.value }),
       getProducts({ page_size: 100 }),
       getSources({ page_size: 100 }),
     ])
     batches.value = b.results
+    total.value = b.count
     products.value = p.results
     sources.value = s.results
   } catch {
@@ -47,12 +51,17 @@ async function load() {
     loading.value = false
   }
 }
+function onPageSizeChange() {
+  page.value = 1
+  void load()
+}
 async function create() {
   if (submitting.value) return
   submitting.value = true
   try {
     await createStructuredBatch(form)
     ElMessage.success(form.dry_run ? '预估完成，未调用模型' : '任务已提交')
+    page.value = 1
     await load()
   } catch {
     ElMessage.error('创建任务失败，请检查筛选条件或 AI 配置')
@@ -155,6 +164,7 @@ onUnmounted(() => {
           ></template
         ></el-table-column
       ></el-table
+    ><div class="pagination-bar"><span>共 {{ total }} 条任务记录</span><el-pagination v-model:current-page="page" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" :total="total" layout="sizes, prev, pager, next, jumper" background @current-change="load" @size-change="onPageSizeChange" /></div>
     >
   </section>
 </template>
@@ -163,6 +173,7 @@ onUnmounted(() => {
   display: grid;
   gap: 18px;
 }
+.pagination-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .tasks h1 {
   margin: 0;
 }
