@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   cancelStructuredBatch,
   createStructuredBatch,
@@ -37,7 +37,12 @@ async function load() {
   error.value = ''
   try {
     const [b, p, s] = await Promise.all([
-      getStructuredBatches({ page: page.value, page_size: pageSize.value }),
+      getStructuredBatches({
+        page: page.value,
+        page_size: pageSize.value,
+        product: form.product_id,
+        source: form.source_id,
+      }),
       getProducts({ page_size: 100 }),
       getSources({ page_size: 100 }),
     ])
@@ -51,6 +56,11 @@ async function load() {
     loading.value = false
   }
 }
+function onFilterChange() {
+  page.value = 1
+  void load()
+}
+watch(() => [form.product_id, form.source_id], onFilterChange)
 function onPageSizeChange() {
   if (page.value !== 1) {
     page.value = 1
