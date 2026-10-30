@@ -120,13 +120,22 @@ async function removeConversation(item: AssistantConversation) {
   }
 }
 
+function makeUuid(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = ((bytes[6] ?? 0) & 15) | 64
+  bytes[8] = ((bytes[8] ?? 0) & 63) | 128
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-')
+}
+
 function optimisticMessage(
   role: 'USER' | 'ASSISTANT',
   content: string,
   requestId: string | null,
 ): AssistantMessage {
   return {
-    id: crypto.randomUUID(),
+    id: makeUuid(),
     role,
     content,
     request_id: requestId,
@@ -147,7 +156,7 @@ function optimisticMessage(
 async function send() {
   const content = draft.value.trim()
   if (!content || !activeId.value || generating.value) return
-  const requestId = crypto.randomUUID()
+  const requestId = makeUuid()
   const user = optimisticMessage('USER', content, null)
   const answer = optimisticMessage('ASSISTANT', '', requestId)
   messages.value.push(user, answer)
