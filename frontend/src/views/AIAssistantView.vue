@@ -337,8 +337,8 @@ onMounted(loadBase)
 .assistant-page {
   display: grid;
   grid-template-columns: 270px minmax(0, 1fr);
-  height: calc(100vh - 104px);
-  min-height: 660px;
+  height: calc(100dvh - 120px);
+  min-height: 360px;
   overflow: hidden;
   border: 1px solid #29435c;
   border-radius: 14px;
@@ -347,8 +347,12 @@ onMounted(loadBase)
 }
 .assistant-workspace {
   display: flex;
+  min-height: 0;
   min-width: 0;
   flex-direction: column;
+}
+.assistant-workspace > :not(.chat-scroll) {
+  flex-shrink: 0;
 }
 .assistant-header {
   display: flex;
@@ -395,8 +399,10 @@ onMounted(loadBase)
 }
 .chat-scroll {
   min-height: 0;
-  flex: 1;
-  overflow: auto;
+  flex: 1 1 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   padding: 24px max(22px, calc((100% - 900px) / 2));
 }
 .empty-chat {
@@ -506,17 +512,18 @@ onMounted(loadBase)
 @media (max-width: 900px) {
   .assistant-page {
     grid-template-columns: 1fr;
-    height: auto;
-    min-height: calc(100vh - 90px);
-    overflow: visible;
+    height: calc(100dvh - 90px);
+    min-height: 360px;
+    overflow: hidden;
   }
   .assistant-page :deep(.conversation-sidebar) {
-    max-height: 220px;
+    max-height: 140px;
+    flex-shrink: 0;
     border-right: 0;
     border-bottom: 1px solid #29435c;
   }
   .assistant-workspace {
-    min-height: 720px;
+    min-height: 0;
   }
   .assistant-header,
   .assistant-filters {
