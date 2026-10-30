@@ -209,14 +209,12 @@ def test_admin_selects_shared_assistant_model_and_viewer_cannot_modify(api_clien
     client = APIClient()
     client.force_authenticate(viewer)
     assert client.get("/api/v1/assistant/models/").status_code == 403
-    assert (
-        client.post(
-            "/api/v1/assistant/models/select-assistant/",
-            {"model_id": profile.id},
-            format="json",
-        ).status_code
-        == 403
+    denied = client.post(
+        "/api/v1/assistant/models/select-assistant/",
+        {"model_id": profile.id},
+        format="json",
     )
+    assert denied.status_code == 403
     conversation = client.post(
         "/api/v1/assistant/conversations/",
         {"title": "普通用户对话", "model_profile": profile.id, "use_default_model": False},
