@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 from django.conf import settings
 from django.db import transaction
@@ -105,9 +105,7 @@ class AssistantMessageSerializer(serializers.ModelSerializer):
 
 
 class AssistantConversationSerializer(serializers.ModelSerializer):
-    model_profile = serializers.PrimaryKeyRelatedField(
-        queryset=AssistantModelProfile.objects.none(), required=False, allow_null=True
-    )
+    model_profile = serializers.PrimaryKeyRelatedField(read_only=True)
     model_display = serializers.SerializerMethodField()
     message_count = serializers.IntegerField(read_only=True, default=0)
 
@@ -127,14 +125,6 @@ class AssistantConversationSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = ("id", "status", "last_message_at", "created_at", "updated_at")
-
-    def get_fields(self) -> dict[str, serializers.Field]:
-        fields = super().get_fields()
-        request = self.context.get("request")
-        if request and request.user.is_authenticated:
-            profile_field = cast(serializers.PrimaryKeyRelatedField, fields["model_profile"])
-            profile_field.queryset = AssistantModelProfile.objects.filter(user=request.user, is_active=True)
-        return fields
 
     def get_model_display(self, obj: AssistantConversation) -> str:
         if obj.use_default_model:
