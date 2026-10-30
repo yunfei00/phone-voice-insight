@@ -144,12 +144,8 @@ class AssistantConversationSerializer(serializers.ModelSerializer):
         return obj.model_name_snapshot or "已删除的模型配置"
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
-        use_default = attrs.get("use_default_model", getattr(self.instance, "use_default_model", True))
-        profile = attrs.get("model_profile", getattr(self.instance, "model_profile", None))
-        if use_default and profile is not None:
-            attrs["model_profile"] = None
-        if not use_default and profile is None:
-            raise serializers.ValidationError({"model_profile": "请选择当前用户保存的模型配置。"})
+        attrs["use_default_model"] = True
+        attrs["model_profile"] = None
         return attrs
 
     def create(self, validated_data: dict[str, Any]) -> AssistantConversation:
