@@ -37,7 +37,7 @@ const title = computed(() => (editing.value ? '编辑模型配置' : '新增模�
 function reset(item?: AssistantModelProfile) {
   editing.value = item
   Object.assign(form, {
-    name: item?.name || '',
+    name: item?.name || '平台智能助手',
     provider: item?.provider || 'openai_compatible',
     base_url: item?.base_url || '',
     model: item?.model || '',
