@@ -464,21 +464,12 @@ def test_unauthenticated_assistant_api_is_rejected() -> None:
     assert APIClient().get("/api/v1/assistant/conversations/").status_code == 401
 
 
-def test_default_model_virtual_option(api_client: APIClient) -> None:
-    user = current_user(api_client)
-    configuration = UserAIConfiguration.objects.get(user=user)
-    configuration.provider = "fake"
-    configuration.model = "personal-fake"
-    configuration.is_active = True
-    configuration.save()
+def test_model_catalog_is_shared_without_personal_default(api_client: APIClient) -> None:
+    profile = create_profile(current_user(api_client), name="全局共享模型")
     response = api_client.get("/api/v1/assistant/models/")
-    assert response.data["default_model"] == {
-        "id": None,
-        "name": "使用个人默认模型",
-        "model": "personal-fake",
-        "provider": "fake",
-        "configured": True,
-    }
+    assert response.status_code == 200
+    assert "default_model" not in response.data
+    assert any(item["id"] == profile.id for item in response.data["results"])
 
 
 @override_settings(DEBUG=True, AI_ALLOW_FAKE_PROVIDER=True)
