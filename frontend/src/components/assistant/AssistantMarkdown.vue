@@ -5,7 +5,7 @@ const props = defineProps<{ content: string }>()
 
 type InlinePart = { text: string; strong?: boolean; emphasis?: boolean; code?: boolean }
 type Block = {
-  type: 'heading' | 'list' | 'code' | 'paragraph' | 'table' | 'quote'
+  type: 'heading' | 'list' | 'code' | 'paragraph' | 'table' | 'quote' | 'rule'
   text?: string
   level?: number
   ordered?: boolean
@@ -67,6 +67,11 @@ const blocks = computed<Block[]>(() => {
       result.push({ type: 'code', text: code.join('\n') })
       continue
     }
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      result.push({ type: 'rule' })
+      i++
+      continue
+    }
     const heading = /^(#{1,6})\s+(.+)$/.exec(trimmed)
     if (heading) {
       result.push({ type: 'heading', level: heading[1]!.length, text: heading[2] })
@@ -111,6 +116,7 @@ const blocks = computed<Block[]>(() => {
           ><span v-else>{{ part.text }}</span></template
         >
       </h3>
+      <hr v-else-if="block.type === 'rule'" class="markdown-rule" />
       <div v-else-if="block.type === 'table'" class="table-wrap">
         <table>
           <thead>
@@ -160,6 +166,11 @@ const blocks = computed<Block[]>(() => {
   line-height: 1.75;
   overflow-wrap: anywhere;
   min-width: 0;
+}
+.markdown-rule {
+  border: 0;
+  border-top: 1px solid #35506b;
+  margin: 16px 0;
 }
 .assistant-markdown h3 {
   margin: 14px 0 6px;
