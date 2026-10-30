@@ -5,7 +5,7 @@ import { AUTH_TOKEN_STORAGE_KEY } from '@/config/auth'
 
 const apiClient = axios.create({
   baseURL: import.meta.env.DEV ? '/api/v1' : import.meta.env.VITE_API_BASE_URL || '/api/v1',
-  timeout: 10_000,
+  timeout: 60_000,
   headers: {
     Accept: 'application/json',
   },
