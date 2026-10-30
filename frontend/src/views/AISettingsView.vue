@@ -29,6 +29,7 @@ const discovering = ref(false)
 const ollamaModels = ref<string[]>([])
 const configured = ref(false)
 const maskedKey = ref('')
+const displayName = ref('')
 const updatedAt = ref<string | null>(null)
 const formRef = ref<FormInstance>()
 const form = reactive<AIConfigurationPayload>({
@@ -86,6 +87,7 @@ async function loadConfiguration(): Promise<void> {
 }
 
 function editProfile(profile: AssistantModelProfile): void {
+  displayName.value = profile.name
   selectedProfileId.value = profile.id
   configured.value = profile.api_key_configured
   maskedKey.value = profile.api_key_masked
@@ -103,6 +105,7 @@ function editProfile(profile: AssistantModelProfile): void {
 }
 
 function newProfile(): void {
+  displayName.value = ''
   selectedProfileId.value = 0
   configured.value = false
   maskedKey.value = ''
@@ -120,6 +123,7 @@ function newProfile(): void {
 }
 
 async function choosePersonal(): Promise<void> {
+  displayName.value = ''
   selectedProfileId.value = null
   await loadConfiguration()
 }
@@ -147,15 +151,13 @@ async function saveConfiguration(): Promise<boolean> {
     if (selectedProfileId.value !== null) {
       const profilePayload = {
         ...payload,
-        name: selectedProfileId.value
-          ? assistantModels.value?.results.find((item) => item.id === selectedProfileId.value)
-              ?.name || payload.model
-          : `${payload.provider} · ${payload.model}`,
+        name: displayName.value.trim() || payload.model.trim(),
       }
       const saved = selectedProfileId.value
         ? await updateAssistantModel(selectedProfileId.value, profilePayload)
         : await createAssistantModel(profilePayload)
       selectedProfileId.value = saved.id
+      displayName.value = saved.name
       configured.value = saved.api_key_configured
       maskedKey.value = saved.api_key_masked
       form.api_key = ''
@@ -259,7 +261,7 @@ onMounted(() => {
           :key="item.id"
           :type="selectedProfileId === item.id ? 'primary' : 'default'"
           @click="editProfile(item)"
-          >{{ item.model }}</el-button
+          >{{ item.name }}</el-button
         >
         <el-button type="success" plain @click="newProfile">+ 新增模型</el-button>
       </div>
@@ -270,7 +272,7 @@ onMounted(() => {
           <el-option
             v-for="item in assistantModels?.results.filter((profile) => profile.is_active)"
             :key="item.id"
-            :label="`${item.model}（${item.provider}）`"
+            :label="`${item.name}（${item.provider} · ${item.model}）`"
             :value="item.id"
           />
         </el-select>
@@ -315,7 +317,7 @@ onMounted(() => {
             :placeholder="maskedKey || '请输入 API Key'"
           />
         </el-form-item>
-        <el-form-item label="模型名称" prop="model">
+        <el-form-item v-if="selectedProfileId !== null" label="显示名称（可选）">\n          <el-input v-model="displayName" :placeholder="form.model || '默认使用实际模型名称'" maxlength="80" />\n          <div class="field-hint">留空默认使用实际模型名称；模型列表和智能助手选择器显示此名称。</div>\n        </el-form-item>\n        <el-form-item label="实际模型名称" prop="model">
           <el-select
             v-if="form.provider === 'ollama'"
             v-model="form.model"
