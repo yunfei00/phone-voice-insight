@@ -143,6 +143,11 @@ async function removeProfile(profile: AssistantModelProfile): Promise<void> {
   }
 }
 
+async function removeSelectedProfile(): Promise<void> {
+  const profile = assistantModels.value?.results.find((item) => item.id === selectedProfileId.value)
+  if (profile) await removeProfile(profile)
+}
+
 async function choosePersonal(): Promise<void> {
   displayName.value = ''
   selectedProfileId.value = null
@@ -268,22 +273,22 @@ onMounted(() => {
       class="notice"
     />
 
+    <div class="settings-layout" :class="{ 'single-column': !auth.isAdmin }">
     <section v-if="auth.isAdmin" class="panel settings-panel model-library">
       <h2>统一模型库</h2>
-      <p>在下方同一表单中配置或编辑模型，保存后可分配给智能助手，无需重复填写。</p>
+      <p>选择左侧模型，在右侧编辑配置；新增模型也在右侧完成。</p>
       <div class="model-actions">
         <el-button
           :type="selectedProfileId === null ? 'primary' : 'default'"
           @click="choosePersonal"
           >个人默认模型</el-button
         >
-        <div v-for="item in assistantModels?.results" :key="item.id" class="model-entry">
-          <el-button
-            :type="selectedProfileId === item.id ? 'primary' : 'default'"
-            @click="editProfile(item)"
-          >{{ item.name }}</el-button>
-          <el-button type="danger" plain size="small" aria-label="删除模型" @click="removeProfile(item)">删除</el-button>
-        </div>
+        <el-button
+          v-for="item in assistantModels?.results"
+          :key="item.id"
+          :type="selectedProfileId === item.id ? 'primary' : 'default'"
+          @click="editProfile(item)"
+        >{{ item.name }}</el-button>
         <el-button type="success" plain @click="newProfile">+ 新增模型</el-button>
       </div>
       <el-divider />
@@ -387,12 +392,19 @@ onMounted(() => {
             >保存配置</el-button
           >
           <el-button :loading="testing" @click="saveAndTest">保存并测试连接</el-button>
+          <el-button
+            v-if="selectedProfileId !== null && selectedProfileId > 0"
+            type="danger"
+            plain
+            @click="removeSelectedProfile"
+          >删除模型</el-button>
         </div>
       </el-form>
       <p v-if="updatedAt && selectedProfileId === null" class="updated-at">
         最后更新：{{ new Date(updatedAt).toLocaleString() }}
       </p>
     </section>
+    </div>
   </div>
 </template>
 
@@ -409,9 +421,20 @@ onMounted(() => {
 .notice {
   margin-bottom: 18px;
 }
-.settings-panel {
-  max-width: 760px;
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  max-width: 1440px;
 }
+.settings-layout.single-column { grid-template-columns: minmax(0, 920px); }
+.settings-panel { min-width: 0; }
+.model-library { position: sticky; top: 16px; }
+.model-library .model-actions { align-items: stretch; flex-direction: column; }
+.model-library .model-actions .el-button { margin-left: 0; width: 100%; justify-content: flex-start; }
+.model-library .model-actions .el-select { width: 100% !important; }
+.model-library .model-actions .el-button + .el-button { margin-left: 0; }
 .advanced-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -436,5 +459,8 @@ onMounted(() => {
     flex-direction: column;
   }
 }
- .model-entry { display: inline-flex; align-items: center; gap: 4px; }
+@media (max-width: 980px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); }
+  .model-library { position: static; }
+}
 </style>
