@@ -61,7 +61,6 @@ const baseNavigationItems = [
   { path: '/structured-analysis', label: 'AI结构化分析', icon: DataAnalysis },
   { path: '/ai-quality', label: 'AI质量中心', icon: CircleCheck, advanced: true },
   { path: '/ai-tasks', label: 'AI任务中心', icon: List, advanced: true },
-  { path: '/analysis', label: '历史AI分析', icon: DataAnalysis, advanced: true },
   { path: '/ai-settings', label: 'AI配置', icon: Setting, advanced: true },
   { path: '/system', label: '系统状态', icon: Cpu, advanced: true },
 ]
