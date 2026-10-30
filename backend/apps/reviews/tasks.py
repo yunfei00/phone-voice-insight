@@ -287,9 +287,26 @@ def run_automatic_voice_pipeline(product_id: int, source_id: int | None = None) 
 def reconcile_automatic_voice_pipeline() -> dict[str, int | str]:
     if not settings.AI_AUTOMATION_ENABLED:
         return {"status": "disabled", "queued": 0}
+    # A prior collection may have completed governance while the AI provider was
+    # unavailable. Reconcile both ungoverned records and eligible unreviewed ones.
+    # Limit the number of product/source pairs per tick to bound queue pressure.
+    from django.db.models import Q
+
     pairs = list(
-        ReviewRecord.objects.filter(quality__isnull=True).values_list("product_id", "source_id").distinct()[:20]
+        ReviewRecord.objects.filter(
+            Q(quality__isnull=True)
+            | Q(quality__eligible_for_ai=True, quality__ai_reviews__isnull=True)
+        )
+        .values_list("product_id", "source_id")
+        .distinct()[:20]
     )
+    queued = 0
+    failed = 0
     for product_id, source_id in pairs:
-        run_automatic_voice_pipeline.delay(product_id, source_id)
-    return {"status": "queued", "queued": len(pairs)}
+        try:
+            run_automatic_voice_pipeline.delay(product_id, source_id)
+            queued += 1
+        except Exception:
+            logger.exception("automatic_pipeline_reconcile_dispatch_failed product_id=%s source_id=%s", product_id, source_id)
+            failed += 1
+    return {"status": "partial" if failed else "queued", "queued": queued, "dispatch_failed": failed}
