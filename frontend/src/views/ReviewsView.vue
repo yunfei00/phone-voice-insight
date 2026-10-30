@@ -39,8 +39,6 @@ const selected = ref<ReviewRecord | null>(null)
 const loading = ref(false)
 const error = ref('')
 const total = ref(0)
-const selectedPageSize = ref('20')
-const pageSizeOptions = [10, 20, 50, 100, 200, 500]
 const metadata = ref<ReviewMetadataCompleteness | null>(null)
 const filters = reactive({
   page: 1,
@@ -134,14 +132,7 @@ function onSortChange(sort: {
   void loadReviews()
 }
 
-function onPageSizeChange(value: string): void {
-  const size = Number(value.trim())
-  if (!/^\\d+$/.test(value.trim()) || !Number.isSafeInteger(size) || size < 1 || size > 1000) {
-    selectedPageSize.value = String(filters.page_size)
-    ElMessage.warning('每页条数请输入 1～1000 的整数')
-    return
-  }
-  selectedPageSize.value = String(size)
+function onPageSizeChange(size: number): void {
   if (filters.page_size === size) return
   filters.page_size = size
   filters.page = 1
@@ -296,31 +287,14 @@ onMounted(async () => {
       </el-table>
 
       <div class="reviews-pagination">
-        <span class="page-size-label">每页</span>
-        <el-select
-          v-model="selectedPageSize"
-          class="page-size-select"
-          filterable
-          allow-create
-          default-first-option
-          :reserve-keyword="false"
-          placeholder="输入条数"
-          @change="onPageSizeChange"
-        >
-          <el-option
-            v-for="size in pageSizeOptions"
-            :key="size"
-            :label="`${size} 条`"
-            :value="String(size)"
-          />
-        </el-select>
-        <span class="page-size-label">条</span>
         <el-pagination
           v-model:current-page="filters.page"
           class="pagination"
-          layout="total, prev, pager, next, jumper"
+          layout="total, sizes, prev, pager, next, jumper"
           :page-size="filters.page_size"
+          :page-sizes="[10, 20, 50, 100]"
           :total="total"
+          @size-change="onPageSizeChange"
           @current-change="loadReviews"
         />
       </div>
@@ -444,24 +418,12 @@ pre {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
+  overflow-x: auto;
   margin-top: 18px;
 }
 
 .pagination {
   justify-content: flex-end;
-}
-
-.custom-page-size {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.custom-page-size .el-input-number {
-  width: 120px;
 }
 
 @media (max-width: 900px) {
