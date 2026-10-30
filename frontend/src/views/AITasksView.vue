@@ -122,6 +122,24 @@ onUnmounted(() => {
     <header>
       <h1>AI 任务中心</h1>
       <p>默认 dry-run；只有明确关闭 dry-run 才会调用个人 AI 配置</p>
+      <div class="task-filters">
+      <el-select
+        v-model="filterProductId"
+        clearable
+        placeholder="筛选任务机型（全部）"
+        @change="onFilterChange"
+      >
+        <el-option v-for="p in products" :key="p.id" :label="p.name" :value="p.id" />
+      </el-select>
+      <el-select
+        v-model="filterSourceId"
+        clearable
+        placeholder="筛选任务来源（全部）"
+        @change="onFilterChange"
+      >
+        <el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id" />
+      </el-select>
+      </div>
     </header>
     <el-card shadow="never"
       ><div class="form">
@@ -140,25 +158,7 @@ onUnmounted(() => {
         >并发 {{ form.max_concurrency }} · {{ form.requests_per_minute }} 请求/分钟 · Token 上限
         {{ form.token_limit }} · 预算 ¥{{ form.cost_budget }}</small
       ></el-card
-    ><div class="task-filters">
-      <el-select
-        v-model="filterProductId"
-        clearable
-        placeholder="筛选任务机型（全部）"
-        @change="onFilterChange"
-      >
-        <el-option v-for="p in products" :key="p.id" :label="p.name" :value="p.id" />
-      </el-select>
-      <el-select
-        v-model="filterSourceId"
-        clearable
-        placeholder="筛选任务来源（全部）"
-        @change="onFilterChange"
-      >
-        <el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id" />
-      </el-select>
-    </div>
-    <el-alert v-if="error" :title="error" type="error" /><el-table
+    ><el-alert v-if="error" :title="error" type="error" /><el-table
       v-loading="loading"
       :data="batches"
       empty-text="暂无 V1 任务"
