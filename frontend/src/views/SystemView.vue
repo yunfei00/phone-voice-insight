@@ -97,9 +97,9 @@ onBeforeUnmount(() => window.clearInterval(timer))
         <p>{{ size(resources?.disk?.used) }} / {{ size(resources?.disk?.total) }}</p>
       </section>
       <section class="panel metric-card">
-        <h3>最近登录用户</h3>
+        <h3>当前在线用户</h3>
         <div class="metric-value">{{ resources?.online.count ?? '—' }}<small>人</small></div>
-        <p>最近5分钟登录人数；非实时在线人数</p>
+        <p>最近120秒有活动心跳的独立账号数</p>
       </section>
     </div>
     <section class="panel">
