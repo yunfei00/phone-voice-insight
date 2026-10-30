@@ -46,30 +46,50 @@ const page = ref(1)
 const batchPage = ref(1)
 const filters = reactive({ search: '', aspect_code: '', sentiment: '' })
 async function load() {
+  if (loading.value) return
   loading.value = true
   error.value = ''
+  const scope = { product: selectedProduct.value }
+  const results = await Promise.allSettled([
+    getStructuredAnalyses({ ...filters, ...scope, page: page.value, page_size: 10 }),
+    getStructuredQuality(scope),
+    getStructuredBatches({ ...scope, page: batchPage.value, page_size: 10 }),
+    selectedProduct.value
+      ? getStructuredCorpusProgress(selectedProduct.value)
+      : Promise.resolve(undefined),
+  ] as const)
+  if (results[0].status === 'fulfilled') {
+    items.value = results[0].value.results
+    count.value = results[0].value.count
+  }
+  if (results[1].status === 'fulfilled') quality.value = results[1].value
+  if (results[2].status === 'fulfilled') {
+    batches.value = results[2].value.results
+    batchCount.value = results[2].value.count
+  }
+  if (results[3].status === 'fulfilled') corpusProgress.value = results[3].value
+  if (results.some((result) => result.status === 'rejected')) {
+    error.value = '部分数据暂时加载失败，任务进度和其他统计仍可查看。'
+  }
+  loading.value = false
+}
+
+let aggregateLoading = false
+async function loadAggregates() {
+  if (aggregateLoading) return
+  aggregateLoading = true
   try {
     const scope = { product: selectedProduct.value }
-    const [response, qualityResult, aggregateResult, batchResult] = await Promise.all([
-      getStructuredAnalyses({ ...filters, ...scope, page: page.value, page_size: 10 }),
-      getStructuredQuality(scope),
+    const [aggregateResult, taxonomyResult] = await Promise.all([
       getStructuredAggregates(scope),
-      getStructuredBatches({ ...scope, page: batchPage.value, page_size: 10 }),
+      taxonomy.value ? Promise.resolve(taxonomy.value) : getTaxonomy(),
     ])
-    items.value = response.results
-    count.value = response.count
-    quality.value = qualityResult
     aggregates.value = aggregateResult
-    batches.value = batchResult.results
-    batchCount.value = batchResult.count
-    taxonomy.value ||= await getTaxonomy()
-    corpusProgress.value = selectedProduct.value
-      ? await getStructuredCorpusProgress(selectedProduct.value)
-      : undefined
+    taxonomy.value = taxonomyResult
   } catch {
-    error.value = '结构化分析数据加载失败，请稍后重试。'
+    // Aggregate statistics are optional and must never block task progress.
   } finally {
-    loading.value = false
+    aggregateLoading = false
   }
 }
 
@@ -142,6 +162,7 @@ onMounted(async () => {
     ElMessage.warning('产品列表加载失败')
   }
   await load()
+  void loadAggregates()
   refreshTimer = setInterval(() => {
     if (!loading.value) void load()
   }, 5000)
