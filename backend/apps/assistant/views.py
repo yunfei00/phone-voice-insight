@@ -80,9 +80,7 @@ class AssistantModelProfileViewSet(viewsets.ModelViewSet):
         profile = self.get_queryset().filter(pk=raw_id, is_active=True).first()
         if profile is None:
             return Response({"detail": "模型不存在或已停用。"}, status=status.HTTP_400_BAD_REQUEST)
-        AssistantModelSelection.objects.update_or_create(
-            slot="assistant", defaults={"profile": profile}
-        )
+        AssistantModelSelection.objects.update_or_create(slot="assistant", defaults={"profile": profile})
         return Response({"assistant_model_id": profile.pk})
 
     @action(detail=True, methods=("post",))
