@@ -313,15 +313,29 @@ export const evaluateAnalysis = async (
   (await apiClient.post<AnalysisEvaluation>(`/analysis-results/${analysisId}/evaluate/`, payload))
     .data
 
-export const getTaxonomy = async (): Promise<TaxonomyDefinition> =>
-  (await apiClient.get<TaxonomyDefinition>('/taxonomies/')).data
+export interface StructuredRequestOptions {
+  signal?: AbortSignal
+  suppressGlobalError?: boolean
+}
+
+const structuredRequestConfig = (options: StructuredRequestOptions = {}) => ({
+  signal: options.signal,
+  skipGlobalError: options.suppressGlobalError ?? false,
+})
+
+export const getTaxonomy = async (
+  options: StructuredRequestOptions = {},
+): Promise<TaxonomyDefinition> =>
+  (await apiClient.get<TaxonomyDefinition>('/taxonomies/', structuredRequestConfig(options))).data
 
 export const getStructuredAnalyses = async (
   params: PageParams = {},
+  options: StructuredRequestOptions = {},
 ): Promise<PaginatedResponse<StructuredAnalysisV1>> =>
   (
     await apiClient.get<PaginatedResponse<StructuredAnalysisV1>>('/structured-analyses/', {
       params,
+      ...structuredRequestConfig(options),
     })
   ).data
 
@@ -337,18 +351,39 @@ export const reviewStructuredAnalysis = async (
     })
   ).data
 
-export const getStructuredQuality = async (params: PageParams = {}): Promise<StructuredQuality> =>
-  (await apiClient.get<StructuredQuality>('/structured-analyses/quality/', { params })).data
+export const getStructuredQuality = async (
+  params: PageParams = {},
+  options: StructuredRequestOptions = {},
+): Promise<StructuredQuality> =>
+  (
+    await apiClient.get<StructuredQuality>('/structured-analyses/quality/', {
+      params,
+      ...structuredRequestConfig(options),
+    })
+  ).data
 
 export const getStructuredAggregates = async (
   params: PageParams = {},
+  options: StructuredRequestOptions = {},
 ): Promise<StructuredAggregates> =>
-  (await apiClient.get<StructuredAggregates>('/structured-analyses/aggregates/', { params })).data
+  (
+    await apiClient.get<StructuredAggregates>('/structured-analyses/aggregates/', {
+      params,
+      timeout: 60_000,
+      ...structuredRequestConfig(options),
+    })
+  ).data
 
 export const getStructuredBatches = async (
   params: PageParams = {},
+  options: StructuredRequestOptions = {},
 ): Promise<PaginatedResponse<StructuredBatch>> =>
-  (await apiClient.get<PaginatedResponse<StructuredBatch>>('/structured-batches/', { params })).data
+  (
+    await apiClient.get<PaginatedResponse<StructuredBatch>>('/structured-batches/', {
+      params,
+      ...structuredRequestConfig(options),
+    })
+  ).data
 
 export interface StructuredCorpusProgress {
   total: number
@@ -360,8 +395,14 @@ export interface StructuredCorpusProgress {
 
 export const getStructuredCorpusProgress = async (
   productId: number,
+  options: StructuredRequestOptions = {},
 ): Promise<StructuredCorpusProgress> =>
-  (await apiClient.get('/structured-batches/progress/', { params: { product_id: productId } })).data
+  (
+    await apiClient.get('/structured-batches/progress/', {
+      params: { product_id: productId },
+      ...structuredRequestConfig(options),
+    })
+  ).data
 
 export const runAllStructuredAnalysis = async (
   productId: number,

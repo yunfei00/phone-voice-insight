@@ -29,10 +29,31 @@ const router = useRouter()
 const starting = ref(false)
 const startingAll = ref(false)
 const corpusProgress = ref<StructuredCorpusProgress>()
-let refreshTimer: ReturnType<typeof setInterval> | undefined
+let progressTimer: ReturnType<typeof setInterval> | undefined
+let aggregateTimer: ReturnType<typeof setInterval> | undefined
+let requestGeneration = 0
+let disposed = false
+let progressRequestPending = false
+let aggregateRequestPending = false
+let lastProgressActive = false
+let resultsController: AbortController | undefined
+let qualityController: AbortController | undefined
+let aggregateController: AbortController | undefined
+let batchesController: AbortController | undefined
+let taxonomyController: AbortController | undefined
+let progressController: AbortController | undefined
 const sampleSize = ref(20)
 const loading = ref(false)
 const error = ref('')
+const qualityLoading = ref(false)
+const qualityError = ref('')
+const aggregatesLoading = ref(false)
+const aggregatesError = ref('')
+const batchesLoading = ref(false)
+const batchesError = ref('')
+const taxonomyError = ref('')
+const progressLoading = ref(false)
+const progressError = ref('')
 const items = ref<StructuredAnalysisV1[]>([])
 const count = ref(0)
 const taxonomy = ref<TaxonomyDefinition>()
@@ -45,31 +66,295 @@ const batchCount = ref(0)
 const page = ref(1)
 const batchPage = ref(1)
 const filters = reactive({ search: '', aspect_code: '', sentiment: '' })
-async function load() {
+
+const batchStatusLabels: Record<StructuredBatch['status'], string> = {
+  PENDING: '排队中',
+  RUNNING: '执行中',
+  SUCCESS: '已成功',
+  PARTIAL: '部分成功',
+  FAILED: '已失败',
+  CANCELLED: '已取消',
+  PAUSED: '已暂停',
+  BUDGET_EXCEEDED: '预算已停止',
+}
+
+function batchStatusLabel(status: StructuredBatch['status']): string {
+  return batchStatusLabels[status]
+}
+
+function batchStatusType(
+  status: StructuredBatch['status'],
+): 'success' | 'warning' | 'danger' | 'info' {
+  if (status === 'SUCCESS') return 'success'
+  if (status === 'FAILED' || status === 'BUDGET_EXCEEDED') return 'danger'
+  if (status === 'RUNNING' || status === 'PENDING' || status === 'PARTIAL') return 'warning'
+  return 'info'
+}
+
+function isCancelled(reason: unknown): boolean {
+  const candidate = reason as { code?: string; name?: string }
+  return candidate?.code === 'ERR_CANCELED' || candidate?.name === 'AbortError'
+}
+
+function shouldRetry(reason: unknown): boolean {
+  const status = (reason as { response?: { status?: number } })?.response?.status
+  return status === undefined || status === 408 || status === 429 || status >= 500
+}
+
+function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer)
+      const error = new Error('请求已取消')
+      error.name = 'AbortError'
+      reject(error)
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, delay)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+async function withBoundedRetry<T>(task: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  const retryDelays = [100, 300]
+  let lastError: unknown
+  for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+    try {
+      return await task()
+    } catch (reason: unknown) {
+      if (isCancelled(reason) || signal.aborted) throw reason
+      lastError = reason
+      if (!shouldRetry(reason) || attempt === retryDelays.length) break
+      await waitForRetry(retryDelays[attempt], signal)
+    }
+  }
+  throw lastError
+}
+
+function isCurrent(generation: number, productId: number | undefined): boolean {
+  return !disposed && generation === requestGeneration && selectedProduct.value === productId
+}
+
+function abortRequests(): void {
+  resultsController?.abort()
+  qualityController?.abort()
+  aggregateController?.abort()
+  batchesController?.abort()
+  taxonomyController?.abort()
+  progressController?.abort()
+}
+
+async function loadResults(generation = requestGeneration): Promise<void> {
+  const productId = selectedProduct.value
+  resultsController?.abort()
+  const controller = new AbortController()
+  resultsController = controller
   loading.value = true
   error.value = ''
   try {
-    const scope = { product: selectedProduct.value }
-    const [response, qualityResult, aggregateResult, batchResult] = await Promise.all([
-      getStructuredAnalyses({ ...filters, ...scope, page: page.value, page_size: 10 }),
-      getStructuredQuality(scope),
-      getStructuredAggregates(scope),
-      getStructuredBatches({ ...scope, page: batchPage.value, page_size: 10 }),
-    ])
+    const response = await withBoundedRetry(
+      () =>
+        getStructuredAnalyses(
+          { ...filters, product: productId, page: page.value, page_size: 10 },
+          { signal: controller.signal, suppressGlobalError: true },
+        ),
+      controller.signal,
+    )
+    if (!isCurrent(generation, productId)) return
     items.value = response.results
     count.value = response.count
-    quality.value = qualityResult
-    aggregates.value = aggregateResult
-    batches.value = batchResult.results
-    batchCount.value = batchResult.count
-    taxonomy.value ||= await getTaxonomy()
-    corpusProgress.value = selectedProduct.value
-      ? await getStructuredCorpusProgress(selectedProduct.value)
-      : undefined
-  } catch {
-    error.value = '结构化分析数据加载失败，请稍后重试。'
+  } catch (reason: unknown) {
+    if (!isCancelled(reason) && isCurrent(generation, productId)) {
+      error.value = '分析结果加载失败，请稍后重试。'
+    }
   } finally {
-    loading.value = false
+    if (isCurrent(generation, productId) && resultsController === controller) loading.value = false
+  }
+}
+
+async function loadQuality(generation = requestGeneration): Promise<void> {
+  const productId = selectedProduct.value
+  qualityController?.abort()
+  const controller = new AbortController()
+  qualityController = controller
+  qualityLoading.value = true
+  qualityError.value = ''
+  try {
+    const result = await withBoundedRetry(
+      () =>
+        getStructuredQuality(
+          { product: productId },
+          { signal: controller.signal, suppressGlobalError: true },
+        ),
+      controller.signal,
+    )
+    if (isCurrent(generation, productId)) quality.value = result
+  } catch (reason: unknown) {
+    if (!isCancelled(reason) && isCurrent(generation, productId)) {
+      qualityError.value = '质量统计加载失败，已保留上次成功数据。'
+    }
+  } finally {
+    if (isCurrent(generation, productId) && qualityController === controller)
+      qualityLoading.value = false
+  }
+}
+
+async function loadAggregates(generation = requestGeneration): Promise<void> {
+  const productId = selectedProduct.value
+  aggregateController?.abort()
+  const controller = new AbortController()
+  aggregateController = controller
+  aggregatesLoading.value = true
+  aggregatesError.value = ''
+  try {
+    const result = await withBoundedRetry(
+      () =>
+        getStructuredAggregates(
+          { product: productId },
+          { signal: controller.signal, suppressGlobalError: true },
+        ),
+      controller.signal,
+    )
+    if (isCurrent(generation, productId)) aggregates.value = result
+  } catch (reason: unknown) {
+    if (!isCancelled(reason) && isCurrent(generation, productId)) {
+      aggregatesError.value = '聚合统计加载失败，任务进度仍会继续更新。'
+    }
+  } finally {
+    if (isCurrent(generation, productId) && aggregateController === controller) {
+      aggregatesLoading.value = false
+    }
+  }
+}
+
+async function loadBatches(generation = requestGeneration): Promise<void> {
+  const productId = selectedProduct.value
+  batchesController?.abort()
+  const controller = new AbortController()
+  batchesController = controller
+  batchesLoading.value = true
+  batchesError.value = ''
+  try {
+    const result = await withBoundedRetry(
+      () =>
+        getStructuredBatches(
+          { product: productId, page: batchPage.value, page_size: 10 },
+          { signal: controller.signal, suppressGlobalError: true },
+        ),
+      controller.signal,
+    )
+    if (!isCurrent(generation, productId)) return
+    batches.value = result.results
+    batchCount.value = result.count
+  } catch (reason: unknown) {
+    if (!isCancelled(reason) && isCurrent(generation, productId)) {
+      batchesError.value = '任务列表加载失败，其他模块不受影响。'
+    }
+  } finally {
+    if (isCurrent(generation, productId) && batchesController === controller)
+      batchesLoading.value = false
+  }
+}
+
+async function loadTaxonomy(generation = requestGeneration): Promise<void> {
+  if (taxonomy.value) return
+  const productId = selectedProduct.value
+  taxonomyController?.abort()
+  const controller = new AbortController()
+  taxonomyController = controller
+  taxonomyError.value = ''
+  try {
+    const result = await withBoundedRetry(
+      () => getTaxonomy({ signal: controller.signal, suppressGlobalError: true }),
+      controller.signal,
+    )
+    if (isCurrent(generation, productId)) taxonomy.value = result
+  } catch (reason: unknown) {
+    if (!isCancelled(reason) && isCurrent(generation, productId)) {
+      taxonomyError.value = '分类体系暂时不可用，不影响结果和任务进度。'
+    }
+  }
+}
+
+async function loadProgress(
+  generation = requestGeneration,
+  detectCompletion = false,
+): Promise<void> {
+  const productId = selectedProduct.value
+  if (!productId) {
+    corpusProgress.value = undefined
+    progressError.value = ''
+    return
+  }
+  progressController?.abort()
+  const controller = new AbortController()
+  progressController = controller
+  progressLoading.value = true
+  progressError.value = ''
+  try {
+    const result = await withBoundedRetry(
+      () =>
+        getStructuredCorpusProgress(productId, {
+          signal: controller.signal,
+          suppressGlobalError: true,
+        }),
+      controller.signal,
+    )
+    if (!isCurrent(generation, productId)) return
+    const justCompleted = detectCompletion && lastProgressActive && !result.active
+    corpusProgress.value = result
+    lastProgressActive = result.active
+    if (justCompleted) {
+      await Promise.allSettled([
+        loadResults(generation),
+        loadQuality(generation),
+        loadAggregates(generation),
+        loadBatches(generation),
+      ])
+    }
+  } catch (reason: unknown) {
+    if (!isCancelled(reason) && isCurrent(generation, productId)) {
+      progressError.value = '任务进度更新失败，将在下个周期自动重试。'
+    }
+  } finally {
+    if (isCurrent(generation, productId) && progressController === controller)
+      progressLoading.value = false
+  }
+}
+
+async function load(): Promise<void> {
+  requestGeneration += 1
+  abortRequests()
+  const generation = requestGeneration
+  await Promise.allSettled([
+    loadResults(generation),
+    loadQuality(generation),
+    loadAggregates(generation),
+    loadBatches(generation),
+    loadTaxonomy(generation),
+    loadProgress(generation),
+  ])
+}
+
+async function pollProgress(): Promise<void> {
+  if (progressRequestPending || disposed || document.hidden || !selectedProduct.value) return
+  progressRequestPending = true
+  try {
+    await loadProgress(requestGeneration, true)
+  } finally {
+    progressRequestPending = false
+  }
+}
+
+async function refreshAggregatesOnSchedule(): Promise<void> {
+  if (aggregateRequestPending || disposed || document.hidden) return
+  aggregateRequestPending = true
+  try {
+    await loadAggregates(requestGeneration)
+  } finally {
+    aggregateRequestPending = false
   }
 }
 
@@ -131,8 +416,28 @@ async function startSample() {
 async function changeProduct() {
   page.value = 1
   batchPage.value = 1
+  lastProgressActive = false
   await load()
 }
+
+async function applyResultFilters(): Promise<void> {
+  page.value = 1
+  await loadResults()
+}
+
+function startRefreshTimers(): void {
+  progressTimer ||= setInterval(() => void pollProgress(), 5000)
+  aggregateTimer ||= setInterval(() => void refreshAggregatesOnSchedule(), 60_000)
+}
+
+function stopRefreshTimers(): void {
+  if (progressTimer) clearInterval(progressTimer)
+  if (aggregateTimer) clearInterval(aggregateTimer)
+  progressTimer = undefined
+  aggregateTimer = undefined
+}
+
+defineExpose({ changeProduct, selectedProduct })
 
 onMounted(async () => {
   try {
@@ -142,12 +447,12 @@ onMounted(async () => {
     ElMessage.warning('产品列表加载失败')
   }
   await load()
-  refreshTimer = setInterval(() => {
-    if (!loading.value) void load()
-  }, 5000)
+  startRefreshTimers()
 })
 onUnmounted(() => {
-  if (refreshTimer) clearInterval(refreshTimer)
+  disposed = true
+  stopRefreshTimers()
+  abortRequests()
 })
 </script>
 
@@ -193,7 +498,16 @@ onUnmounted(() => {
         分钟检查新增有效评论并自动分析，失败记录不会无限重试。
       </p>
     </el-card>
-    <el-card v-if="corpusProgress" shadow="never">
+    <el-alert
+      v-if="progressError"
+      :title="progressError"
+      type="warning"
+      show-icon
+      :closable="false"
+    >
+      <el-button text @click="loadProgress()">立即重试</el-button>
+    </el-alert>
+    <el-card v-if="corpusProgress" v-loading="progressLoading" shadow="never">
       <template #header><strong>全量分析进度（每 5 秒更新）</strong></template>
       <el-progress
         :percentage="
@@ -207,7 +521,8 @@ onUnmounted(() => {
         {{ corpusProgress.remaining }}
       </p>
       <p v-if="corpusProgress.batch">
-        批次 #{{ corpusProgress.batch.id }} · {{ corpusProgress.batch.status }} · 本批
+        批次 #{{ corpusProgress.batch.id }} · {{ batchStatusLabel(corpusProgress.batch.status) }} ·
+        本批
         {{
           corpusProgress.batch.success_count +
           corpusProgress.batch.failed_count +
@@ -219,7 +534,10 @@ onUnmounted(() => {
         >查看任务中心</el-button
       >
     </el-card>
-    <div class="metric-grid">
+    <el-alert v-if="qualityError" :title="qualityError" type="warning" show-icon :closable="false">
+      <el-button text @click="loadQuality()">重试质量统计</el-button>
+    </el-alert>
+    <div v-loading="qualityLoading" class="metric-grid">
       <el-card shadow="never"
         ><span>AI 已分析量</span><strong>{{ quality?.total_runs || 0 }}</strong></el-card
       >
@@ -250,7 +568,7 @@ onUnmounted(() => {
           v-model="filters.search"
           clearable
           placeholder="搜索原文、摘要或证据"
-          @keyup.enter="load"
+          @keyup.enter="applyResultFilters"
         />
         <el-select v-model="filters.aspect_code" clearable placeholder="一级分类">
           <el-option
@@ -267,9 +585,18 @@ onUnmounted(() => {
             :value="value"
           />
         </el-select>
-        <el-button type="primary" @click="load">查询</el-button>
+        <el-button type="primary" @click="applyResultFilters">查询</el-button>
       </div>
     </el-card>
+    <el-alert
+      v-if="taxonomyError"
+      :title="taxonomyError"
+      type="warning"
+      show-icon
+      :closable="false"
+    >
+      <el-button text @click="loadTaxonomy()">重试分类体系</el-button>
+    </el-alert>
     <el-alert v-if="error" :title="error" type="error" show-icon
       ><el-button text @click="load">重试</el-button></el-alert
     >
@@ -327,9 +654,18 @@ onUnmounted(() => {
       :page-size="10"
       :total="count"
       layout="prev, pager, next, total"
-      @current-change="load"
+      @current-change="loadResults"
     />
-    <el-card shadow="never">
+    <el-alert
+      v-if="aggregatesError"
+      :title="aggregatesError"
+      type="warning"
+      show-icon
+      :closable="false"
+    >
+      <el-button text @click="loadAggregates()">重试聚合统计</el-button>
+    </el-alert>
+    <el-card v-loading="aggregatesLoading" shadow="never">
       <template #header><strong>高频问题与分类</strong></template>
       <div class="ranking">
         <el-tag v-for="item in aggregates?.high_frequency_clusters || []" :key="item.topic_code">
@@ -342,12 +678,25 @@ onUnmounted(() => {
         />
       </div>
     </el-card>
-    <el-card shadow="never">
+    <el-card v-loading="batchesLoading" shadow="never">
       <template #header><strong>最近自动分析任务</strong></template>
+      <el-alert
+        v-if="batchesError"
+        :title="batchesError"
+        type="warning"
+        show-icon
+        :closable="false"
+      >
+        <el-button text @click="loadBatches()">重试任务列表</el-button>
+      </el-alert>
       <el-table :data="batches" empty-text="暂无自动分析任务">
         <el-table-column prop="id" label="任务 ID" width="90" />
         <el-table-column prop="product_name" label="产品" />
-        <el-table-column prop="status" label="状态" width="110" />
+        <el-table-column label="状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="batchStatusType(row.status)">{{ batchStatusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="进度"
           ><template #default="{ row }"
             >{{ row.success_count + row.failed_count + row.skipped_count }} /
@@ -363,7 +712,7 @@ onUnmounted(() => {
         :page-size="10"
         :total="batchCount"
         layout="prev, pager, next, total"
-        @current-change="load"
+        @current-change="loadBatches"
       />
     </el-card>
   </section>
