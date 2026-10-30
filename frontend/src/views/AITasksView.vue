@@ -22,6 +22,7 @@ const failureError = ref('')
 const loading = ref(false)
 const submitting = ref(false)
 const advancedVisible = ref(false)
+const preview = ref<{ matched_count: number; estimated_tokens: number; estimated_cost: string; cost_estimate_reliable: boolean } | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 const error = ref('')
 const batches = ref<StructuredBatch[]>([])
@@ -80,10 +81,16 @@ async function create() {
   if (submitting.value) return
   submitting.value = true
   try {
-    await createStructuredBatch(form)
-    ElMessage.success(form.dry_run ? '预估完成，未调用模型' : '任务已提交')
-    page.value = 1
-    await load()
+    const result = await createStructuredBatch({ ...form })
+    if (form.dry_run) {
+      preview.value = result.preview || null
+      ElMessage.success('预估完成，未调用模型、未创建任务')
+    } else {
+      preview.value = null
+      ElMessage.success('任务已提交')
+      page.value = 1
+      await load()
+    }
   } catch {
     ElMessage.error('创建任务失败，请检查筛选条件或 AI 配置')
   } finally {
@@ -166,7 +173,7 @@ onUnmounted(() => {
           ></el-card
     ><el-alert v-if="error" :title="error" type="error" /><el-table
       v-loading="loading"
-      :data="batches"
+      :data="batches.filter((batch) => !batch.dry_run)"
       empty-text="暂无 V1 任务"
       ><el-table-column prop="id" label="任务" width="80" /><el-table-column
         prop="product_name"
