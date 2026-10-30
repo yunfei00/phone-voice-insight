@@ -732,6 +732,9 @@ export interface SystemResources {
   online: { count: number; definition: string }
   sampled_at: string
 }
+export const sendPresenceHeartbeat = async (): Promise<void> => {
+  await apiClient.post('/presence/heartbeat/')
+}
 export const getSystemResources = async (): Promise<SystemResources> =>
   (await apiClient.get<SystemResources>('/system/resources/')).data
 
