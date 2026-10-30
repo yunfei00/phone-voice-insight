@@ -203,18 +203,19 @@ class StructuredBatchViewSet(ViewSet):
         product_id = request.data.get("product_id")
         if not isinstance(product_id, int) or product_id <= 0:
             return Response({"error_code": "PRODUCT_REQUIRED"}, status=status.HTTP_400_BAD_REQUEST)
-        lock_key = f"structured-dispatch:{request.user.pk}:{product_id}"
+        user = cast(User, request.user)
+        lock_key = f"structured-dispatch:{user.pk}:{product_id}"
         if not cache.add(lock_key, "1", timeout=240):
             return Response({"error_code": "DISPATCH_BUSY"}, status=status.HTTP_409_CONFLICT)
         try:
             if AnalysisBatch.objects.filter(
-                created_by=request.user,
+                created_by=user,
                 prompt_version="structured_analysis_v1",
                 status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
             ).exists():
                 return Response({"error_code": "ANALYSIS_ALREADY_RUNNING"}, status=status.HTTP_409_CONFLICT)
             try:
-                provider = get_user_ai_provider(request.user)
+                provider = get_user_ai_provider(user)
             except Exception:
                 return Response({"error_code": "AI_NOT_CONFIGURED"}, status=status.HTTP_400_BAD_REQUEST)
             completed = AnalysisRun.objects.filter(
