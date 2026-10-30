@@ -13,7 +13,7 @@ from django.core.cache import cache
 from django.db.models import Count
 from django.http import StreamingHttpResponse
 from django.utils import timezone
-from rest_framework import status, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer
@@ -171,6 +171,21 @@ class AssistantConversationViewSet(viewsets.ModelViewSet):
                 orchestrator = AssistantOrchestrator(conversation, response_message)
                 for event in orchestrator.stream(payload["content"], filters):
                     yield _sse(event)
+            except (AIProviderError, serializers.ValidationError, ValueError) as exc:
+                code = exc.code if isinstance(exc, AIProviderError) else "ASSISTANT_MODEL_CONFIGURATION_INVALID"
+                message = exc.safe_message if isinstance(exc, AIProviderError) else str(exc)
+                AssistantMessage.objects.filter(pk=response_message.pk).update(
+                    status=MessageStatus.FAILED,
+                    error_code=code,
+                    error_message=message[:500],
+                    updated_at=timezone.now(),
+                )
+                AssistantConversation.objects.filter(pk=conversation.pk).update(
+                    status=ConversationStatus.FAILED,
+                    active_request_id=None,
+                    updated_at=timezone.now(),
+                )
+                yield _sse({"type": "error", "code": code, "message": message})
             except GeneratorExit:
                 AssistantMessage.objects.filter(pk=response_message.pk, status=MessageStatus.RUNNING).update(
                     status=MessageStatus.CANCELLED,
