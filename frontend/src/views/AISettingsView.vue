@@ -249,19 +249,26 @@ onMounted(() => {
       <h2>统一模型库</h2>
       <p>在下方同一表单中配置或编辑模型，保存后可分配给智能助手，无需重复填写。</p>
       <div class="model-actions">
-        <el-button :type="selectedProfileId === null ? 'primary' : 'default'" @click="choosePersonal">个人默认模型</el-button>
+        <el-button :type="selectedProfileId === null ? 'primary' : 'default'" @click="choosePersonal"
+          >个人默认模型</el-button
+        >
         <el-button
           v-for="item in assistantModels?.results"
           :key="item.id"
           :type="selectedProfileId === item.id ? 'primary' : 'default'"
           @click="editProfile(item)"
-        >{{ item.model }}</el-button>
+          >{{ item.model }}</el-button
+        >
         <el-button type="success" plain @click="newProfile">+ 新增模型</el-button>
       </div>
       <el-divider />
       <h3>智能助手使用模型</h3>
       <div class="model-actions">
-        <el-select v-model="assistantSelection" placeholder="选择已保存的模型" style="width: 300px">
+        <el-select
+          v-model="assistantSelection"
+          placeholder="选择已保存的模型"
+          style="width: 300px"
+        >
           <el-option
             v-for="item in assistantModels?.results.filter((profile) => profile.is_active)"
             :key="item.id"
@@ -269,11 +276,21 @@ onMounted(() => {
             :value="item.id"
           />
         </el-select>
-        <el-button type="primary" :loading="assigning" @click="assignAssistantModel">设为智能助手模型</el-button>
+        <el-button type="primary" :loading="assigning" @click="assignAssistantModel"
+          >设为智能助手模型</el-button
+        >
       </div>
     </section>
     <section class="panel settings-panel">
-      <h2>{{ selectedProfileId === null ? "个人默认模型" : selectedProfileId === 0 ? "新增模型" : "编辑模型" }}</h2>
+      <h2>
+        {{
+          selectedProfileId === null
+            ? '个人默认模型'
+            : selectedProfileId === 0
+              ? '新增模型'
+              : '编辑模型'
+        }}
+      </h2>
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <el-form-item label="接口类型">
           <el-select v-model="form.provider">
