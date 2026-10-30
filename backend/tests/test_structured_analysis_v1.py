@@ -1,9 +1,12 @@
 import json
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from ai.providers.base import AIProvider, AIProviderError, AIProviderResponse
 from ai.schemas.review_analysis import ReviewAnalysisInput
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.analysis.models import (
@@ -14,6 +17,7 @@ from apps.analysis.models import (
     StructuredRunStatus,
 )
 from apps.analysis.services.structured_engine import analyze_content
+from apps.products.models import Product
 from apps.reviews.models import (
     AuthorRole,
     GovernanceAIReview,
@@ -21,6 +25,7 @@ from apps.reviews.models import (
     ReviewQuality,
     ReviewRecord,
 )
+from apps.sources.models import SourceTarget, TargetType
 
 
 class StructuredProvider(AIProvider):
@@ -227,6 +232,141 @@ def test_aggregate_counts_are_deterministic(api_client, review):  # type: ignore
     assert response.data["high_frequency_clusters"] == [{"topic_code": "NET.CELLULAR", "count": 1}]
     assert response.data["independent_user_count"] is None
     assert response.data["product_issue_comparison"][0]["opinion_count"] == 1
+
+
+@pytest.mark.django_db
+def test_anomaly_windows_are_aggregated_correctly(api_client, product, source, source_target):  # type: ignore[no-untyped-def]
+    now = timezone.now()
+    for index in range(13):
+        published_at = now - timedelta(days=2 if index < 5 else 14)
+        item = ReviewRecord.objects.create(
+            product=product,
+            source=source,
+            source_target=source_target,
+            external_id=f"anomaly-{index}",
+            record_type=RecordType.REPLY,
+            title="",
+            content="地下车库信号不稳定",
+            content_hash=f"{index + 100:064x}",
+            author_role=AuthorRole.USER,
+            collected_at=now,
+            published_at=published_at,
+        )
+        accept_for_final_corpus(item)
+        analyze_content(item.id, StructuredProvider())
+
+    response = api_client.get("/api/v1/structured-analyses/aggregates/")
+
+    assert response.status_code == 200
+    assert response.data["anomaly_candidates"] == [
+        {
+            "topic_code": "NET.CELLULAR",
+            "observed_7d": 5,
+            "baseline_28d": 8,
+            "expected_7d": 2.0,
+            "reason": "近7天数量至少5且达到历史周均的2倍",
+        }
+    ]
+
+
+@pytest.mark.django_db
+def test_aggregate_query_count_does_not_grow_with_topics(api_client, review):  # type: ignore[no-untyped-def]
+    accept_for_final_corpus(review)
+    run = analyze_content(review.id, StructuredProvider())
+    analysis = run.structured_analysis
+    OpinionAspect.objects.bulk_create(
+        [
+            OpinionAspect(
+                analysis=analysis,
+                business_domains=["NET"],
+                aspect_code="NET",
+                topic_code=f"NET.SYNTHETIC_{index:03d}",
+                sentiment="NEGATIVE",
+                intent="COMPLAINT",
+                issue_type="RELIABILITY",
+                severity="MEDIUM",
+                scenario=None,
+                trigger=None,
+                phenomenon="网络体验异常",
+                target_product=None,
+                compared_products=[],
+                relation_type="SELF",
+                evidence_text="信号不稳定",
+                evidence_start=4,
+                evidence_end=9,
+                confidence=0.9,
+                review_required=False,
+            )
+            for index in range(100)
+        ]
+    )
+
+    with CaptureQueriesContext(connection) as captured:
+        response = api_client.get("/api/v1/structured-analyses/aggregates/")
+
+    assert response.status_code == 200
+    assert len(response.data["topic_distribution"]) == 101
+    assert len(captured) <= 18
+
+
+@pytest.mark.django_db
+def test_aggregate_empty_dataset(api_client):  # type: ignore[no-untyped-def]
+    response = api_client.get("/api/v1/structured-analyses/aggregates/")
+
+    assert response.status_code == 200
+    assert response.data["content_count"] == 0
+    assert response.data["opinion_count"] == 0
+    assert response.data["topic_distribution"] == []
+    assert response.data["anomaly_candidates"] == []
+
+
+@pytest.mark.django_db
+def test_aggregate_product_filter_is_isolated(api_client, product, source, source_target):  # type: ignore[no-untyped-def]
+    other_product = Product.objects.create(
+        brand=product.brand,
+        name="荣耀 Power",
+        normalized_name="HONOR_POWER",
+        series="Power",
+    )
+    other_target = SourceTarget.objects.create(
+        source=source,
+        product=other_product,
+        name="另一个测试入口",
+        target_type=TargetType.PRODUCT,
+    )
+    now = timezone.now()
+    for index, (current_product, target) in enumerate(
+        ((product, source_target), (other_product, other_target)), start=1
+    ):
+        item = ReviewRecord.objects.create(
+            product=current_product,
+            source=source,
+            source_target=target,
+            external_id=f"product-isolation-{index}",
+            record_type=RecordType.REPLY,
+            title="",
+            content="地下车库信号不稳定",
+            content_hash=f"{index + 300:064x}",
+            author_role=AuthorRole.USER,
+            collected_at=now,
+            published_at=now,
+        )
+        accept_for_final_corpus(item)
+        analyze_content(item.id, StructuredProvider())
+
+    response = api_client.get(f"/api/v1/structured-analyses/aggregates/?product={other_product.id}")
+
+    assert response.status_code == 200
+    assert response.data["content_count"] == 1
+    assert response.data["opinion_count"] == 1
+    assert response.data["product_issue_comparison"] == [
+        {
+            "analysis__content__product__name": "荣耀 Power",
+            "topic_code": "NET.CELLULAR",
+            "content_count": 1,
+            "opinion_count": 1,
+        }
+    ]
 
 
 @pytest.mark.django_db

@@ -261,7 +261,7 @@ describe('App', () => {
     },
   )
 
-  it('原始数据页面区分发布时间、IP 属地和用户填写地区完整率', async () => {
+  it('原始数据页面使用紧凑字段完整率并隐藏用户填写地区', async () => {
     const { app, container } = await mountApp('/reviews')
     await new Promise((resolve) => setTimeout(resolve, 0))
     await nextTick()
@@ -269,7 +269,10 @@ describe('App', () => {
     expect(container.textContent).toContain('发布时间完整率')
     expect(container.textContent).toContain('98.00%')
     expect(container.textContent).toContain('公开 IP 属地完整率')
-    expect(container.textContent).toContain('用户填写地区完整率')
+    expect(container.textContent).not.toContain('用户填写地区完整率')
+    expect(container.querySelector('.page-title')).toBeNull()
+    expect(container.querySelector('.metadata-strip')).not.toBeNull()
+    expect(container.querySelectorAll('.metadata-strip > span')).toHaveLength(2)
 
     app.unmount()
   })

@@ -514,7 +514,15 @@ export interface AnalysisBatch {
   provider: string
   model_name: string
   prompt_version: string
-  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
+  status:
+    | 'PENDING'
+    | 'RUNNING'
+    | 'SUCCESS'
+    | 'PARTIAL'
+    | 'FAILED'
+    | 'CANCELLED'
+    | 'PAUSED'
+    | 'BUDGET_EXCEEDED'
   requested_count: number
   success_count: number
   failed_count: number

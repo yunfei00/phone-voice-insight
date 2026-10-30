@@ -8,7 +8,7 @@ from ai.taxonomy import load_taxonomy
 from ai.validation import validate_structured_payload
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, QuerySet
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework import status
@@ -426,11 +426,15 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
             .annotate(count=Count("id"))
             .order_by("-count")[:100]
         )
+        totals = aspects.aggregate(
+            content_count=Count("analysis__content_id", distinct=True),
+            opinion_count=Count("id"),
+        )
         return Response(
             {
                 "disclaimer": "论坛反馈占比不等于真实设备故障率",
-                "content_count": analyses.values("content_id").distinct().count(),
-                "opinion_count": aspects.count(),
+                "content_count": totals["content_count"],
+                "opinion_count": totals["opinion_count"],
                 "independent_user_count": None,
                 "independent_user_count_reason": "原始数据没有稳定个人标识 不能伪造独立用户数",
                 "domain_distribution": by_domain,
@@ -469,19 +473,32 @@ def _analysis_payload(analysis: StructuredAnalysis) -> dict[str, Any]:
     }
 
 
-def _anomalies(aspects):  # type: ignore[no-untyped-def]
+def _anomalies(aspects: QuerySet[OpinionAspect]) -> list[dict[str, Any]]:
     now = timezone.now()
     recent_start = now - timedelta(days=7)
     baseline_start = recent_start - timedelta(days=28)
-    candidates = []
-    topics = aspects.values_list("topic_code", flat=True).distinct()
-    for topic in topics:
-        recent = aspects.filter(topic_code=topic, analysis__content__published_at__gte=recent_start).count()
-        baseline = aspects.filter(
-            topic_code=topic,
-            analysis__content__published_at__gte=baseline_start,
-            analysis__content__published_at__lt=recent_start,
-        ).count()
+    candidates: list[dict[str, Any]] = []
+    topic_windows = (
+        aspects.values("topic_code")
+        .annotate(
+            recent=Count(
+                "id",
+                filter=Q(analysis__content__published_at__gte=recent_start),
+            ),
+            baseline=Count(
+                "id",
+                filter=Q(
+                    analysis__content__published_at__gte=baseline_start,
+                    analysis__content__published_at__lt=recent_start,
+                ),
+            ),
+        )
+        .order_by("topic_code")
+    )
+    for row in topic_windows:
+        topic = row["topic_code"]
+        recent = row["recent"]
+        baseline = row["baseline"]
         expected = baseline / 4
         if recent >= 5 and recent >= max(expected * 2, 5):
             candidates.append(

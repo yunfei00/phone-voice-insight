@@ -99,11 +99,10 @@ function formatPublishedAt(value: string | null): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     hourCycle: 'h23',
   }).formatToParts(date)
   const part = (type: string) => parts.find((item) => item.type === type)?.value || ''
-  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`
 }
 
 function formatRate(value: number): string {
@@ -159,31 +158,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">原始数据</h1>
-      </div>
-    </div>
+  <div class="reviews-page">
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="notice" />
-    <div v-if="metadata" class="metadata-grid">
-      <div class="metadata-card">
-        <span>发布时间完整率</span>
-        <strong>{{ formatRate(metadata.summary.published_at_rate) }}</strong>
-        <small>{{ metadata.summary.published_at_count }} / {{ metadata.summary.total }}</small>
-      </div>
-      <div class="metadata-card">
-        <span>公开 IP 属地完整率</span>
-        <strong>{{ formatRate(metadata.summary.ip_location_rate) }}</strong>
-        <small>{{ metadata.summary.ip_location_count }} / {{ metadata.summary.total }}</small>
-      </div>
-      <div class="metadata-card">
-        <span>用户填写地区完整率</span>
-        <strong>{{ formatRate(metadata.summary.profile_region_rate) }}</strong>
-        <small>{{ metadata.summary.profile_region_count }} / {{ metadata.summary.total }}</small>
-      </div>
-    </div>
-    <div class="panel">
+    <div class="panel data-panel">
       <div class="filters">
         <el-select
           v-model="filters.product"
@@ -246,6 +223,19 @@ onMounted(async () => {
         </el-input>
       </div>
 
+      <div v-if="metadata" class="metadata-strip" aria-label="原始数据字段完整率">
+        <span>
+          发布时间完整率
+          <strong>{{ formatRate(metadata.summary.published_at_rate) }}</strong>
+          <small>{{ metadata.summary.published_at_count }}/{{ metadata.summary.total }}</small>
+        </span>
+        <span>
+          公开 IP 属地完整率
+          <strong>{{ formatRate(metadata.summary.ip_location_rate) }}</strong>
+          <small>{{ metadata.summary.ip_location_count }}/{{ metadata.summary.total }}</small>
+        </span>
+      </div>
+
       <el-table
         v-loading="loading"
         :data="reviews"
@@ -275,16 +265,16 @@ onMounted(async () => {
             }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="ip_location" label="IP 属地" sortable="custom" min-width="110" />
-        <el-table-column prop="published_at" label="发布时间" sortable="custom" min-width="170"
-          ><template #default="{ row }">{{
-            formatPublishedAt(row.published_at)
-          }}</template></el-table-column
+        <el-table-column prop="ip_location" label="IP 属地" sortable="custom" width="100" />
+        <el-table-column prop="published_at" label="发布时间" sortable="custom" width="150"
+          ><template #default="{ row }"
+            ><span class="compact-time">{{ formatPublishedAt(row.published_at) }}</span></template
+          ></el-table-column
         >
-        <el-table-column prop="collected_at" label="采集时间" sortable="custom" min-width="170"
-          ><template #default="{ row }: { row: ReviewRecord }">{{
-            formatPublishedAt(row.collected_at)
-          }}</template></el-table-column
+        <el-table-column prop="collected_at" label="采集时间" sortable="custom" width="150"
+          ><template #default="{ row }: { row: ReviewRecord }"
+            ><span class="compact-time">{{ formatPublishedAt(row.collected_at) }}</span></template
+          ></el-table-column
         >
       </el-table>
 
@@ -359,43 +349,57 @@ onMounted(async () => {
   margin-bottom: 16px;
 }
 
-.metadata-grid {
-  display: grid;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
+.data-panel {
+  padding: 14px;
 }
 
-.metadata-card {
-  display: grid;
-  gap: 6px;
-  padding: 16px 18px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 10px;
-  background: var(--el-bg-color);
-}
-
-.metadata-card span,
-.metadata-card small {
+.metadata-strip {
+  display: flex;
+  justify-content: flex-end;
+  gap: 18px;
+  margin: -4px 0 10px;
   color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
-.metadata-card strong {
+.metadata-strip > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.metadata-strip strong {
   color: var(--el-text-color-primary);
-  font-size: 24px;
+  font-size: 14px;
+}
+
+.metadata-strip small {
+  color: var(--el-text-color-secondary);
 }
 
 .filters {
   display: grid;
   grid-template-columns: repeat(6, minmax(120px, 1fr));
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 10px;
+}
+
+.compact-time {
+  white-space: nowrap;
+  font-size: 12px;
 }
 
 pre {
   margin: 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .metadata-strip {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 .pagination {

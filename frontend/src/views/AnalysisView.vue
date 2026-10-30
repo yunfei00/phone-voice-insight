@@ -694,8 +694,9 @@ onMounted(loadAll)
   margin-bottom: 18px;
 }
 .metric-card {
-  background: #fff;
-  border: 1px solid #e5e9f0;
+  color: var(--pvi-text);
+  background: var(--pvi-card);
+  border: 1px solid var(--pvi-border);
   border-radius: 10px;
   padding: 16px;
   display: flex;
@@ -740,7 +741,7 @@ onMounted(loadAll)
 }
 .preview-heading p {
   margin-top: 6px;
-  color: #667085;
+  color: var(--pvi-muted);
 }
 .preview-text {
   white-space: pre-wrap;
@@ -762,7 +763,7 @@ onMounted(loadAll)
   gap: 10px 16px;
 }
 .detail-grid dt {
-  color: #667085;
+  color: var(--pvi-muted);
 }
 .detail-grid dd {
   margin: 0;
@@ -772,7 +773,9 @@ onMounted(loadAll)
   line-height: 1.65;
 }
 .aspect-card {
-  border: 1px solid #e5e9f0;
+  color: var(--pvi-text);
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--pvi-border);
   border-radius: 8px;
   padding: 14px;
   margin: 12px 0;
@@ -785,13 +788,15 @@ onMounted(loadAll)
   padding: 10px;
   white-space: pre-wrap;
   line-height: 1.65;
-  background: #f8fafc;
+  color: var(--pvi-text);
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--pvi-border);
   border-radius: 6px;
 }
 .evidence-content :deep(mark) {
   padding: 1px 2px;
-  background: #fff176;
-  color: #1f2937;
+  background: var(--pvi-orange);
+  color: #071524;
 }
 .evaluation-actions {
   margin-bottom: 12px;

@@ -3,6 +3,12 @@ import { ElMessage } from 'element-plus'
 
 import { AUTH_TOKEN_STORAGE_KEY } from '@/config/auth'
 
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    skipGlobalError?: boolean
+  }
+}
+
 const apiClient = axios.create({
   baseURL: import.meta.env.DEV ? '/api/v1' : import.meta.env.VITE_API_BASE_URL || '/api/v1',
   timeout: 10_000,
@@ -28,7 +34,7 @@ apiClient.interceptors.response.use(
         : typeof nestedDetail === 'string'
           ? nestedDetail
           : 'API 请求失败，请检查后端服务状态'
-    ElMessage.error(message)
+    if (!error.config?.skipGlobalError) ElMessage.error(message)
     if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login/')) {
       window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
       const base = import.meta.env.BASE_URL || '/'
