@@ -177,6 +177,10 @@ async function saveConfiguration(): Promise<boolean> {
 
 async function discoverOllamaModels(): Promise<void> {
   if (form.provider !== 'ollama') return
+  if (selectedProfileId.value !== null) {
+    ElMessage.info('请先保存该模型，再使用连接测试验证本地 Ollama 服务')
+    return
+  }
   if (!form.base_url) {
     ElMessage.warning('请先填写 Ollama 服务地址')
     return
