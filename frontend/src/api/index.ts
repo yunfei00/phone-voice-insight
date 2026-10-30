@@ -723,6 +723,9 @@ export const getInsightReports = async (
 ): Promise<PaginatedResponse<InsightReport>> =>
   (await apiClient.get<PaginatedResponse<InsightReport>>('/dashboard/reports/', { params })).data
 
+export const generateInsightReport = async (report_type: 'DAILY' | 'WEEKLY'): Promise<{ task_id: string; status: string }> =>
+  (await apiClient.post('/dashboard/reports/generate/', { report_type })).data
+
 export const getInsightReport = async (id: number): Promise<InsightReport> =>
   (await apiClient.get<InsightReport>(`/dashboard/reports/${id}/`)).data
 
