@@ -54,9 +54,7 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: 'operations',
-        name: 'operations',
-        component: () => import('@/views/OperationsView.vue'),
-        meta: { title: '数据运行监控' },
+        redirect: '/system',
       },
       {
         path: 'products',
@@ -110,7 +108,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'system',
         name: 'system',
         component: () => import('@/views/SystemView.vue'),
-        meta: { title: '系统状态', writeOnly: true },
+        meta: { title: '运行监控', writeOnly: true },
       },
     ],
   },
