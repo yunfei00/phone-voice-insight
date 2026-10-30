@@ -534,7 +534,12 @@ onUnmounted(() => {
         <el-tag type="danger" effect="plain">失败 {{ corpusProgress.batch.failed_count }}</el-tag>
         <el-tag type="info" effect="plain">跳过 {{ corpusProgress.batch.skipped_count }}</el-tag>
       </p>
-      <el-alert v-if="corpusProgress.batch?.error_message" :title="corpusProgress.batch.error_message" type="error" :closable="false" />
+      <el-alert
+        v-if="corpusProgress.batch?.error_message"
+        :title="corpusProgress.batch.error_message"
+        type="error"
+        :closable="false"
+      />
       <p v-if="corpusProgress.active">任务执行中，已禁止重复提交。</p>
       <el-button v-if="corpusProgress.batch" type="primary" plain @click="router.push('/ai-tasks')"
         >查看任务中心</el-button
@@ -712,7 +717,9 @@ onUnmounted(() => {
         <el-table-column prop="success_count" label="成功" width="85" />
         <el-table-column prop="failed_count" label="失败" width="85" />
         <el-table-column label="失败原因" min-width="170" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.error_message || (row.failed_count ? '在任务中心查看失败帖子' : '—') }}</template>
+          <template #default="{ row }">{{
+            row.error_message || (row.failed_count ? '在任务中心查看失败帖子' : '—')
+          }}</template>
         </el-table-column>
         <el-table-column prop="total_tokens" label="Token" width="100" />
       </el-table>
