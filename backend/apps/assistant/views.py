@@ -99,6 +99,37 @@ class AssistantModelProfileViewSet(viewsets.ModelViewSet):
             )
         return Response(result)
 
+    @action(detail=False, methods=("post",), url_path="discover-models")
+    def discover_models(self, request: Request) -> Response:
+        provider = request.data.get("provider")
+        if provider not in {"ollama", "openai_compatible"}:
+            return Response({"detail": "不支持的服务类型。"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            base_url = validate_ai_endpoint(str(request.data.get("base_url", "")), provider=provider)
+            if provider == "ollama":
+                root = base_url[:-3] if base_url.endswith("/v1") else base_url
+                endpoint = f"{root}/api/tags"
+                headers: dict[str, str] = {}
+            else:
+                key = str(request.data.get("api_key", "")).strip()
+                if not key:
+                    return Response({"detail": "请提供 API Key 或选择已有配置。"}, status=status.HTTP_400_BAD_REQUEST)
+                root = base_url.rstrip("/")
+                endpoint = f"{root}/models" if root.endswith("/v1") else f"{root}/v1/models"
+                headers = {"Authorization": f"Bearer {key}"}
+            response = httpx.get(endpoint, headers=headers, timeout=10, follow_redirects=False, trust_env=False)
+            response.raise_for_status()
+            payload = response.json()
+            entries = payload.get("models", []) if provider == "ollama" else payload.get("data", [])
+            models = sorted({
+                value for item in entries if isinstance(item, dict)
+                for value in [item.get("name") if provider == "ollama" else item.get("id")]
+                if isinstance(value, str) and value
+            })
+        except (httpx.HTTPError, ValueError, TypeError, KeyError):
+            return Response({"detail": "获取模型列表失败，请检查服务商接口或手动输入。"}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({"models": models})
+
     @action(detail=True, methods=("get",), url_path="available-models")
     def available_models(self, request: Request, pk: str | None = None) -> Response:  # noqa: ARG002
         profile = self.get_object()
