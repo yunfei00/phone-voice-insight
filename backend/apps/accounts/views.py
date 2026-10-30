@@ -3,6 +3,7 @@ from typing import Any, cast
 import httpx
 from ai.providers import AIProviderError
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import update_last_login
 from django.contrib.auth.models import User as DjangoUser
 from django.db import transaction
 from rest_framework import status
@@ -35,6 +36,7 @@ def login(request: Request) -> Response:
     serializer.is_valid(raise_exception=True)
     user = serializer.validated_data["user"]
     token, _ = Token.objects.get_or_create(user=user)
+    update_last_login(None, user)
     return Response({"token": token.key, "user": UserSerializer(user).data})
 
 
