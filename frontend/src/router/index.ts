@@ -116,7 +116,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'ai-settings',
         name: 'ai-settings',
         component: () => import('@/views/AISettingsView.vue'),
-        meta: { title: 'AI 配置', writeOnly: true },
+        meta: { title: 'AI 配置', adminOnly: true },
       },
       {
         path: 'system',
