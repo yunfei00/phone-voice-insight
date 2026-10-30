@@ -55,7 +55,9 @@ function describeError(error: unknown): string {
     const data = error.response?.data as Record<string, unknown> | undefined
     if (data) {
       const details = Object.entries(data)
-        .map(([field, value]) => `${field}: ${Array.isArray(value) ? value.join('；') : String(value)}`)
+        .map(
+          ([field, value]) => `${field}: ${Array.isArray(value) ? value.join('；') : String(value)}`,
+        )
         .join('；')
       if (details) return details
     }
