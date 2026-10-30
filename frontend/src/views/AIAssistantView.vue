@@ -205,6 +205,7 @@ async function send() {
           answer.status = 'FAILED'
           answer.error_code = event.code || 'ASSISTANT_ERROR'
           answer.error_message = event.message || '助手处理失败'
+          ElMessage.error(answer.error_message)
         }
         if (event.type === 'cancelled') answer.status = 'CANCELLED'
         if (event.type === 'done') answer.status = 'COMPLETED'
@@ -221,7 +222,11 @@ async function send() {
   } finally {
     generating.value = false
     controller = undefined
-    await Promise.all([selectConversation(activeId.value), refreshConversations()])
+    try {
+      await Promise.all([selectConversation(activeId.value), refreshConversations()])
+    } catch {
+      // Keep the visible local error when refreshing conversation history fails.
+    }
   }
 }
 
