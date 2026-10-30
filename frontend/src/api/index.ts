@@ -782,8 +782,10 @@ export const cancelAssistantChat = async (
   ).data
 
 function assistantApiUrl(path: string): string {
-  const base = import.meta.env.DEV ? '/api/v1' : import.meta.env.VITE_API_BASE_URL || '/api/v1'
-  return `${base}${path}`
+  const base = import.meta.env.DEV
+    ? '/api/v1'
+    : import.meta.env.VITE_API_BASE_URL || `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/v1`
+  return `${base.replace(/\/$/, '')}${path}`
 }
 
 export async function streamAssistantChat(
