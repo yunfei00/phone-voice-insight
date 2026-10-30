@@ -101,6 +101,33 @@ class AssistantModelProfileViewSet(viewsets.ModelViewSet):
             )
         return Response(result)
 
+    @action(detail=True, methods=("get",), url_path="available-models")
+    def available_models(self, request: Request, pk: str | None = None) -> Response:  # noqa: ARG002
+        profile = self.get_object()
+        if profile.provider not in {"ollama", "openai_compatible"}:
+            return Response({"detail": "当前服务类型不支持模型列表发现。"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            base_url = validate_ai_endpoint(profile.base_url, provider=profile.provider)
+            if profile.provider == "ollama":
+                root = base_url[:-3] if base_url.endswith("/v1") else base_url
+                endpoint = f"{root}/api/tags"
+                headers: dict[str, str] = {}
+            else:
+                endpoint = f"{base_url.rstrip('/')}/models" if base_url.rstrip("/").endswith("/v1") else f"{base_url.rstrip('/')}/v1/models"
+                headers = {"Authorization": f"Bearer {profile.get_api_key()}"}
+            response = httpx.get(endpoint, headers=headers, timeout=10, follow_redirects=False, trust_env=False)
+            response.raise_for_status()
+            payload = response.json()
+            entries = payload.get("models", []) if profile.provider == "ollama" else payload.get("data", [])
+            models = sorted({
+                value for item in entries if isinstance(item, dict)
+                for value in [item.get("name") if profile.provider == "ollama" else item.get("id")]
+                if isinstance(value, str) and value
+            })
+        except (httpx.HTTPError, ValueError, TypeError, KeyError):
+            return Response({"detail": "获取模型列表失败；服务商可能不支持此接口，请手动输入模型名称。"}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({"models": models})
+
     @action(detail=True, methods=("get",), url_path="ollama-models")
     def ollama_models(self, request: Request, pk: str | None = None) -> Response:  # noqa: ARG002
         profile = self.get_object()
