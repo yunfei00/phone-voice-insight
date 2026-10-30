@@ -121,7 +121,14 @@ const blocks = computed<Block[]>(() => {
         <table>
           <thead>
             <tr>
-              <th v-for="(cell, n) in block.cells?.[0] || []" :key="n">{{ cell }}</th>
+              <th v-for="(cell, n) in block.cells?.[0] || []" :key="n">
+                <template v-for="(part, k) in inlineParts(cell)" :key="k"
+                  ><strong v-if="part.strong">{{ part.text }}</strong
+                  ><em v-else-if="part.emphasis">{{ part.text }}</em
+                  ><code v-else-if="part.code">{{ part.text }}</code
+                  ><span v-else>{{ part.text }}</span></template
+                >
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -148,7 +155,14 @@ const blocks = computed<Block[]>(() => {
         >
       </div>
       <pre v-else-if="block.type === 'code'"><code>{{ block.text }}</code></pre>
-      <blockquote v-else-if="block.type === 'quote'">{{ block.text }}</blockquote>
+      <blockquote v-else-if="block.type === 'quote'">
+        <template v-for="(part, n) in inlineParts(block.text || '')" :key="n"
+          ><strong v-if="part.strong">{{ part.text }}</strong
+          ><em v-else-if="part.emphasis">{{ part.text }}</em
+          ><code v-else-if="part.code">{{ part.text }}</code
+          ><span v-else>{{ part.text }}</span></template
+        >
+      </blockquote>
       <p v-else>
         <template v-for="(part, n) in inlineParts(block.text || '')" :key="n"
           ><strong v-if="part.strong">{{ part.text }}</strong
