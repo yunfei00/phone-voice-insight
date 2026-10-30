@@ -20,8 +20,6 @@ const batches = ref<StructuredBatch[]>([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-const filterProductId = ref<number | undefined>()
-const filterSourceId = ref<number | undefined>()
 const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
 const form = reactive({
@@ -42,8 +40,8 @@ async function load() {
       getStructuredBatches({
         page: page.value,
         page_size: pageSize.value,
-        product: filterProductId.value,
-        source: filterSourceId.value,
+        product: form.product_id,
+        source: form.source_id,
       }),
       getProducts({ page_size: 100 }),
       getSources({ page_size: 100 }),
@@ -122,30 +120,12 @@ onUnmounted(() => {
     <header>
       <h1>AI 任务中心</h1>
       <p>默认 dry-run；只有明确关闭 dry-run 才会调用个人 AI 配置</p>
-      <div class="task-filters">
-      <el-select
-        v-model="filterProductId"
-        clearable
-        placeholder="筛选任务机型（全部）"
-        @change="onFilterChange"
-      >
-        <el-option v-for="p in products" :key="p.id" :label="p.name" :value="p.id" />
-      </el-select>
-      <el-select
-        v-model="filterSourceId"
-        clearable
-        placeholder="筛选任务来源（全部）"
-        @change="onFilterChange"
-      >
-        <el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id" />
-      </el-select>
-      </div>
     </header>
     <el-card shadow="never"
       ><div class="form">
-        <el-select v-model="form.product_id" placeholder="选择机型"
+        <el-select v-model="form.product_id" placeholder="选择机型" clearable @change="onFilterChange"
           ><el-option v-for="p in products" :key="p.id" :label="p.name" :value="p.id" /></el-select
-        ><el-select v-model="form.source_id" clearable placeholder="数据来源（可选）"
+        ><el-select v-model="form.source_id" clearable placeholder="数据来源（可选）" @change="onFilterChange"
           ><el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id" /></el-select
         ><el-input-number v-model="form.max_items" :min="1" :max="1000" /><el-switch
           v-model="form.dry_run"
@@ -212,14 +192,6 @@ onUnmounted(() => {
 .tasks {
   display: grid;
   gap: 18px;
-}
-.task-filters {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.task-filters .el-select {
-  width: 220px;
 }
 .tasks h1 {
   margin: 0;
