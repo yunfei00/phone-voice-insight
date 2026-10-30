@@ -7,11 +7,18 @@ import {
   getProducts,
   getSources,
   getStructuredBatches,
+  getStructuredBatchFailures,
   pauseStructuredBatch,
   resumeStructuredBatch,
   retryStructuredBatch,
 } from '@/api'
 import type { DataSource, Product, StructuredBatch } from '@/types/api'
+import type { StructuredFailure } from '@/api'
+const failureDialog = ref(false)
+const failureLoading = ref(false)
+const failureRows = ref<StructuredFailure[]>([])
+const failureBatchId = ref<number | null>(null)
+const failureError = ref('')
 const loading = ref(false)
 const submitting = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | undefined
@@ -97,6 +104,22 @@ async function resume(id: number) {
   ElMessage.success('任务已恢复')
   await load()
 }
+async function showFailures(id: number) {
+  failureBatchId.value = id
+  failureDialog.value = true
+  failureLoading.value = true
+  failureError.value = ''
+  failureRows.value = []
+  try {
+    const result = await getStructuredBatchFailures(id)
+    failureRows.value = result.results
+    if (result.next) failureError.value = '失败记录超过 100 条，当前仅展示前 100 条。'
+  } catch {
+    failureError.value = '失败明细加载失败，请稍后重试。'
+  } finally {
+    failureLoading.value = false
+  }
+}
 async function retry(id: number) {
   try {
     await retryStructuredBatch(id)
@@ -120,7 +143,7 @@ onUnmounted(() => {
   <section class="tasks">
     <header>
       <h1>AI 任务中心</h1>
-      <p>默认 dry-run；只有明确关闭 dry-run 才会调用个人 AI 配置</p>
+      <p>查看每批成功、失败及具体失败帖子；真实执行需关闭预估模式。</p>
     </header>
     <el-card shadow="never"
       ><div class="form">
@@ -152,7 +175,7 @@ onUnmounted(() => {
             row.requested_count
           }}</template
         ></el-table-column
-      ><el-table-column label="模式"
+      ><el-table-column prop="success_count" label="成功" width="80" /><el-table-column prop="failed_count" label="失败" width="80" /><el-table-column prop="skipped_count" label="跳过" width="80" /><el-table-column label="模式"
         ><template #default="{ row }"
           ><el-tag :type="row.dry_run ? 'info' : 'warning'">{{
             row.dry_run ? 'DRY-RUN' : '真实调用'
@@ -166,6 +189,8 @@ onUnmounted(() => {
             >暂停</el-button
           ><el-button v-if="row.status === 'PAUSED'" text type="primary" @click="resume(row.id)"
             >恢复</el-button
+          ><el-button v-if="row.failed_count" text type="primary" @click="showFailures(row.id)"
+            >失败详情</el-button
           ><el-button v-if="row.failed_count" text type="warning" @click="retry(row.id)"
             >重试失败</el-button
           ><el-button
@@ -187,6 +212,16 @@ onUnmounted(() => {
       @current-change="load"
       @size-change="onPageSizeChange"
     />
+    <el-dialog v-model="failureDialog" :title="`批次 #${failureBatchId} · 失败帖子`" width="min(900px, 95%)">
+      <el-alert v-if="failureError" :title="failureError" type="warning" :closable="false" />
+      <el-table v-loading="failureLoading" :data="failureRows" max-height="450" empty-text="暂无失败记录">
+        <el-table-column prop="content" label="帖子 ID" width="100" />
+        <el-table-column prop="content_excerpt" label="帖子内容" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="error_code" label="错误代码" width="150" />
+        <el-table-column prop="error_message" label="失败原因" min-width="260" show-overflow-tooltip />
+        <el-table-column prop="attempt_count" label="尝试次数" width="90" />
+      </el-table>
+    </el-dialog>
   </section>
 </template>
 <style scoped>
