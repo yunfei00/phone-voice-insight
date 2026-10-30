@@ -2,7 +2,7 @@ name: P2 formatting repair
 on:
   push:
     branches:
-      - fix/raw-data-collection-baseline-v1
+      - work/system-fixes
     paths:
       - .github/workflows/p2-format.yml
 permissions:
@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: fix/raw-data-collection-baseline-v1
+          ref: work/system-fixes
           persist-credentials: true
       - uses: astral-sh/setup-uv@v6
         with:
@@ -21,23 +21,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Format backend
-        run: |
-          cd backend
-          uv sync --group dev
-          uv run ruff format . ../collectors ../ai ../tools
-          uv run ruff check --fix . ../collectors ../ai ../tools
       - name: Format frontend
         run: |
           cd frontend
           npm ci
-          npx prettier --write .
+          npx prettier --write src/components/assistant/AssistantMarkdown.vue
       - name: Commit formatted code
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend collectors ai tools frontend
+          git add frontend/src/components/assistant/AssistantMarkdown.vue
           if ! git diff --cached --quiet; then
             git commit -m "style(p2): apply Ruff and Prettier formatting"
-            git push origin HEAD:fix/raw-data-collection-baseline-v1
+            git push origin HEAD:work/system-fixes
           fi
