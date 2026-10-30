@@ -22,6 +22,7 @@ from apps.assistant.models import (
     AssistantConversation,
     AssistantMessage,
     AssistantModelProfile,
+    AssistantModelSelection,
     ConversationStatus,
     MessageStatus,
 )
@@ -50,6 +51,8 @@ def create_profile(user, *, name: str = "测试助手", model: str = "fake-assis
 
 
 def create_conversation(user, profile: AssistantModelProfile | None = None) -> AssistantConversation:  # type: ignore[no-untyped-def]
+    if profile is not None:
+        AssistantModelSelection.objects.update_or_create(slot="assistant", defaults={"profile": profile})
     return AssistantConversation.objects.create(
         user=user,
         title="测试会话",
@@ -185,8 +188,8 @@ def test_model_profiles_are_encrypted_masked_and_isolated(api_client: APIClient)
     UserProfile.objects.create(user=other, role=UserRole.VIEWER)
     other_client = APIClient()
     other_client.force_authenticate(other)
-    assert other_client.get("/api/v1/assistant/models/").data["results"] == []
-    assert other_client.get(f"/api/v1/assistant/models/{profile.id}/").status_code == 404
+    assert other_client.get("/api/v1/assistant/models/").status_code == 403
+    assert other_client.get(f"/api/v1/assistant/models/{profile.id}/").status_code == 403
 
 
 def test_ai_endpoint_blocks_private_address_and_allows_approved_ollama() -> None:
@@ -217,7 +220,7 @@ def test_conversation_model_selection_and_deleted_profile_snapshot(api_client: A
         format="json",
     )
     assert updated.status_code == 200
-    assert updated.data["model_profile"] == second.id
+    assert updated.data["model_profile"] is None
     conversation = AssistantConversation.objects.get(pk=conversation_id)
     conversation.model_name_snapshot = second.model
     conversation.save(update_fields=("model_name_snapshot",))
@@ -453,6 +456,8 @@ def test_default_model_can_answer_without_changing_background_configuration(api_
     configuration.model = "background-and-default-model"
     configuration.is_active = True
     configuration.save()
+    profile = create_profile(user, name="统一助手模型")
+    AssistantModelSelection.objects.update_or_create(slot="assistant", defaults={"profile": profile})
     conversation = create_conversation(user)
     response = api_client.post(
         f"/api/v1/assistant/conversations/{conversation.id}/chat/",
