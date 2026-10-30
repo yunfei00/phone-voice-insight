@@ -53,7 +53,6 @@ const baseNavigationItems = [
   { path: '/comparison', label: '产品对比中心', icon: TrendCharts },
   { path: '/issues', label: '用户问题洞察', icon: Warning },
   { path: '/insight-reports', label: 'AI洞察报告', icon: Notebook },
-  { path: '/operations', label: '数据运行监控', icon: Operation },
   { path: '/products', label: '手机产品', icon: Iphone },
   { path: '/threads', label: '帖子视图', icon: ChatLineSquare },
   { path: '/reviews', label: '原始数据', icon: Document },
@@ -61,7 +60,7 @@ const baseNavigationItems = [
   { path: '/structured-analysis', label: 'AI结构化分析', icon: DataAnalysis },
   { path: '/ai-tasks', label: 'AI任务中心', icon: List, advanced: true },
   { path: '/ai-settings', label: 'AI配置', icon: Setting, advanced: true },
-  { path: '/system', label: '系统状态', icon: Cpu, advanced: true },
+  { path: '/system', label: '运行监控', icon: Cpu, advanced: true },
 ]
 const navigationItems = computed(() => [
   ...baseNavigationItems
