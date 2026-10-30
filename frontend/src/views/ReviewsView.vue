@@ -435,9 +435,28 @@ pre {
   }
 }
 
+.reviews-pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
 .pagination {
   justify-content: flex-end;
-  margin-top: 18px;
+}
+
+.custom-page-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.custom-page-size .el-input-number {
+  width: 120px;
 }
 
 @media (max-width: 900px) {
