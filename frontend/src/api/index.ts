@@ -724,6 +724,17 @@ export const getInsightReports = async (
 export const getInsightReport = async (id: number): Promise<InsightReport> =>
   (await apiClient.get<InsightReport>(`/dashboard/reports/${id}/`)).data
 
+export interface SystemResources {
+  scope: string
+  cpu: { cores: number; load_percent: number | null; metric: string }
+  memory: { total: number; used: number; percent: number | null }
+  disk: { total: number; used: number; percent: number | null } | null
+  online: { count: number; definition: string }
+  sampled_at: string
+}
+export const getSystemResources = async (): Promise<SystemResources> =>
+  (await apiClient.get<SystemResources>('/system/resources/')).data
+
 export const getOperationsStatus = async (): Promise<OperationsStatus> =>
   (await apiClient.get<OperationsStatus>('/dashboard/operations/')).data
 
