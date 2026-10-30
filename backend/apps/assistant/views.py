@@ -20,7 +20,6 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.accounts.models import UserAIConfiguration
 from apps.accounts.permissions import IsAdministrator
 from apps.assistant.models import (
     AssistantConversation,
@@ -52,21 +51,13 @@ class AssistantModelProfileViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAdministrator,)
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
-        return AssistantModelProfile.objects.filter(user=cast(DjangoUser, self.request.user))
+        return AssistantModelProfile.objects.all()
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: ARG002
         profiles = self.get_queryset()
         selection = AssistantModelSelection.objects.filter(slot="assistant").first()
-        default = UserAIConfiguration.objects.filter(user=cast(DjangoUser, request.user)).first()
         return Response(
             {
-                "default_model": {
-                    "id": None,
-                    "name": "使用个人默认模型",
-                    "model": default.model if default else "",
-                    "provider": default.provider if default else "",
-                    "configured": bool(default and default.is_configured),
-                },
                 "results": self.get_serializer(profiles, many=True).data,
                 "assistant_model_id": selection.profile_id if selection else None,
             }
