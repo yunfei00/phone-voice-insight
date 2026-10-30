@@ -191,7 +191,11 @@ async function send() {
     generating.value = false
     controller = undefined
     try {
-      await Promise.all([selectConversation(activeId.value), refreshConversations()])
+      if (answer.status !== 'FAILED') {
+        await Promise.all([selectConversation(activeId.value), refreshConversations()])
+      } else {
+        await refreshConversations()
+      }
     } catch {
       // Keep the visible local error when refreshing conversation history fails.
     }
