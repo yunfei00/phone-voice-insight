@@ -6,6 +6,7 @@ import { onMounted, reactive, ref } from 'vue'
 import {
   getPersonalAIConfiguration,
   getAssistantModels,
+  getAssistantAvailableModels,
   createAssistantModel,
   deleteAssistantModel,
   updateAssistantModel,
@@ -28,6 +29,7 @@ const saving = ref(false)
 const testing = ref(false)
 const discovering = ref(false)
 const ollamaModels = ref<string[]>([])
+const availableModels = ref<string[]>([])
 const configured = ref(false)
 const maskedKey = ref('')
 const displayName = ref('')
@@ -88,6 +90,7 @@ async function loadConfiguration(): Promise<void> {
 }
 
 function editProfile(profile: AssistantModelProfile): void {
+  availableModels.value = []
   displayName.value = profile.name
   selectedProfileId.value = profile.id
   configured.value = profile.api_key_configured
@@ -106,6 +109,7 @@ function editProfile(profile: AssistantModelProfile): void {
 }
 
 function newProfile(): void {
+  availableModels.value = []
   displayName.value = ''
   selectedProfileId.value = 0
   configured.value = false
@@ -149,6 +153,7 @@ async function removeSelectedProfile(): Promise<void> {
 }
 
 async function choosePersonal(): Promise<void> {
+  availableModels.value = []
   displayName.value = ''
   selectedProfileId.value = null
   await loadConfiguration()
@@ -200,6 +205,23 @@ async function saveConfiguration(): Promise<boolean> {
     return true
   } finally {
     saving.value = false
+  }
+}
+
+async function fetchAvailableModels(): Promise<void> {
+  if (!selectedProfileId.value) {
+    ElMessage.info('请先保存模型配置，再获取模型列表；获取后可选择其他模型并保存为新配置。')
+    return
+  }
+  discovering.value = true
+  try {
+    availableModels.value = await getAssistantAvailableModels(selectedProfileId.value)
+    if (!availableModels.value.length) ElMessage.warning('接口已连接，但未返回可用模型；仍可手动输入')
+    else ElMessage.success(`已获取 ${availableModels.value.length} 个模型`)
+  } catch (error) {
+    ElMessage.warning(error instanceof Error ? error.message : '获取模型列表失败，请手动输入')
+  } finally {
+    discovering.value = false
   }
 }
 
@@ -349,18 +371,19 @@ onMounted(() => {
         </el-form-item>
         <el-form-item label="实际模型名称" prop="model">
           <el-select
-            v-if="form.provider === 'ollama'"
+            v-if="form.provider === 'ollama' || availableModels.length"
             v-model="form.model"
             filterable
             allow-create
             default-first-option
             placeholder="选择已安装模型或输入模型名称"
           >
-            <el-option v-for="name in ollamaModels" :key="name" :label="name" :value="name" />
+            <el-option v-for="name in [...new Set([...ollamaModels, ...availableModels])]" :key="name" :label="name" :value="name" />
           </el-select>
           <el-input v-else v-model="form.model" placeholder="例如 deepseek-flash" />
+          <el-button v-if="selectedProfileId !== null" :loading="discovering" @click="fetchAvailableModels">获取模型列表</el-button>
           <el-button
-            v-if="form.provider === 'ollama'"
+            v-if="form.provider === 'ollama' && selectedProfileId === null"
             :loading="discovering"
             @click="discoverOllamaModels"
             >保存并获取本地模型列表</el-button
