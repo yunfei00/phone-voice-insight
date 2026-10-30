@@ -225,7 +225,7 @@ class AssistantOrchestrator:
         yield {"type": "error", "code": code, "message": message}
 
 
-def _resolve_settings(conversation: AssistantConversation) -> tuple[AssistantProviderSettings, int | None]:
+def _resolve_settings(conversation: AssistantConversation) -> tuple[AssistantProviderSettings, int | None]:  # noqa: ARG001
     """All customer conversations use the centrally managed assistant model."""
     from apps.accounts.models import UserRole
     from apps.accounts.permissions import get_user_role
