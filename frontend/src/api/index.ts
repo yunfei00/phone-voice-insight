@@ -707,7 +707,7 @@ export const getOperationsStatus = async (): Promise<OperationsStatus> =>
   (await apiClient.get<OperationsStatus>('/dashboard/operations/')).data
 
 export const selectAssistantModel = async (modelId: number): Promise<void> => {
-  await apiClient.post('/assistant-models/select-assistant/', { model_id: modelId })
+  await apiClient.post('/assistant/models/select-assistant/', { model_id: modelId })
 }
 
 export const getAssistantModels = async (): Promise<AssistantModelList> =>
