@@ -5,12 +5,18 @@ import { onMounted, reactive, ref } from 'vue'
 
 import {
   getPersonalAIConfiguration,
+  getAssistantModels,
   getOllamaModels,
   savePersonalAIConfiguration,
   testPersonalAIConfiguration,
 } from '@/api'
-import type { AIConfigurationPayload } from '@/types/api'
+import type { AIConfigurationPayload, AssistantModelList } from '@/types/api'
+import AssistantModelManager from '@/components/assistant/AssistantModelManager.vue'
+import { useAuthStore } from '@/stores/auth'
 
+const auth = useAuthStore()
+const assistantModels = ref<AssistantModelList>()
+const assistantManagerVisible = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref(false)
@@ -121,7 +127,14 @@ async function saveAndTest(): Promise<void> {
   }
 }
 
-onMounted(loadConfiguration)
+async function loadAssistantModels(): Promise<void> {
+  if (auth.isAdmin) assistantModels.value = await getAssistantModels()
+}
+
+onMounted(() => {
+  void loadConfiguration()
+  void loadAssistantModels()
+})
 </script>
 
 <template>
@@ -225,6 +238,17 @@ onMounted(loadConfiguration)
       </p>
     </section>
   </div>
+  <section v-if="auth.isAdmin" class="panel settings-panel">
+    <h2>平台 AI 智能助手专用模型</h2>
+    <p>仅管理员配置，所有客户对话统一使用名称为“平台智能助手”的启用模型。</p>
+    <el-button type="primary" @click="assistantManagerVisible = true">配置助手模型</el-button>
+  </section>
+  <AssistantModelManager
+    v-if="auth.isAdmin"
+    v-model="assistantManagerVisible"
+    :models="assistantModels"
+    @refresh="loadAssistantModels"
+  />
 </template>
 
 <style scoped>
