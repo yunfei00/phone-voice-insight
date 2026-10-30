@@ -107,12 +107,6 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 任务中心', writeOnly: true },
       },
       {
-        path: 'analysis',
-        name: 'analysis',
-        component: () => import('@/views/AnalysisView.vue'),
-        meta: { title: '历史 AI 分析', writeOnly: true },
-      },
-      {
         path: 'ai-settings',
         name: 'ai-settings',
         component: () => import('@/views/AISettingsView.vue'),
