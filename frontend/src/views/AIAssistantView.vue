@@ -244,7 +244,6 @@ onMounted(loadBase)
           </h1>
           <p>基于真实用户声音数据回答，统计结论均可追溯</p>
         </div>
-
       </header>
       <section class="assistant-filters">
         <el-select v-model="productId" clearable placeholder="全部产品"
