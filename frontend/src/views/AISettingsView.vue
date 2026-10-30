@@ -148,8 +148,8 @@ async function saveConfiguration(): Promise<boolean> {
       const profilePayload = {
         ...payload,
         name: selectedProfileId.value
-          ? assistantModels.value?.results.find((item) => item.id === selectedProfileId.value)?.name ||
-            payload.model
+          ? assistantModels.value?.results.find((item) => item.id === selectedProfileId.value)
+              ?.name || payload.model
           : `${payload.provider} · ${payload.model}`,
       }
       const saved = selectedProfileId.value
@@ -249,7 +249,9 @@ onMounted(() => {
       <h2>统一模型库</h2>
       <p>在下方同一表单中配置或编辑模型，保存后可分配给智能助手，无需重复填写。</p>
       <div class="model-actions">
-        <el-button :type="selectedProfileId === null ? 'primary' : 'default'" @click="choosePersonal"
+        <el-button
+          :type="selectedProfileId === null ? 'primary' : 'default'"
+          @click="choosePersonal"
           >个人默认模型</el-button
         >
         <el-button
@@ -264,11 +266,7 @@ onMounted(() => {
       <el-divider />
       <h3>智能助手使用模型</h3>
       <div class="model-actions">
-        <el-select
-          v-model="assistantSelection"
-          placeholder="选择已保存的模型"
-          style="width: 300px"
-        >
+        <el-select v-model="assistantSelection" placeholder="选择已保存的模型" style="width: 300px">
           <el-option
             v-for="item in assistantModels?.results.filter((profile) => profile.is_active)"
             :key="item.id"
