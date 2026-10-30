@@ -152,6 +152,7 @@ async function changeProduct() {
   page.value = 1
   batchPage.value = 1
   await load()
+  void loadAggregates()
 }
 
 onMounted(async () => {
@@ -163,8 +164,11 @@ onMounted(async () => {
   }
   await load()
   void loadAggregates()
+  let pollCount = 0
   refreshTimer = setInterval(() => {
     if (!loading.value) void load()
+    pollCount += 1
+    if (pollCount % 12 === 0) void loadAggregates()
   }, 5000)
 })
 onUnmounted(() => {
