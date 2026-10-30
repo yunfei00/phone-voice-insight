@@ -134,7 +134,6 @@ const advancedNavigationLabels = [
   'AI质量中心',
   'AI任务中心',
   '历史AI分析',
-  'AI配置',
   '系统状态',
 ]
 
@@ -246,6 +245,7 @@ describe('App', () => {
       (item) => item.textContent?.trim(),
     )
     expect(navigationLabels).toEqual(advancedNavigationLabels)
+    expect(navigationLabels).not.toContain('AI配置')
 
     app.unmount()
   })
