@@ -373,7 +373,7 @@ def test_aggregate_product_filter_is_isolated(api_client, product, source, sourc
 def test_batch_defaults_to_dry_run_and_does_not_call_ai(api_client, review):  # type: ignore[no-untyped-def]
     accept_for_final_corpus(review)
     response = api_client.post("/api/v1/structured-batches/", {"content_ids": [review.id]}, format="json")
-    assert response.status_code == 201
+    assert response.status_code == 200
     assert response.data["dry_run"] is True
     assert response.data["celery_task_id"] is None
     assert StructuredAnalysis.objects.count() == 0
