@@ -519,7 +519,7 @@ onUnmounted(() => {
         <el-button
           type="warning"
           :loading="retryingRemaining"
-          :disabled="!selectedProduct || startingAll || starting || retryingRemaining || corpusProgress?.active"
+          :disabled="!selectedProduct || startingAll || starting || corpusProgress?.active"
           @click="retryRemaining"
           >一键补齐剩余（含历史失败）</el-button
         >
