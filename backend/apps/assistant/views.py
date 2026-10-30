@@ -21,6 +21,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.accounts.models import UserAIConfiguration
+from apps.accounts.permissions import IsAdministrator
 from apps.assistant.models import (
     AssistantConversation,
     AssistantMessage,
@@ -47,7 +48,7 @@ def _sse(event: dict[str, Any]) -> str:
 
 class AssistantModelProfileViewSet(viewsets.ModelViewSet):
     serializer_class = AssistantModelProfileSerializer
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAdministrator,)
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         return AssistantModelProfile.objects.filter(user=cast(DjangoUser, self.request.user))
