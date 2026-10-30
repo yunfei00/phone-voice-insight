@@ -324,7 +324,6 @@ onMounted(async () => {
           @current-change="loadReviews"
         />
       </div>
-      </div>
     </div>
 
     <el-drawer
