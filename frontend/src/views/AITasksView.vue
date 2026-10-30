@@ -179,7 +179,8 @@ onUnmounted(() => {
         prop="failed_count"
         label="失败"
         width="80"
-      /><el-table-column prop="skipped_count" label="跳过" width="80" /><el-table-column label="模式"
+      /><el-table-column prop="skipped_count" label="跳过" width="80" /><el-table-column
+        label="模式"
         ><template #default="{ row }"
           ><el-tag :type="row.dry_run ? 'info' : 'warning'">{{
             row.dry_run ? 'DRY-RUN' : '真实调用'
