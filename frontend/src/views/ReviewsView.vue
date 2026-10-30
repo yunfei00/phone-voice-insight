@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useRoute } from 'vue-router'
 
 import {
@@ -38,7 +39,8 @@ const selected = ref<ReviewRecord | null>(null)
 const loading = ref(false)
 const error = ref('')
 const total = ref(0)
-const customPageSize = ref<number | undefined>(undefined)
+const selectedPageSize = ref('20')
+const pageSizeOptions = [10, 20, 50, 100, 200, 500]
 const metadata = ref<ReviewMetadataCompleteness | null>(null)
 const filters = reactive({
   page: 1,
@@ -132,15 +134,15 @@ function onSortChange(sort: {
   void loadReviews()
 }
 
-function onPageSizeChange(): void {
-  filters.page = 1
-  customPageSize.value = undefined
-  void loadReviews()
-}
-
-function applyCustomPageSize(): void {
-  const size = customPageSize.value
-  if (size === undefined || !Number.isInteger(size) || size < 1 || size > 1000) return
+function onPageSizeChange(value: string): void {
+  const size = Number(value.trim())
+  if (!/^\\d+$/.test(value.trim()) || !Number.isSafeInteger(size) || size < 1 || size > 1000) {
+    selectedPageSize.value = String(filters.page_size)
+    ElMessage.warning('每页条数请输入 1～1000 的整数')
+    return
+  }
+  selectedPageSize.value = String(size)
+  if (filters.page_size === size) return
   filters.page_size = size
   filters.page = 1
   void loadReviews()
@@ -294,30 +296,34 @@ onMounted(async () => {
       </el-table>
 
       <div class="reviews-pagination">
+        <span class="page-size-label">每页</span>
+        <el-select
+          v-model="selectedPageSize"
+          class="page-size-select"
+          filterable
+          allow-create
+          default-first-option
+          :reserve-keyword="false"
+          placeholder="输入条数"
+          @change="onPageSizeChange"
+        >
+          <el-option
+            v-for="size in pageSizeOptions"
+            :key="size"
+            :label="`${size} 条`"
+            :value="String(size)"
+          />
+        </el-select>
+        <span class="page-size-label">条</span>
         <el-pagination
           v-model:current-page="filters.page"
-          v-model:page-size="filters.page_size"
           class="pagination"
-          layout="total, sizes, prev, pager, next, jumper"
-          :page-sizes="[10, 20, 50, 100, 200, 500]"
+          layout="total, prev, pager, next, jumper"
+          :page-size="filters.page_size"
           :total="total"
           @current-change="loadReviews"
-          @size-change="onPageSizeChange"
         />
-        <div class="custom-page-size">
-          <span>自定义每页</span>
-          <el-input-number
-            v-model="customPageSize"
-            :min="1"
-            :max="1000"
-            :step="1"
-            :precision="0"
-            controls-position="right"
-            placeholder="输入条数"
-            @keyup.enter="applyCustomPageSize"
-          />
-          <el-button @click="applyCustomPageSize">应用</el-button>
-        </div>
+      </div>
       </div>
     </div>
 
