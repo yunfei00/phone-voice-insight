@@ -105,7 +105,7 @@ class AssistantMessageSerializer(serializers.ModelSerializer):
 
 
 class AssistantConversationSerializer(serializers.ModelSerializer):
-    model_profile = serializers.PrimaryKeyRelatedField(read_only=True)
+    model_profile = serializers.IntegerField(source="model_profile_id", read_only=True, allow_null=True)
     model_display = serializers.SerializerMethodField()
     message_count = serializers.IntegerField(read_only=True, default=0)
 
