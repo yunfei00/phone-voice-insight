@@ -21,6 +21,7 @@ const failureBatchId = ref<number | null>(null)
 const failureError = ref('')
 const loading = ref(false)
 const submitting = ref(false)
+const advancedVisible = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 const error = ref('')
 const batches = ref<StructuredBatch[]>([])
@@ -33,7 +34,7 @@ const form = reactive({
   product_id: undefined as number | undefined,
   source_id: undefined as number | undefined,
   max_items: 20,
-  dry_run: true,
+  dry_run: false,
   max_concurrency: 1,
   requests_per_minute: 10,
   token_limit: 50000,
@@ -142,8 +143,7 @@ onUnmounted(() => {
 <template>
   <section class="tasks">
     <header>
-      <h1>AI 任务中心</h1>
-      <p>查看每批成功、失败及具体失败帖子；真实执行需关闭预估模式。</p>
+      <p>创建分析任务、查看处理进度和失败明细。</p>
     </header>
     <el-card shadow="never"
       ><div class="form">
@@ -151,17 +151,19 @@ onUnmounted(() => {
           ><el-option v-for="p in products" :key="p.id" :label="p.name" :value="p.id" /></el-select
         ><el-select v-model="form.source_id" clearable placeholder="数据来源（可选）"
           ><el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id" /></el-select
-        ><el-input-number v-model="form.max_items" :min="1" :max="1000" /><el-switch
-          v-model="form.dry_run"
-          active-text="仅预估（推荐）"
-        /><el-button type="primary" :loading="submitting" :disabled="submitting" @click="create">{{
-          form.dry_run ? '执行预估' : '提交真实任务'
-        }}</el-button>
+        ><el-input-number v-model="form.max_items" :min="1" :max="1000" aria-label="分析数量" />
+        <el-button :loading="submitting" @click="form.dry_run = true; create()">预估任务</el-button>
+        <el-button type="primary" :loading="submitting" :disabled="submitting" @click="form.dry_run = false; create()">开始分析</el-button>
       </div>
-      <small
-        >并发 {{ form.max_concurrency }} · {{ form.requests_per_minute }} 请求/分钟 · Token 上限
-        {{ form.token_limit }} · 预算 ¥{{ form.cost_budget }}</small
-      ></el-card
+      <el-button link @click="advancedVisible = !advancedVisible">{{ advancedVisible ? '收起高级设置' : '展开高级设置' }}</el-button>
+      <div v-if="advancedVisible" class="advanced-settings">
+        <label>最大并发 <el-input-number v-model="form.max_concurrency" :min="1" :max="8" /></label>
+        <label>每分钟请求上限 <el-input-number v-model="form.requests_per_minute" :min="1" :max="120" /></label>
+        <label>Token 上限 <el-input-number v-model="form.token_limit" :min="1" :step="10000" /></label>
+        <label>预算上限（元） <el-input-number v-model="form.cost_budget" :min="0" :precision="2" :step="1" /></label>
+        <p>预算依赖模型单价配置和后端累计计算，不能保证实际账单严格不超过该值。</p>
+      </div>
+          ></el-card
     ><el-alert v-if="error" :title="error" type="error" /><el-table
       v-loading="loading"
       :data="batches"
@@ -260,6 +262,9 @@ onUnmounted(() => {
 small {
   color: #6b7280;
 }
+.advanced-settings { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+.advanced-settings label { display: flex; align-items: center; gap: 8px; }
+.advanced-settings p { width: 100%; font-size: 12px; }
 .form {
   display: grid;
   grid-template-columns: 1fr 1fr auto auto auto;
@@ -272,4 +277,8 @@ small {
     grid-template-columns: 1fr;
   }
 }
-</style>
+</style>      ><el-table-column prop="skipped_count" label="跳过" width="75" v-if="false" />
+      <el-table-column label="实际成本" width="110">
+        <template #default="{ row }">{{ Number(row.actual_cost) > 0 ? '¥' + Number(row.actual_cost).toFixed(4) : '—' }}</template>
+      </el-table-column
+
