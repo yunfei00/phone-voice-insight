@@ -5,7 +5,6 @@ import { useRouter } from 'vue-router'
 
 import {
   createStructuredBatch,
-  runAllStructuredAnalysis,
   retryRemainingStructuredAnalysis,
   getStructuredCorpusProgress,
   getProducts,
@@ -29,7 +28,6 @@ import type {
 const router = useRouter()
 const starting = ref(false)
 const startingAll = ref(false)
-const retryingRemaining = ref(false)
 const corpusProgress = ref<StructuredCorpusProgress>()
 let progressTimer: ReturnType<typeof setInterval> | undefined
 let aggregateTimer: ReturnType<typeof setInterval> | undefined
@@ -364,10 +362,10 @@ async function startAll() {
   if (!selectedProduct.value || startingAll.value || corpusProgress.value?.active) return
   startingAll.value = true
   try {
-    const result = await runAllStructuredAnalysis(selectedProduct.value)
+    const result = await retryRemainingStructuredAnalysis(selectedProduct.value)
     ElMessage.success(
-      result.batch_id
-        ? `已创建批次 #${result.batch_id}，本批 ${result.queued} 条`
+      result.queued
+        ? `已提交 ${result.queued} 条剩余语料（包含历史失败项）`
         : '没有待分析的有效评论',
     )
     await load()
@@ -383,29 +381,6 @@ async function startAll() {
     )
   } finally {
     startingAll.value = false
-  }
-}
-
-async function retryRemaining() {
-  if (!selectedProduct.value || retryingRemaining.value || corpusProgress.value?.active) return
-  retryingRemaining.value = true
-  try {
-    const result = await retryRemainingStructuredAnalysis(selectedProduct.value)
-    ElMessage.success(
-      result.queued
-        ? `已提交 ${result.queued} 条剩余语料（包含历史失败项）`
-        : '当前没有剩余语料',
-    )
-    await load()
-  } catch (reason: unknown) {
-    const detail = reason as { response?: { data?: { error_code?: string } } }
-    ElMessage.error(
-      detail.response?.data?.error_code === 'ANALYSIS_ALREADY_RUNNING'
-        ? '已有分析任务正在运行，请完成后再补齐'
-        : '补齐任务提交失败，请检查 AI 配置与 Worker',
-    )
-  } finally {
-    retryingRemaining.value = false
   }
 }
 
@@ -514,14 +489,7 @@ onUnmounted(() => {
           :loading="startingAll"
           :disabled="!selectedProduct || startingAll || starting || corpusProgress?.active"
           @click="startAll"
-          >一键分析全部剩余数据</el-button
-        >
-        <el-button
-          type="warning"
-          :loading="retryingRemaining"
-          :disabled="!selectedProduct || startingAll || starting || corpusProgress?.active"
-          @click="retryRemaining"
-          >一键补齐剩余（含历史失败）</el-button
+          >一键补齐全部剩余（含历史失败）</el-button
         >
         <el-button @click="load">刷新结果与任务进度</el-button>
       </div>
