@@ -195,6 +195,73 @@ class StructuredBatchViewSet(ViewSet):
             }
         )
 
+    @action(detail=False, methods=("post",), url_path="retry-remaining")
+    def retry_remaining(self, request: Request) -> Response:
+        """Explicitly retry every unfinished corpus item, including previous failures."""
+        product_id = request.data.get("product_id")
+        if not isinstance(product_id, int) or product_id <= 0:
+            return Response({"error_code": "PRODUCT_REQUIRED"}, status=status.HTTP_400_BAD_REQUEST)
+        from django.core.cache import cache
+        from apps.accounts.services.ai_provider import get_user_ai_provider
+
+        lock_key = f"structured-dispatch:{request.user.pk}:{product_id}"
+        if not cache.add(lock_key, "1", timeout=240):
+            return Response({"error_code": "DISPATCH_BUSY"}, status=status.HTTP_409_CONFLICT)
+        try:
+            if AnalysisBatch.objects.filter(
+                created_by=request.user,
+                prompt_version="structured_analysis_v1",
+                status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
+            ).exists():
+                return Response({"error_code": "ANALYSIS_ALREADY_RUNNING"}, status=status.HTTP_409_CONFLICT)
+            try:
+                provider = get_user_ai_provider(request.user)
+            except Exception:
+                return Response({"error_code": "AI_NOT_CONFIGURED"}, status=status.HTTP_400_BAD_REQUEST)
+            completed = AnalysisRun.objects.filter(
+                is_current=True,
+                status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
+            ).values("content_id")
+            corpus = final_corpus_reviews().filter(product_id=product_id).exclude(pk__in=completed)
+            source_ids = list(corpus.order_by().values_list("source_id", flat=True).distinct())
+            queued = 0
+            batch_ids = []
+            for source_id in source_ids:
+                ids = list(corpus.filter(source_id=source_id).order_by("id").values_list("id", flat=True))
+                if not ids:
+                    continue
+                batch = AnalysisBatch.objects.create(
+                    created_by=request.user,
+                    product_id=product_id,
+                    source_id=source_id,
+                    corpus_version="structured-v1",
+                    provider=provider.provider_name,
+                    model_name=provider.model,
+                    prompt_version="structured_analysis_v1",
+                    requested_count=len(ids),
+                    dry_run=False,
+                    max_concurrency=1,
+                    requests_per_minute=10,
+                    status=AnalysisBatchStatus.PENDING,
+                    total_tokens=0,
+                )
+                try:
+                    run_structured_analysis_batch_task.delay(batch.id, ids)
+                except Exception as exc:
+                    batch.status = AnalysisBatchStatus.FAILED
+                    batch.error_message = f"TASK_DISPATCH_FAILED: {type(exc).__name__}: {exc}"[:1000]
+                    batch.finished_at = timezone.now()
+                    batch.save(update_fields=("status", "error_message", "finished_at", "updated_at"))
+                    continue
+                queued += len(ids)
+                batch_ids.append(batch.id)
+            return Response(
+                {"queued": queued, "batch_ids": batch_ids},
+                status=status.HTTP_202_ACCEPTED if queued else status.HTTP_200_OK,
+            )
+        finally:
+            cache.delete(lock_key)
+
     @action(detail=False, methods=("post",), url_path="run-all")
     def run_all(self, request: Request) -> Response:
         product_id = request.data.get("product_id")
