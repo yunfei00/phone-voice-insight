@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   cancelStructuredBatch,
   createStructuredBatch,
@@ -60,6 +60,7 @@ function onFilterChange() {
   page.value = 1
   void load()
 }
+watch(() => [form.product_id, form.source_id], onFilterChange)
 function onPageSizeChange() {
   if (page.value !== 1) {
     page.value = 1
@@ -123,9 +124,9 @@ onUnmounted(() => {
     </header>
     <el-card shadow="never"
       ><div class="form">
-        <el-select v-model="form.product_id" placeholder="选择机型" clearable @change="onFilterChange"
+        <el-select v-model="form.product_id" placeholder="选择机型"
           ><el-option v-for="p in products" :key="p.id" :label="p.name" :value="p.id" /></el-select
-        ><el-select v-model="form.source_id" clearable placeholder="数据来源（可选）" @change="onFilterChange"
+        ><el-select v-model="form.source_id" clearable placeholder="数据来源（可选）"
           ><el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id" /></el-select
         ><el-input-number v-model="form.max_items" :min="1" :max="1000" /><el-switch
           v-model="form.dry_run"
