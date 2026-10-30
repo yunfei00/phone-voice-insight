@@ -149,8 +149,9 @@ onUnmounted(() => {
 </script>
 <template>
   <section class="tasks">
-    <header>
-      <p>创建分析任务、查看处理进度和失败明细。</p>
+    <header class="page-header">
+      <div><h1 class="page-title">AI 任务中心</h1>
+      <p>创建分析任务、查看处理进度和失败明细。</p></div>
     </header>
     <el-card shadow="never"
       ><div class="form">
