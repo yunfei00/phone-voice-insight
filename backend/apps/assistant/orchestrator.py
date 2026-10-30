@@ -12,7 +12,6 @@ from django.db import transaction
 from django.utils import timezone
 from pydantic import ValidationError
 
-from apps.accounts.ai_service import get_user_ai_configuration, provider_settings_from_model
 from apps.assistant.models import (
     AssistantConversation,
     AssistantMessage,
@@ -227,35 +226,23 @@ class AssistantOrchestrator:
 
 
 def _resolve_settings(conversation: AssistantConversation) -> tuple[AssistantProviderSettings, int | None]:
-    if conversation.use_default_model:
-        source = provider_settings_from_model(get_user_ai_configuration(conversation.user))
-        settings = AssistantProviderSettings(
-            **{
-                **source.__dict__,
-                "timeout_seconds": min(source.timeout_seconds, django_settings.ASSISTANT_MAX_EXECUTION_SECONDS),
-            }
-        )
-        profile_id = None
-    else:
-        if conversation.model_profile_id is None:
-            raise AIProviderError("AI_NOT_CONFIGURED", "当前会话未选择可用的模型配置。")
-        profile = AssistantModelProfile.objects.get(
-            pk=conversation.model_profile_id, user=conversation.user, is_active=True
-        )
-        settings = AssistantProviderSettings(
-            provider=profile.provider,
-            base_url=profile.base_url,
-            api_key=profile.get_api_key(),
-            model=profile.model,
-            thinking_mode=profile.thinking_mode,
-            timeout_seconds=min(profile.timeout_seconds, django_settings.ASSISTANT_MAX_EXECUTION_SECONDS),
-            temperature=float(profile.temperature),
-            max_output_tokens=profile.max_output_tokens,
-        )
-        profile_id = profile.id
-    if settings.provider != "fake":
-        validate_ai_endpoint(settings.base_url, provider=settings.provider)
-    return settings, profile_id
+    """All customer conversations use the centrally managed assistant model."""
+    from apps.accounts.models import UserRole
+    from apps.accounts.permissions import get_user_role
+
+    profile = next(
+        (
+            item
+            for item in AssistantModelProfile.objects.filter(
+                name="平台智能助手", is_active=True
+            ).select_related("user").order_by("id")
+            if get_user_role(item.user) == UserRole.ADMIN
+        ),
+        None,
+    )
+    if profile is None:
+        raise AIProviderError("AI_NOT_CONFIGURED", "管理员尚未在 AI 配置中设置平台智能助手模型。")
+    return settings_from_profile(profile), profile.id
 
 
 def settings_from_profile(profile: AssistantModelProfile) -> AssistantProviderSettings:
