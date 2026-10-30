@@ -10,22 +10,17 @@ import {
   deleteAssistantConversation,
   getAssistantConversations,
   getAssistantMessages,
-  getAssistantModels,
   getProducts,
   getSources,
   streamAssistantChat,
-  updateAssistantConversation,
 } from '@/api'
 import AssistantComposer from '@/components/assistant/AssistantComposer.vue'
 import AssistantEvidence from '@/components/assistant/AssistantEvidence.vue'
 import AssistantMarkdown from '@/components/assistant/AssistantMarkdown.vue'
-import AssistantModelManager from '@/components/assistant/AssistantModelManager.vue'
-import AssistantModelSelector from '@/components/assistant/AssistantModelSelector.vue'
 import AssistantSidebar from '@/components/assistant/AssistantSidebar.vue'
 import type {
   AssistantConversation,
   AssistantMessage,
-  AssistantModelList,
   DataSource,
   Product,
 } from '@/types/api'
@@ -34,10 +29,8 @@ const route = useRoute()
 const conversations = ref<AssistantConversation[]>([])
 const activeId = ref('')
 const messages = ref<AssistantMessage[]>([])
-const models = ref<AssistantModelList>()
 const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
-const selectedModel = ref<number | null>(null)
 const productId = ref<number>()
 const sourceId = ref<number>()
 const dateRange = ref<[string, string]>()
@@ -45,7 +38,6 @@ const draft = ref('')
 const loading = ref(false)
 const messagesLoading = ref(false)
 const generating = ref(false)
-const managerVisible = ref(false)
 const chatScroll = ref<HTMLElement>()
 let controller: AbortController | undefined
 
@@ -67,13 +59,11 @@ function queryString(name: string): string | undefined {
 async function loadBase() {
   loading.value = true
   try {
-    const [modelData, conversationData, productData, sourceData] = await Promise.all([
-      getAssistantModels(),
+    const [conversationData, productData, sourceData] = await Promise.all([
       getAssistantConversations(),
       getProducts({ page_size: 100 }),
       getSources({ page_size: 100 }),
     ])
-    models.value = modelData
     conversations.value = conversationData
     products.value = productData.results
     sources.value = sourceData.results
@@ -88,10 +78,6 @@ async function loadBase() {
   } finally {
     loading.value = false
   }
-}
-
-async function refreshModels() {
-  models.value = await getAssistantModels()
 }
 
 async function refreshConversations() {
@@ -114,23 +100,10 @@ async function selectConversation(id: string) {
   try {
     messages.value = await getAssistantMessages(id)
     const item = conversations.value.find((conversation) => conversation.id === id)
-    selectedModel.value = item?.use_default_model ? null : item?.model_profile || null
     await scrollToBottom()
   } finally {
     messagesLoading.value = false
   }
-}
-
-async function changeModel(value: number | null) {
-  if (!activeId.value || generating.value) return
-  selectedModel.value = value
-  const updated = await updateAssistantConversation(activeId.value, {
-    use_default_model: value === null,
-    model_profile: value,
-  })
-  const index = conversations.value.findIndex((item) => item.id === updated.id)
-  if (index >= 0) conversations.value[index] = updated
-  ElMessage.success('后续消息将使用所选模型')
 }
 
 async function renameConversation(item: AssistantConversation) {
@@ -271,13 +244,7 @@ onMounted(loadBase)
           </h1>
           <p>基于真实用户声音数据回答，统计结论均可追溯</p>
         </div>
-        <AssistantModelSelector
-          :model-value="selectedModel"
-          :models="models"
-          :disabled="generating"
-          @update:model-value="changeModel"
-          @manage="managerVisible = true"
-        />
+
       </header>
       <section class="assistant-filters">
         <el-select v-model="productId" clearable placeholder="全部产品"
@@ -350,7 +317,6 @@ onMounted(loadBase)
         @stop="stop"
       />
     </main>
-    <AssistantModelManager v-model="managerVisible" :models="models" @refresh="refreshModels" />
   </div>
 </template>
 
