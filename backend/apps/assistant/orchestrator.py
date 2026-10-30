@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from apps.assistant.models import (
     AssistantConversation,
     AssistantMessage,
+    AssistantModelProfile,
     AssistantModelSelection,
     ConversationStatus,
     MessageStatus,
