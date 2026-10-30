@@ -317,7 +317,11 @@ onMounted(() => {
             :placeholder="maskedKey || '请输入 API Key'"
           />
         </el-form-item>
-        <el-form-item v-if="selectedProfileId !== null" label="显示名称（可选）">\n          <el-input v-model="displayName" :placeholder="form.model || '默认使用实际模型名称'" maxlength="80" />\n          <div class="field-hint">留空默认使用实际模型名称；模型列表和智能助手选择器显示此名称。</div>\n        </el-form-item>\n        <el-form-item label="实际模型名称" prop="model">
+        <el-form-item v-if="selectedProfileId !== null" label="显示名称（可选）">
+          <el-input v-model="displayName" :placeholder="form.model || '默认使用实际模型名称'" maxlength="80" />
+          <div class="field-hint">留空默认使用实际模型名称；模型列表和智能助手选择器显示此名称。</div>
+        </el-form-item>
+        <el-form-item label="实际模型名称" prop="model">
           <el-select
             v-if="form.provider === 'ollama'"
             v-model="form.model"
