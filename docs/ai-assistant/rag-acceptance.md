@@ -5,6 +5,7 @@
 - 日期：2026-10-31
 - 基线：`main@88cabce2e5c3b271111871bd106b1390c2656c31`
 - 分支：`feature/ai-data-rag-v1`
+- Pull Request：`https://github.com/yunfei00/phone-voice-insight/pull/20`
 - 隔离 Docker 项目：`pvi-rag-validation`
 - 生产环境：未更新
 
@@ -77,6 +78,7 @@ Windows 默认临时目录权限导致首次全量 pytest 在最后一个用例 
 - Frontend：healthy，HTTP 200。
 - Backend health API：HTTP 200，database/redis 均 ok。
 - RAG 索引 API 未认证访问：HTTP 401，权限边界正确。
+- 六容器整体重启后：全部恢复 healthy，索引运行记录和 vector 0.8.7 扩展仍存在。
 
 开发 Compose 的前端健康检查最初使用 `localhost`，Alpine 将其解析为未监听的 `::1`；已改为 `127.0.0.1` 并复验 healthy。
 
@@ -88,7 +90,14 @@ Windows 默认临时目录权限导致首次全量 pytest 在最后一个用例 
 - 测试使用 fake Embedding，不调用付费模型。
 - 隔离验收没有读取、修改或删除生产业务数据。
 
-## 7. 已知限制
+## 7. GitHub CI
+
+- Backend：PASS（41 秒）。
+- Frontend：PASS（1 分 14 秒）。
+- CI Run：`https://github.com/yunfei00/phone-voice-insight/actions/runs/41157649986`
+- PR 保持 OPEN，未合并 `main`。
+
+## 8. 已知限制
 
 1. 默认 Embedding Provider 为 `disabled`；正式配置前只有关键词检索，这是安全降级而不是故障。
 2. 未使用真实外部 Embedding 服务，避免在没有凭据和预算授权时产生费用。
@@ -96,7 +105,7 @@ Windows 默认临时目录权限导致首次全量 pytest 在最后一个用例 
 4. 尚未在生产真实数据规模测量 PostgreSQL P50/P95；部署前应先在生产副本执行容量评测。
 5. V1 使用固定 1024 维；更换不同维度模型需要新 migration 或独立索引版本。
 
-## 8. 结论
+## 9. 结论
 
 代码、自动测试和隔离 Docker 验收达到创建 PR 的条件。正式生产部署与真实外部 Embedding 服务验证仍需在 PR 审核后按部署文档执行；本分支不会自动合并 `main`。
 
