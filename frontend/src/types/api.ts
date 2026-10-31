@@ -952,6 +952,7 @@ export interface AssistantMessage {
   model_name_snapshot: string
   provider_snapshot: string
   evidence: AssistantEvidenceItem[]
+  tool_result: Record<string, unknown>
   prompt_tokens: number | null
   completion_tokens: number | null
   total_tokens: number | null
@@ -962,12 +963,15 @@ export interface AssistantMessage {
 }
 
 export interface AssistantStreamEvent {
-  type: 'start' | 'tool' | 'delta' | 'done' | 'cancelled' | 'error'
+  type: 'start' | 'status' | 'tool' | 'delta' | 'done' | 'cancelled' | 'error'
   message_id?: string
   content?: string
   message?: string
   code?: string
   tool?: string
   evidence?: AssistantEvidenceItem[]
+  result?: Record<string, unknown>
+  stage?: 'understanding' | 'querying' | 'retrieving' | 'generating'
+  label?: string
   model?: string
 }
