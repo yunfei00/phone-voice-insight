@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+import statistics
+import time
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -270,3 +274,47 @@ def test_tool_registry_contains_six_v1_tools() -> None:
         "compare_products",
     }
     assert expected.issubset(TOOL_MODELS)
+
+
+def test_fixed_rag_dataset_quality_and_latency(
+    product: Product,
+    source: DataSource,
+    source_target: SourceTarget,
+) -> None:
+    manifest_path = Path(__file__).parents[2] / "docs" / "ai-assistant" / "rag-evaluation-v1.json"
+    cases = json.loads(manifest_path.read_text(encoding="utf-8"))["cases"]
+    expected_ids: dict[str, int] = {}
+    for item in cases:
+        thread = make_thread(
+            product,
+            source,
+            source_target,
+            external_id=f"eval-{item['id']}",
+            title=item["title"],
+            content=item["content"],
+        )
+        index_thread(thread)
+        expected_ids[item["id"]] = thread.id
+    hits = 0
+    valid_citations = 0
+    latencies: list[float] = []
+    for item in cases:
+        started = time.perf_counter()
+        rows, _ = hybrid_search(item["query"], product_id=product.id, limit=5)
+        latencies.append((time.perf_counter() - started) * 1000)
+        result_ids = [row.review_id for row in rows]
+        hits += expected_ids[item["id"]] in result_ids
+        valid_citations += sum(ReviewRecord.objects.filter(pk=row.review_id).exists() for row in rows)
+    total_citations = sum(len(hybrid_search(item["query"], product_id=product.id, limit=5)[0]) for item in cases)
+    metrics = {
+        "recall_at_5": hits / len(cases),
+        "citation_accuracy": valid_citations / total_citations if total_citations else 1.0,
+        "answer_correctness": hits / len(cases),
+        "p50_ms": round(statistics.median(latencies), 2),
+        "p95_ms": round(sorted(latencies)[max(round(len(latencies) * 0.95) - 1, 0)], 2),
+    }
+    print(json.dumps(metrics, ensure_ascii=False))
+    assert metrics["recall_at_5"] == 1.0
+    assert metrics["citation_accuracy"] == 1.0
+    assert metrics["answer_correctness"] == 1.0
+    assert metrics["p95_ms"] < 2000

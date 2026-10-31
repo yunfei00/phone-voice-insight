@@ -46,6 +46,14 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     return numerator / denominator if denominator else 0.0
 
 
+def _keyword_terms(query: str) -> list[str]:
+    compact = query.replace(" ", "")
+    terms = [query]
+    if len(compact) >= 4:
+        terms.extend(compact[index : index + 2] for index in range(len(compact) - 1))
+    return list(dict.fromkeys(term for term in terms if term))[:16]
+
+
 def build_document_text(thread: ReviewRecord) -> str:
     parts = [clean_text(thread.title), clean_text(thread.content)]
     reply_budget = 10_000
@@ -193,9 +201,17 @@ def hybrid_search(
         tags=tags,
     )
     candidates: dict[int, tuple[RagDocument, float, set[str]]] = {}
-    for document in queryset.filter(Q(title__icontains=query) | Q(cleaned_text__icontains=query))[: limit * 4]:
-        title_match = query.casefold() in document.title.casefold()
-        score = 1.0 if title_match else 0.72
+    terms = _keyword_terms(query)
+    keyword_filter = Q()
+    for term in terms:
+        keyword_filter |= Q(title__icontains=term) | Q(cleaned_text__icontains=term)
+    for document in queryset.filter(keyword_filter)[: limit * 8]:
+        folded_title = document.title.casefold()
+        folded_text = document.cleaned_text.casefold()
+        title_hits = sum(term.casefold() in folded_title for term in terms)
+        text_hits = sum(term.casefold() in folded_text for term in terms)
+        title_match = title_hits > 0
+        score = min(1.0, (title_hits * 1.3 + text_hits) / max(len(terms), 1))
         candidates[document.id] = (document, score, {"标题关键词" if title_match else "正文或回复关键词"})
     vector_status = "未启用"
     try:
