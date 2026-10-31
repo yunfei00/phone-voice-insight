@@ -16,6 +16,8 @@ dependencies = [
   "drf-spectacular==0.29.0",
   "gunicorn==23.0.0; sys_platform != 'win32'",
   "httpx==0.28.1",
+  "langchain-core>=1.2,<2",
+  "pgvector>=0.4,<0.5",
   "psycopg[binary]==3.3.2",
   "pydantic==2.12.5",
   "python-dotenv==1.2.2",

@@ -200,8 +200,8 @@ class SystemResourcesView(APIView):
             disk_info = None
         cpu_count = os.cpu_count() or 1
         try:
-            load = os.getloadavg()[0]
-            cpu_load = round(load / cpu_count * 100, 1)
+            get_loadavg = getattr(os, "getloadavg", None)
+            cpu_load = round(get_loadavg()[0] / cpu_count * 100, 1) if get_loadavg else None
         except (OSError, AttributeError):
             cpu_load = None
         from django.contrib.auth import get_user_model

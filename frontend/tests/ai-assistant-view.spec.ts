@@ -128,6 +128,7 @@ describe('AI 智能助手工作台', () => {
     })
     vi.mocked(streamAssistantChat).mockImplementation(async (_id, _payload, onEvent) => {
       onEvent({ type: 'start', message_id: 'assistant-1' })
+      onEvent({ type: 'status', stage: 'querying', label: '正在查询业务数据' })
       onEvent({
         type: 'tool',
         tool: 'get_issue_statistics',
@@ -140,6 +141,16 @@ describe('AI 智能助手工作台', () => {
             published_at: null,
           },
         ],
+        result: {
+          status: 'ok',
+          overview: {
+            raw_feedback: 120,
+            valid_feedback: 80,
+            ai_analyzed: 60,
+            explicit_issue_feedback: 25,
+          },
+          meta: { scope_note: '仅统计最终有效 AI 语料。' },
+        },
       })
       onEvent({ type: 'delta', content: '主要问题是信号。' })
       onEvent({ type: 'done', message_id: 'assistant-1' })
@@ -181,6 +192,9 @@ describe('AI 智能助手工作台', () => {
     )
     expect(container.textContent).toContain('主要问题是信号')
     expect(container.textContent).toContain('地下车库信号不稳定')
+    expect(container.textContent).toContain('原始反馈')
+    expect(container.textContent).toContain('120')
+    expect(container.textContent).toContain('仅统计最终有效 AI 语料')
     app.unmount()
   })
 

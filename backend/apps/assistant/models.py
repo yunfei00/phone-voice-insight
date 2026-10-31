@@ -5,6 +5,7 @@ import uuid
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from pgvector.django import VectorField  # type: ignore[import-untyped]
 
 from apps.accounts.models import AIProviderName, AIThinkingMode
 from apps.common.models import TimeStampedModel
@@ -133,6 +134,7 @@ class AssistantMessage(TimeStampedModel):
     provider_snapshot = models.CharField(max_length=30, blank=True)
     evidence = models.JSONField(default=list, blank=True)
     tool_trace = models.JSONField(default=list, blank=True)
+    tool_result = models.JSONField(default=dict, blank=True)
     prompt_tokens = models.PositiveIntegerField(null=True, blank=True)
     completion_tokens = models.PositiveIntegerField(null=True, blank=True)
     total_tokens = models.PositiveIntegerField(null=True, blank=True)
@@ -143,3 +145,69 @@ class AssistantMessage(TimeStampedModel):
     class Meta:
         ordering = ("created_at", "id")
         indexes = (models.Index(fields=("conversation", "created_at"), name="assistant_msg_conv_time"),)
+
+
+class RagIndexStatus(models.TextChoices):
+    PENDING = "PENDING", "待索引"
+    INDEXED = "INDEXED", "已索引"
+    KEYWORD_ONLY = "KEYWORD_ONLY", "仅关键词"
+    FAILED = "FAILED", "失败"
+
+
+class RagDocument(TimeStampedModel):
+    """A derived, disposable retrieval document for one source thread."""
+
+    review = models.OneToOneField(
+        "reviews.ReviewRecord",
+        on_delete=models.CASCADE,
+        related_name="rag_document",
+    )
+    product = models.ForeignKey("products.Product", on_delete=models.CASCADE, related_name="rag_documents")
+    source = models.ForeignKey("sources.DataSource", on_delete=models.CASCADE, related_name="rag_documents")
+    title = models.CharField(max_length=500, blank=True)
+    cleaned_text = models.TextField()
+    summary = models.CharField(max_length=800, blank=True)
+    content_hash = models.CharField(max_length=64, db_index=True)
+    embedding = VectorField(dimensions=1024, null=True, blank=True)
+    embedding_provider = models.CharField(max_length=40, blank=True)
+    embedding_model = models.CharField(max_length=200, blank=True)
+    cleaning_version = models.PositiveSmallIntegerField(default=1)
+    status = models.CharField(max_length=16, choices=RagIndexStatus.choices, default=RagIndexStatus.PENDING)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    last_error = models.CharField(max_length=500, blank=True)
+    indexed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-review__published_at", "-id")
+        indexes = (
+            models.Index(fields=("status", "product"), name="rag_doc_status_product"),
+            models.Index(fields=("product", "source"), name="rag_doc_product_source"),
+        )
+
+
+class RagIndexRunStatus(models.TextChoices):
+    PENDING = "PENDING", "等待中"
+    RUNNING = "RUNNING", "执行中"
+    SUCCESS = "SUCCESS", "成功"
+    PARTIAL = "PARTIAL", "部分成功"
+    FAILED = "FAILED", "失败"
+
+
+class RagIndexRun(TimeStampedModel):
+    status = models.CharField(
+        max_length=12,
+        choices=RagIndexRunStatus.choices,
+        default=RagIndexRunStatus.PENDING,
+    )
+    checkpoint_review_id = models.PositiveBigIntegerField(default=0)
+    requested_count = models.PositiveIntegerField(default=0)
+    processed_count = models.PositiveIntegerField(default=0)
+    indexed_count = models.PositiveIntegerField(default=0)
+    keyword_only_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    error_message = models.CharField(max_length=500, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")

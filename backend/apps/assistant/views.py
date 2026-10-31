@@ -10,7 +10,7 @@ from ai.providers.base import AIProviderError
 from django.conf import settings
 from django.contrib.auth.models import User as DjangoUser
 from django.core.cache import cache
-from django.db.models import Count
+from django.db.models import Count, Max
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 from rest_framework import serializers, status, viewsets
@@ -28,6 +28,9 @@ from apps.assistant.models import (
     AssistantModelSelection,
     ConversationStatus,
     MessageStatus,
+    RagDocument,
+    RagIndexRun,
+    RagIndexRunStatus,
 )
 from apps.assistant.orchestrator import AssistantOrchestrator, prepare_chat, settings_from_profile
 from apps.assistant.providers import AssistantProviderClient
@@ -39,11 +42,17 @@ from apps.assistant.serializers import (
     AssistantMessageSerializer,
     AssistantModelProfileSerializer,
 )
+from apps.assistant.tasks import run_rag_backfill
 from apps.assistant.throttles import AssistantChatThrottle
+from apps.reviews.models import RecordType, ReviewRecord
 
 
 def _sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+
+
+class RagSyncSerializer(serializers.Serializer):
+    batch_size = serializers.IntegerField(default=100, min_value=1, max_value=500)
 
 
 class AssistantModelProfileViewSet(viewsets.ModelViewSet):
@@ -195,6 +204,52 @@ class AssistantModelProfileViewSet(viewsets.ModelViewSet):
         except (httpx.HTTPError, ValueError, TypeError, KeyError):
             return Response({"detail": "无法读取 Ollama 模型，请检查服务地址。"}, status=status.HTTP_502_BAD_GATEWAY)
         return Response({"models": models})
+
+
+class RagIndexViewSet(viewsets.ViewSet):
+    """Read index health; only administrators may start a historical backfill."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def list(self, request: Request) -> Response:  # noqa: ARG002
+        counts = {
+            row["status"]: row["count"] for row in RagDocument.objects.values("status").annotate(count=Count("id"))
+        }
+        latest = RagDocument.objects.aggregate(value=Max("indexed_at"))["value"]
+        thread_count = ReviewRecord.objects.filter(record_type=RecordType.THREAD).count()
+        return Response(
+            {
+                "enabled": settings.RAG_INDEXING_ENABLED,
+                "embedding_provider": settings.RAG_EMBEDDING_PROVIDER,
+                "embedding_model": settings.RAG_EMBEDDING_MODEL,
+                "thread_count": thread_count,
+                "document_count": sum(counts.values()),
+                "pending_count": max(thread_count - sum(counts.values()), 0),
+                "status_counts": counts,
+                "failed_count": counts.get("FAILED", 0),
+                "last_synced_at": latest,
+            }
+        )
+
+    @action(detail=False, methods=("post",), permission_classes=(IsAdministrator,))
+    def sync(self, request: Request) -> Response:
+        active = RagIndexRun.objects.filter(status__in=(RagIndexRunStatus.PENDING, RagIndexRunStatus.RUNNING)).first()
+        if active:
+            return Response({"detail": "已有索引任务正在执行", "run_id": active.id}, status=status.HTTP_409_CONFLICT)
+        batch_size_serializer = RagSyncSerializer(data=request.data)
+        batch_size_serializer.is_valid(raise_exception=True)
+        run = RagIndexRun.objects.create(
+            requested_count=ReviewRecord.objects.filter(record_type=RecordType.THREAD).count()
+        )
+        try:
+            run_rag_backfill.delay(run.id, batch_size_serializer.validated_data["batch_size"])
+        except Exception as exc:
+            run.status = RagIndexRunStatus.FAILED
+            run.error_message = "索引任务提交失败"
+            run.finished_at = timezone.now()
+            run.save()
+            raise serializers.ValidationError("索引任务提交失败，请检查 Celery 服务。") from exc
+        return Response({"run_id": run.id, "status": run.status}, status=status.HTTP_202_ACCEPTED)
 
 
 class AssistantConversationViewSet(viewsets.ModelViewSet):
