@@ -23,7 +23,7 @@ from apps.analysis.structured_views import (
     TaxonomyViewSet,
 )
 from apps.analysis.views import AnalysisBatchViewSet, AnalysisResultViewSet
-from apps.assistant.views import AssistantConversationViewSet, AssistantModelProfileViewSet
+from apps.assistant.views import AssistantConversationViewSet, AssistantModelProfileViewSet, RagIndexViewSet
 from apps.collection.views import CollectionScheduleViewSet, CollectionTargetStateViewSet, CollectionTaskViewSet
 from apps.common.views import health
 from apps.products.views import BrandViewSet, ProductViewSet
@@ -66,6 +66,7 @@ router.register("structured-batches", StructuredBatchViewSet, basename="structur
 router.register("taxonomies", TaxonomyViewSet, basename="taxonomy")
 router.register("assistant/models", AssistantModelProfileViewSet, basename="assistant-model")
 router.register("assistant/conversations", AssistantConversationViewSet, basename="assistant-conversation")
+router.register("assistant/rag-index", RagIndexViewSet, basename="assistant-rag-index")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

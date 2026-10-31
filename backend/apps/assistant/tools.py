@@ -1,19 +1,32 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from datetime import date
 from typing import Any, Literal
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Q
+from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from apps.analysis.models import OpinionAspect
+from apps.assistant.rag import hybrid_search
 from apps.products.models import Product
 from apps.reports import services as report_services
+from apps.reviews.models import RecordType, ReviewRecord
 from apps.reviews.services.final_corpus import final_corpus_reviews
+from apps.reviews.services.thread_tree import (
+    annotate_thread_metrics,
+    build_reply_tree,
+    replies_for_thread,
+    serialize_reply_node,
+    serialize_thread,
+)
+from apps.sources.models import DataSource
 
 
 class ToolInput(BaseModel):
@@ -59,22 +72,53 @@ class FeedbackTrendsInput(ToolInput):
     granularity: Literal["day"] = "day"
 
 
+class ListProductsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    search: str | None = Field(default=None, max_length=80)
+    limit: int = Field(default=50, ge=1, le=100)
+
+
+class QueryPostsInput(ToolInput):
+    query: str | None = Field(default=None, max_length=200)
+    tags: list[str] = Field(default_factory=list, max_length=10)
+    limit: int = Field(default=10, ge=1, le=30)
+
+
+class PostDetailInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    post_id: int = Field(ge=1)
+
+
+class ToolOutput(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    status: Literal["ok", "empty", "partial"] = "ok"
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 TOOL_MODELS: dict[str, type[BaseModel]] = {
+    "list_products": ListProductsInput,
+    "query_posts": QueryPostsInput,
+    "get_post_detail": PostDetailInput,
     "get_product_overview": ProductOverviewInput,
     "get_issue_statistics": IssueStatisticsInput,
     "compare_products": CompareProductsInput,
     "search_feedback": SearchFeedbackInput,
     "get_issue_evidence": IssueEvidenceInput,
     "get_feedback_trends": FeedbackTrendsInput,
+    "get_issue_trends": FeedbackTrendsInput,
 }
 
 TOOL_DESCRIPTIONS = {
+    "list_products": "列出当前可查询的真实手机产品及其帖子数量。",
+    "query_posts": "按关键词或语义查询真实帖子, 可按产品、来源、时间和标签过滤。",
+    "get_post_detail": "获取一个真实帖子的正文和完整回复树。",
     "get_product_overview": "查询产品反馈总量、有效反馈量、AI 分析量和明确问题量。",
     "get_issue_statistics": "按产品、来源、时间、分类和严重程度统计明确用户问题。",
     "compare_products": "比较两个至五个产品的问题数量、分类比例和样本可信度。",
     "search_feedback": "在最终有效 AI 语料中检索真实用户反馈。",
     "get_issue_evidence": "获取指定问题的真实原始证据和来源链接。",
     "get_feedback_trends": "查询指定范围内有效反馈和明确问题的按日趋势。",
+    "get_issue_trends": "查询指定范围内有效反馈和明确问题的按日趋势。",
 }
 
 
@@ -97,13 +141,107 @@ def _meta(params: dict[str, Any], sample_size: int) -> dict[str, Any]:
     }
 
 
+def _validate_scope(value: ToolInput) -> None:
+    if value.product_id and not Product.objects.filter(pk=value.product_id, is_active=True).exists():
+        raise ValueError("产品不存在或已停用")
+    if value.source_id and not DataSource.objects.filter(pk=value.source_id, is_active=True).exists():
+        raise ValueError("数据来源不存在或已停用")
+
+
+def list_products(value: ListProductsInput) -> dict[str, Any]:
+    queryset = Product.objects.filter(is_active=True).order_by("name")
+    if value.search:
+        queryset = queryset.filter(name__icontains=value.search.strip())
+    rows = list(
+        queryset.annotate(
+            post_count=Count("reviews", filter=Q(reviews__record_type=RecordType.THREAD), distinct=True)
+        ).values("id", "name", "brand__name", "post_count")[: value.limit]
+    )
+    return _json_safe(
+        {
+            "status": "ok" if rows else "empty",
+            "products": rows,
+            "meta": {"sample_size": len(rows), "data_cutoff": timezone.now(), "scope_note": "仅列出启用产品。"},
+        }
+    )
+
+
+def query_posts(value: QueryPostsInput) -> dict[str, Any]:
+    _validate_scope(value)
+    params = _params(value)
+    query = str(params.pop("query", "")).strip()
+    tags = list(params.pop("tags", []))
+    limit = int(params.pop("limit", 10))
+    if query:
+        rows, retrieval_meta = hybrid_search(
+            query,
+            product_id=value.product_id,
+            source_id=value.source_id,
+            start_date=value.start_date,
+            end_date=value.end_date,
+            tags=tags,
+            limit=limit,
+        )
+        posts = [row.__dict__ for row in rows]
+    else:
+        queryset = ReviewRecord.objects.filter(record_type=RecordType.THREAD).select_related("product", "source")
+        if value.product_id:
+            queryset = queryset.filter(product_id=value.product_id)
+        if value.source_id:
+            queryset = queryset.filter(source_id=value.source_id)
+        if value.start_date:
+            queryset = queryset.filter(published_at__date__gte=value.start_date)
+        if value.end_date:
+            queryset = queryset.filter(published_at__date__lte=value.end_date)
+        queryset = annotate_thread_metrics(queryset).order_by("-activity_at", "-id")[:limit]
+        posts = [serialize_thread(thread) for thread in queryset]
+        retrieval_meta = {"vector_status": "未请求语义检索", "candidate_count": len(posts), "query": ""}
+    return _json_safe(
+        {
+            "status": "ok" if posts else "empty",
+            "posts": posts,
+            "meta": {
+                **retrieval_meta,
+                "sample_size": len(posts),
+                "data_cutoff": timezone.now(),
+                "scope_note": "帖子与回复来自原始采集数据; 语义索引失败时自动降级为关键词检索。",
+            },
+        }
+    )
+
+
+def get_post_detail(value: PostDetailInput) -> dict[str, Any]:
+    thread = get_object_or_404(
+        annotate_thread_metrics(
+            ReviewRecord.objects.filter(record_type=RecordType.THREAD).select_related("product", "source")
+        ),
+        pk=value.post_id,
+    )
+    replies = replies_for_thread(thread)
+    tree = build_reply_tree(thread, replies)
+    return _json_safe(
+        {
+            "status": "ok",
+            "post": serialize_thread(thread),
+            "replies": [serialize_reply_node(node) for node in tree],
+            "meta": {
+                "sample_size": len(replies),
+                "data_cutoff": timezone.now(),
+                "scope_note": "回复按 parent_external_id 构建; 孤立回复保留在根节点并标记。",
+            },
+        }
+    )
+
+
 def get_product_overview(value: ProductOverviewInput) -> dict[str, Any]:
+    _validate_scope(value)
     params = _params(value)
     result = report_services.overview(params)
     return _json_safe({"overview": result, "meta": _meta(params, result["ai_analyzed"])})
 
 
 def get_issue_statistics(value: IssueStatisticsInput) -> dict[str, Any]:
+    _validate_scope(value)
     params = _params(value)
     limit = int(params.pop("limit", 10))
     rows = report_services.issue_rows(params)
@@ -121,6 +259,7 @@ def get_issue_statistics(value: IssueStatisticsInput) -> dict[str, Any]:
 
 
 def compare_products(value: CompareProductsInput) -> dict[str, Any]:
+    _validate_scope(value)
     params = _params(value)
     product_ids = list(dict.fromkeys(params.pop("product_ids")))
     products = {item.id: item for item in Product.objects.filter(id__in=product_ids, is_active=True)}
@@ -149,6 +288,7 @@ def compare_products(value: CompareProductsInput) -> dict[str, Any]:
 
 
 def search_feedback(value: SearchFeedbackInput) -> dict[str, Any]:
+    _validate_scope(value)
     params = _params(value)
     keyword = str(params.pop("keyword"))
     category = str(params.pop("category", "")).upper()
@@ -188,6 +328,7 @@ def search_feedback(value: SearchFeedbackInput) -> dict[str, Any]:
 
 
 def get_issue_evidence(value: IssueEvidenceInput) -> dict[str, Any]:
+    _validate_scope(value)
     params = _params(value)
     issue_id = str(params.pop("issue_id"))
     limit = int(params.pop("limit", 10))
@@ -197,6 +338,7 @@ def get_issue_evidence(value: IssueEvidenceInput) -> dict[str, Any]:
 
 
 def get_feedback_trends(value: FeedbackTrendsInput) -> dict[str, Any]:
+    _validate_scope(value)
     params = _params(value)
     params.pop("granularity", None)
     rows = report_services.trends(params)
@@ -204,13 +346,35 @@ def get_feedback_trends(value: FeedbackTrendsInput) -> dict[str, Any]:
 
 
 TOOL_HANDLERS: dict[str, Callable[[Any], dict[str, Any]]] = {
+    "list_products": list_products,
+    "query_posts": query_posts,
+    "get_post_detail": get_post_detail,
     "get_product_overview": get_product_overview,
     "get_issue_statistics": get_issue_statistics,
     "compare_products": compare_products,
     "search_feedback": search_feedback,
     "get_issue_evidence": get_issue_evidence,
     "get_feedback_trends": get_feedback_trends,
+    "get_issue_trends": get_feedback_trends,
 }
+
+
+def _build_langchain_tool(name: str) -> StructuredTool:
+    model = TOOL_MODELS[name]
+    handler = TOOL_HANDLERS[name]
+
+    def invoke(**arguments: Any) -> dict[str, Any]:
+        return handler(model.model_validate(arguments))
+
+    return StructuredTool.from_function(
+        func=invoke,
+        name=name,
+        description=TOOL_DESCRIPTIONS[name],
+        args_schema=model,
+    )
+
+
+LANGCHAIN_TOOLS: dict[str, StructuredTool] = {name: _build_langchain_tool(name) for name in TOOL_MODELS}
 
 
 def tool_specs() -> list[dict[str, Any]]:
@@ -245,5 +409,8 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
                 50 if name == "get_issue_statistics" else 30 if name == "search_feedback" else 20,
             ),
         )
-    validated = model.model_validate(arguments)
-    return handler(validated)
+    started = time.perf_counter()
+    result = LANGCHAIN_TOOLS[name].invoke(arguments)
+    result.setdefault("status", "ok")
+    result.setdefault("meta", {})["tool_elapsed_ms"] = round((time.perf_counter() - started) * 1000)
+    return ToolOutput.model_validate(result).model_dump()

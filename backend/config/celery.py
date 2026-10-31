@@ -48,4 +48,8 @@ app.conf.beat_schedule = {
         "schedule": crontab(hour=1, minute=20, day_of_week="monday"),
         "args": ("WEEKLY",),
     },
+    "reconcile-rag-index": {
+        "task": "reconcile_rag_index",
+        "schedule": 600.0,
+    },
 }
