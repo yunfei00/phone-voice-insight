@@ -19,7 +19,7 @@ import type { StructuredFailure } from '@/api'
 const failureDialog = ref(false)
 const failureLoading = ref(false)
 const failureRows = ref<StructuredFailure[]>([])
-const dispositions = ref<Record<string, {status: string; reason: string}>>({})
+const dispositions = ref<Record<string, {status: string; reason: string; annotation?: Record<string, unknown>}>>({})
 const failureBatchId = ref<number | null>(null)
 const failureError = ref('')
 const loading = ref(false)
@@ -174,6 +174,38 @@ async function handleFailedReview(contentId: number, status: 'IN_REVIEW' | 'DEFE
     ElMessage.error('人工处理保存失败')
   }
 }
+async function submitManualAnnotation(contentId: number) {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '请填写符合 TAXONOMY JSON Schema 的完整结构化结果（必须包含与原帖匹配的证据区间）',
+      '提交人工标注',
+      { inputType: 'textarea', confirmButtonText: '提交审核', cancelButtonText: '取消' },
+    )
+    const annotation = JSON.parse(value) as Record<string, unknown>
+    await setManualDisposition({ content_id: contentId, status: 'SUBMITTED', reason: '人工结构化标注', annotation })
+    dispositions.value[contentId] = { status: 'SUBMITTED', reason: '人工结构化标注' }
+    ElMessage.success('标注已通过结构化校验，等待管理员审核')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error('提交失败：请检查 JSON 格式、字段与证据区间')
+  }
+}
+async function approveManualAnnotation(contentId: number) {
+  try {
+    const record = dispositions.value[contentId] as {status: string; reason: string; annotation?: Record<string, unknown>}
+    if (!record?.annotation) {
+      ElMessage.warning('未获取到标注数据，请重新打开失败详情')
+      return
+    }
+    await ElMessageBox.confirm('确认标注已核对原文证据？', '审核人工标注', {type: 'warning'})
+    await setManualDisposition({content_id: contentId, status: 'APPROVED', reason: '管理员审核通过', annotation: record.annotation})
+    dispositions.value[contentId] = {...record, status: 'APPROVED'}
+    ElMessage.success('审核状态已保存')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error('审核失败：请确认管理员权限')
+  }
+}
 async function retry(id: number) {
   try {
     await retryStructuredBatch(id)
@@ -326,6 +358,8 @@ onUnmounted(() => {
         <el-table-column label="人工处理" min-width="280">
           <template #default="{ row }">
             <span v-if="dispositions[row.content]">已处理：{{ dispositions[row.content].status }} </span>
+            <el-button v-if="dispositions[row.content]?.status === 'IN_REVIEW'" link type="primary" @click="submitManualAnnotation(row.content)">填写结构化标注</el-button>
+            <el-button v-if="dispositions[row.content]?.status === 'SUBMITTED'" link type="success" @click="approveManualAnnotation(row.content)">审核通过</el-button>
             <template v-else>
               <el-button link type="primary" @click="handleFailedReview(row.content, 'IN_REVIEW')">转人工</el-button>
               <el-button link @click="handleFailedReview(row.content, 'DEFERRED')">暂缓</el-button>
