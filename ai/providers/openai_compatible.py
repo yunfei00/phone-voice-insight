@@ -4,14 +4,30 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import time
+from urllib.parse import urlsplit
 from typing import Any
 
 import httpx
 
 from ai.providers.base import AIConnectivityResponse, AIProvider, AIProviderError, AIProviderResponse
 from ai.schemas.review_analysis import ReviewAnalysisInput
+
+
+def _is_local_endpoint(base_url: str) -> bool:
+    """Treat loopback, RFC1918 and other non-public IP endpoints as local inference."""
+    host = urlsplit(base_url).hostname
+    if not host:
+        return False
+    if host.lower() in {"localhost", "host.docker.internal"}:
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+        return not address.is_global
+    except ValueError:
+        return False
 
 
 class OpenAICompatibleProvider(AIProvider):
@@ -134,7 +150,11 @@ class OpenAICompatibleProvider(AIProvider):
                 f"{self.base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
                 json=request_payload,
-                timeout=self.timeout_seconds,
+                timeout=(
+                    httpx.Timeout(connect=30.0, read=None, write=60.0, pool=30.0)
+                    if _is_local_endpoint(self.base_url)
+                    else self.timeout_seconds
+                ),
                 follow_redirects=False,
                 trust_env=False,
             )
