@@ -396,11 +396,13 @@ def run_honor_full_chunk(
                 # specific response code for these IDs as access-blocked; never mask
                 # generic parser, network, or topic failures.
                 known_blocked_info_threads = {"30417234", "29949239"}
-                access_blocked = error_code in blocked_codes or (
-                    error_code == "BLOCKED_INFO_PAGE" and item.attempts >= max_attempts
-                ) or (
-                    error_code in {"BLOCKED_INFO_PAGE", "INVALID_THREAD_PAGE"}
-                    and str(item.thread_id) in known_blocked_info_threads
+                access_blocked = (
+                    error_code in blocked_codes
+                    or (error_code == "BLOCKED_INFO_PAGE" and item.attempts >= max_attempts)
+                    or (
+                        error_code in {"BLOCKED_INFO_PAGE", "INVALID_THREAD_PAGE"}
+                        and str(item.thread_id) in known_blocked_info_threads
+                    )
                 )
                 item.status = (
                     DiscoveryStatus.BLOCKED_SKIPPED

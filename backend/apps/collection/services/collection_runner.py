@@ -684,15 +684,11 @@ def run_collection(
         .first()
     )
     previous_counts = (
-        (previous_incremental.last_checkpoint or {}).get("reply_count_snapshot", {})
-        if previous_incremental else {}
+        (previous_incremental.last_checkpoint or {}).get("reply_count_snapshot", {}) if previous_incremental else {}
     )
     if not isinstance(previous_counts, dict):
         previous_counts = {}
-    reply_count_snapshot: dict[str, int] = {
-        str(k): int(v) for k, v in previous_counts.items()
-        if str(v).isdigit()
-    }
+    reply_count_snapshot: dict[str, int] = {str(k): int(v) for k, v in previous_counts.items() if str(v).isdigit()}
     checkpoint: dict[str, Any] = {"reply_count_snapshot": reply_count_snapshot}
     start_page = 1
     start_index = 0
@@ -717,7 +713,7 @@ def run_collection(
             _request_log(task.id, source_target.source.code, topic_page, "", raw_topic.metadata)
             thread_links = collector.parse_records(raw_topic)
             if not thread_links:
-                checkpoint = {**checkpoint,"topic_page": topic_page, "thread_index": 0, "completed": True}
+                checkpoint = {**checkpoint, "topic_page": topic_page, "thread_index": 0, "completed": True}
                 _save_progress(
                     task.id,
                     run.id,
@@ -756,14 +752,11 @@ def run_collection(
                     # Periodic deep scans still cover edits, deleted replies and unreliable counters.
                     listed_replies = parse_human_count(listing_data.get("reply_count"))
                     deep_scan_interval = _int_config(config, "incremental_deep_scan_every", 4, 48)
-                    if (
-                        thread_was_known
-                        and listed_replies is not None
-                        and task.id % deep_scan_interval != 0
-                    ):
+                    if thread_was_known and listed_replies is not None and task.id % deep_scan_interval != 0:
                         if reply_count_snapshot.get(thread_id) == listed_replies:
                             fast_skipped_threads += 1
-                            checkpoint = {**checkpoint,
+                            checkpoint = {
+                                **checkpoint,
                                 "topic_page": topic_page,
                                 "thread_index": thread_index + 1,
                                 "last_thread_id": thread_id,
@@ -855,7 +848,8 @@ def run_collection(
                         excluded_aliases=[str(value) for value in target.config.get("excluded_product_aliases", [])],
                     ):
                         skipped += 1
-                        checkpoint = {**checkpoint,
+                        checkpoint = {
+                            **checkpoint,
                             "topic_page": topic_page,
                             "thread_index": thread_index + 1,
                             "last_thread_id": thread_id,
@@ -908,7 +902,8 @@ def run_collection(
 
                     if listed_replies is not None:
                         reply_count_snapshot[thread_id] = listed_replies
-                    checkpoint = {**checkpoint,
+                    checkpoint = {
+                        **checkpoint,
                         "topic_page": topic_page,
                         "thread_index": thread_index + 1,
                         "last_thread_id": thread_id,
@@ -946,43 +941,61 @@ def run_collection(
                     failed += 1
                     error_code = str(getattr(exc, "code", "COLLECTION_ERROR")).upper()
                     blocked = error_code in {
-                        "HTTP_401", "HTTP_403", "AUTH_REQUIRED", "LOGIN_REQUIRED",
-                        "LOGIN_WALL", "PERMISSION_DENIED", "ACCESS_DENIED",
-                        "BLOCKED_PERMISSION_PAGE", "BLOCKED_INFO_PAGE",
+                        "HTTP_401",
+                        "HTTP_403",
+                        "AUTH_REQUIRED",
+                        "LOGIN_REQUIRED",
+                        "LOGIN_WALL",
+                        "PERMISSION_DENIED",
+                        "ACCESS_DENIED",
+                        "BLOCKED_PERMISSION_PAGE",
+                        "BLOCKED_INFO_PAGE",
                     }
                     if blocked:
                         failed -= 1
                         skipped += 1
                     error_details = checkpoint.setdefault("thread_errors", [])
                     if len(error_details) < 50:
-                        error_details.append({
-                            "thread_id": str(thread_link.payload.get("thread_id", "")),
-                            "thread_url": str(thread_link.payload.get("thread_url", "")),
-                            "code": error_code,
-                            "reason": str(exc)[:300],
-                            "outcome": "BLOCKED_SKIPPED" if blocked else "FAILED",
-                        })
-                    checkpoint.update({
-                        "topic_page": topic_page,
-                        "thread_index": thread_index + 1,
-                        "last_thread_id": str(thread_link.payload.get("thread_id", "")),
-                    })
+                        error_details.append(
+                            {
+                                "thread_id": str(thread_link.payload.get("thread_id", "")),
+                                "thread_url": str(thread_link.payload.get("thread_url", "")),
+                                "code": error_code,
+                                "reason": str(exc)[:300],
+                                "outcome": "BLOCKED_SKIPPED" if blocked else "FAILED",
+                            }
+                        )
+                    checkpoint.update(
+                        {
+                            "topic_page": topic_page,
+                            "thread_index": thread_index + 1,
+                            "last_thread_id": str(thread_link.payload.get("thread_id", "")),
+                        }
+                    )
                     _save_progress(
-                        task.id, run.id, inserted=inserted, skipped=skipped,
-                        failed=failed, checkpoint=checkpoint,
+                        task.id,
+                        run.id,
+                        inserted=inserted,
+                        skipped=skipped,
+                        failed=failed,
+                        checkpoint=checkpoint,
                         progress_stats={
-                            "new_threads": new_threads, "known_threads": known_threads,
-                            "new_records": inserted, "duplicate_records": duplicate_records,
+                            "new_threads": new_threads,
+                            "known_threads": known_threads,
+                            "new_records": inserted,
+                            "duplicate_records": duplicate_records,
                             "stopped_at_known_boundary": False,
                         },
                     )
                     logger.warning(
                         "incremental_thread_error task=%s thread=%s code=%s",
-                        task.id, thread_link.payload.get("thread_id"), error_code,
+                        task.id,
+                        thread_link.payload.get("thread_id"),
+                        error_code,
                     )
             if scanned >= max_threads:
                 break
-            checkpoint = {**checkpoint,"topic_page": topic_page + 1, "thread_index": 0}
+            checkpoint = {**checkpoint, "topic_page": topic_page + 1, "thread_index": 0}
             _save_progress(
                 task.id,
                 run.id,

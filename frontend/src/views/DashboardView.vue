@@ -570,7 +570,9 @@ onBeforeUnmount(() => {
             <span class="severity">{{ item.severity }}</span
             ><strong>{{ item.name }}</strong
             ><small>{{ item.product_name }}</small
-            ><em :title="`近7天 ${item.recent_count} 条，上7天 ${item.previous_count} 条`">{{ riskTrendLabel(item) }}</em>
+            ><em :title="`近7天 ${item.recent_count} 条，上7天 ${item.previous_count} 条`">{{
+              riskTrendLabel(item)
+            }}</em>
           </button>
         </div>
         <el-empty v-else description="当前周期没有达到关注规则的问题，可点击上方指标查看规则" />
