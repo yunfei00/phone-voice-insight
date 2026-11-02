@@ -202,20 +202,26 @@ def _text_segments(text: str, limit: int = 3000) -> list[tuple[int, str]]:
 
 
 def _request_with_empty_retry(provider: AIProvider, request: ReviewAnalysisInput, prompt: str, feedback: str = "") -> AIProviderResponse:
-    """Retry an empty model answer once with reduced prompt overhead."""
+    """Retry empty responses and oversized requests without resending large schema text."""
     try:
         return provider.analyze_review(request, prompt=prompt, validation_feedback=feedback)
     except AIProviderError as exc:
         if exc.code not in ("AI_EMPTY_RESPONSE", "AI_REQUEST_TOO_LARGE"):
             raise
+        compact_prompt = (
+            "你是手机用户声音结构化分析器。仅输出 JSON 对象，必须满足既定结构化字段与枚举要求。"
+            "所有证据必须直接引用输入正文，不得编造图片内容。"
+        )
+        compact_request = request.model_copy(update={
+            "title": (request.title or "")[:160] or None,
+            "content": request.content[:1500],
+            "context_text": "",
+            "thread_content": "",
+            "parent_content": "",
+        })
         return provider.analyze_review(
-            request,
-            prompt=prompt.split("## 本次必须遵循的完整 JSON Schema")[0]
-            + "\n请只输出符合结构化分析字段要求的 JSON 对象，不要输出思考过程或说明。",
-            validation_feedback=(
-                "上次请求过大，请仅返回符合结构化字段要求的 JSON。" if exc.code == "AI_REQUEST_TOO_LARGE"
-                else "上次响应没有 JSON 正文，请直接给出最终 JSON。"
-            ),
+            compact_request, prompt=compact_prompt,
+            validation_feedback="请直接输出最终 JSON，不要输出解释或思考过程。",
         )
 
 
