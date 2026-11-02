@@ -10,6 +10,7 @@ import {
   getStructuredBatchFailures,
   getManualDispositions,
   setManualDisposition,
+  cancelManualDisposition,
   pauseStructuredBatch,
   resumeStructuredBatch,
   retryStructuredBatch,
@@ -180,6 +181,19 @@ async function handleFailedReview(contentId: number, status: 'IN_REVIEW' | 'DEFE
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
     ElMessage.error('人工处理保存失败')
+  }
+}
+async function withdrawFailedManual(contentId: number) {
+  try {
+    await ElMessageBox.confirm('撤销人工处理后，原 AI 失败记录保持不变，确认撤销吗？', '撤销人工处理', {
+      type: 'warning', confirmButtonText: '确认撤销', cancelButtonText: '取消',
+    })
+    await cancelManualDisposition(contentId)
+    delete dispositions.value[contentId]
+    ElMessage.success('人工处理已撤销，仍保留原失败状态')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error('撤销人工处理失败')
   }
 }
 async function submitManualAnnotation(contentId: number) {
@@ -378,6 +392,7 @@ onUnmounted(() => {
         <el-table-column label="人工处理" min-width="280">
           <template #default="{ row }">
             <span v-if="dispositions[row.content]">{{ statusLabels[dispositions[row.content].status] || dispositions[row.content].status }} </span>
+            <el-button v-if="dispositions[row.content] && dispositions[row.content].status !== 'APPROVED'" link type="danger" @click="withdrawFailedManual(row.content)">撤销人工</el-button>
             <el-button v-if="dispositions[row.content]?.status === 'IN_REVIEW'" link type="primary" @click="submitManualAnnotation(row.content)">填写结构化标注</el-button>
             <el-button v-if="dispositions[row.content]?.status === 'SUBMITTED'" link type="success" @click="approveManualAnnotation(row.content)">审核通过</el-button>
             <template v-if="!dispositions[row.content]">
