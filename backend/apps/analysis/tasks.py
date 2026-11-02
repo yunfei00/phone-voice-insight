@@ -173,7 +173,10 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
                 .filter(failures__gte=3)
                 .values("content_id")
             )
-            corpus = final_corpus_reviews().exclude(pk__in=completed).exclude(pk__in=failed)
+            from apps.analysis.models import StructuredManualDisposition
+            corpus = final_corpus_reviews().exclude(pk__in=completed).exclude(pk__in=failed).exclude(
+                pk__in=StructuredManualDisposition.objects.values("content_id")
+            )
             if product_id is not None:
                 corpus = corpus.filter(product_id=product_id)
             first = corpus.order_by("id").first()
