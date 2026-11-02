@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getManualQueue, getTaxonomy, setManualDisposition, cancelManualDisposition, type ManualQueueItem } from '@/api'
+import { getManualQueue, getTaxonomy, setManualDisposition, cancelManualDisposition, quickExcludeManual, undoExcludeManual, type ManualQueueItem } from '@/api'
 import type { TaxonomyDefinition } from '@/types/api'
 
 type Choice = { label: string; value: string }
@@ -11,6 +11,38 @@ type AspectForm = {
 }
 const rows = ref<ManualQueueItem[]>([])
 const loading = ref(false)
+const selectedIds = ref<number[]>([])
+const exclusionReason = ref('INTRO')
+const exclusionReasons = [
+  {value:'INTRO',label:'产品介绍 / 宣传内容'},
+  {value:'OFFICIAL',label:'官方公告 / 活动内容'},
+  {value:'IRRELEVANT',label:'与目标产品无关'},
+  {value:'NO_EXPERIENCE',label:'无有效用户体验信息'},
+  {value:'DUPLICATE',label:'重复或无意义内容'},
+]
+function onSelectionChange(items: ManualQueueItem[]): void {
+  selectedIds.value = items.filter(item => item.status !== 'APPROVED').map(item => item.content_id)
+}
+async function quickExclude(ids: number[]): Promise<void> {
+  if (!ids.length) return
+  try {
+    await ElMessageBox.confirm('确定排除所选帖子？原始数据仍然保留。', '快速排除')
+    await quickExcludeManual(ids, exclusionReason.value)
+    ElMessage.success('已快速排除')
+    await load()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('快速排除失败')
+  }
+}
+async function undoExclude(id: number): Promise<void> {
+  try {
+    await undoExcludeManual([id])
+    ElMessage.success('已撤销排除')
+    await load()
+  } catch {
+    ElMessage.error('撤销排除失败')
+  }
+}
 const selected = ref<ManualQueueItem | null>(null)
 const editorOpen = ref(false)
 const reason = ref('')
@@ -209,8 +241,13 @@ onMounted(load)
           <el-option label="已排除" value="EXCLUDED" />
         </el-select>
         <el-button @click="load">刷新</el-button>
+        <el-select v-model="exclusionReason" style="width:220px">
+          <el-option v-for="option in exclusionReasons" :key="option.value" :label="option.label" :value="option.value" />
+        </el-select>
+        <el-button type="danger" plain :disabled="!selectedIds.length" @click="quickExclude(selectedIds)">批量排除（{{ selectedIds.length }}）</el-button>
       </div>
-      <el-table v-loading="loading" :data="rows" empty-text="暂无人工处理记录">
+      <el-table v-loading="loading" :data="rows" empty-text="暂无人工处理记录" @selection-change="onSelectionChange">
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="content_id" label="帖子 ID" width="110" />
         <el-table-column prop="product" label="机型" width="140" />
         <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
@@ -219,13 +256,15 @@ onMounted(load)
           <template #default="{row}">{{ labels[row.status] || row.status }}</template>
         </el-table-column>
         <el-table-column prop="reason" label="处理原因" min-width="160" show-overflow-tooltip />
-        <el-table-column label="操作" width="190">
+        <el-table-column label="操作" width="290">
           <template #default="{row}">
             <el-button v-if="row.status === 'IN_REVIEW' || row.status === 'SUBMITTED'" link type="primary" @click="openEditor(row)">
               {{ row.status === 'SUBMITTED' ? '查看或修改' : '开始处理' }}
             </el-button>
             <el-button v-if="row.status === 'SUBMITTED'" link type="success" @click="approve(row)">审核通过</el-button>
-            <el-button v-if="row.status !== 'APPROVED'" link type="danger" @click="withdraw(row)">撤销人工</el-button>
+            <el-button v-if="row.status !== 'APPROVED' && row.status !== 'EXCLUDED'" link type="warning" @click="quickExclude([row.content_id])">快速排除</el-button>
+            <el-button v-if="row.status === 'EXCLUDED'" link type="success" @click="undoExclude(row.content_id)">撤销排除</el-button>
+            <el-button v-if="row.status !== 'APPROVED' && row.status !== 'EXCLUDED'" link type="danger" @click="withdraw(row)">撤销人工</el-button>
           </template>
         </el-table-column>
       </el-table>
