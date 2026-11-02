@@ -2,6 +2,7 @@
 import { ChatDotRound, FullScreen, Refresh, SwitchButton } from '@element-plus/icons-vue'
 import type { EChartsOption } from 'echarts'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 
 import {
@@ -22,12 +23,76 @@ import type {
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
+const preferenceKey = `pvi:dashboard:filters:v1:user:${auth.user?.id ?? 'anonymous'}`
+type SavedDashboardFilters = FilterValues & { preset?: string }
+
+function rollingDates(days: number): Pick<FilterValues, 'start_date' | 'end_date'> {
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(end.getDate() - days + 1)
+  const iso = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  return { start_date: iso(start), end_date: iso(end) }
+}
+
+function readPreference(): SavedDashboardFilters {
+  try {
+    const raw = window.localStorage.getItem(preferenceKey)
+    if (!raw) return {}
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const value = parsed as Record<string, unknown>
+    const product_id = Number(value.product_id)
+    const source_id = Number(value.source_id)
+    const preset = ['7', '30', '90', 'custom'].includes(String(value.preset))
+      ? String(value.preset)
+      : '30'
+    const dates = preset === 'custom' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(value.start_date || '')) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(value.end_date || ''))
+      ? { start_date: String(value.start_date), end_date: String(value.end_date) }
+      : rollingDates(Number(preset === 'custom' ? '30' : preset))
+    return {
+      product_id: Number.isSafeInteger(product_id) && product_id > 0 ? product_id : undefined,
+      source_id: Number.isSafeInteger(source_id) && source_id > 0 ? source_id : undefined,
+      ...dates,
+      preset,
+    }
+  } catch {
+    return {}
+  }
+}
+
+const savedFilters = readPreference()
+const queryId = (value: unknown): number | undefined => {
+  const id = Number(value)
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined
+}
 const filters = ref<FilterValues>({
-  product_id: route.query.product_id ? Number(route.query.product_id) : undefined,
-  source_id: route.query.source_id ? Number(route.query.source_id) : undefined,
-  start_date: String(route.query.start_date || ''),
-  end_date: String(route.query.end_date || ''),
+  product_id: route.query.product_id !== undefined
+    ? queryId(route.query.product_id) : savedFilters.product_id,
+  source_id: route.query.source_id !== undefined
+    ? queryId(route.query.source_id) : savedFilters.source_id,
+  start_date: typeof route.query.start_date === 'string'
+    ? route.query.start_date : savedFilters.start_date || '',
+  end_date: typeof route.query.end_date === 'string'
+    ? route.query.end_date : savedFilters.end_date || '',
 })
+function savePreference(value: FilterValues): void {
+  try {
+    const saved = readPreference()
+    const rolling = [7, 30, 90].find((days) => {
+      const range = rollingDates(days)
+      return range.start_date === value.start_date && range.end_date === value.end_date
+    })
+    const preset = rolling ? String(rolling) :
+      saved.preset !== 'custom' && !value.start_date && !value.end_date ? '30' : 'custom'
+    window.localStorage.setItem(preferenceKey, JSON.stringify({ ...value, preset }))
+  } catch {
+    // Storage may be disabled; dashboard still works with in-memory filters.
+  }
+}
 const overview = ref<DashboardOverview>()
 const trend = ref<DashboardTrend[]>([])
 const categories = ref<DashboardCategory[]>([])
@@ -168,6 +233,7 @@ async function load(): Promise<void> {
 
 async function applyFilters(value: FilterValues): Promise<void> {
   filters.value = value
+  savePreference(value)
   await router.replace({ query: { ...value, ...(isFullscreen.value ? { fullscreen: '1' } : {}) } })
   await load()
 }
