@@ -94,7 +94,7 @@ class StructuredBatchViewSet(ViewSet):
     def cancel_manual(self, request: Request) -> Response:
         """Withdraw an unfinished manual assignment without altering the original failed run."""
         try:
-            content_id = int(request.data.get("content_id"))
+            content_id = int(str(request.data.get("content_id")))
         except (TypeError, ValueError):
             return Response({"error_code": "INVALID_CONTENT_ID"}, status=400)
         with transaction.atomic():
@@ -133,7 +133,7 @@ class StructuredBatchViewSet(ViewSet):
             for item in items:
                 item.status = "EXCLUDED"
                 item.reason = reasons[reason_code]
-                item.handler = request.user
+                item.handler_id = request.user.pk
                 item.annotation = {}
                 item.save(update_fields=("status", "reason", "handler", "annotation", "updated_at"))
         return Response({"excluded_count": len(items), "reason_code": reason_code})
@@ -202,7 +202,7 @@ class StructuredBatchViewSet(ViewSet):
             return Response({"error_code": "REVIEWER_REQUIRED"}, status=403)
         with transaction.atomic():
             item, _ = StructuredManualDisposition.objects.select_for_update().get_or_create(
-                content_id=content_id, defaults={"handler": request.user}
+                content_id=content_id, defaults={"handler_id": request.user.pk}
             )
             if new_status == "APPROVED" and item.status != "SUBMITTED":
                 return Response({"error_code": "SUBMISSION_REQUIRED"}, status=409)
@@ -214,6 +214,7 @@ class StructuredBatchViewSet(ViewSet):
                 # Preserve failed-run history; publish a distinct MANUAL run as the current analysis.
                 content = ReviewRecord.objects.select_related("product", "source").get(pk=content_id)
                 payload = validation.payload
+                assert payload is not None
                 AnalysisRun.objects.filter(content_id=content_id, is_current=True).update(is_current=False)
                 manual_run = AnalysisRun.objects.create(
                     content=content,
@@ -241,7 +242,7 @@ class StructuredBatchViewSet(ViewSet):
                 OpinionAspect.objects.bulk_create(
                     [OpinionAspect(analysis=analysis, **aspect.model_dump()) for aspect in payload.aspects]
                 )
-                item.reviewer = request.user
+                item.reviewer_id = request.user.pk
                 item.reviewed_at = timezone.now()
             if new_status != "APPROVED":
                 item.handler = request.user
