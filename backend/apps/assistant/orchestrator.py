@@ -353,7 +353,7 @@ def _keyword(question: str) -> str:
         "附链接",
     ):
         subject = subject.replace(phrase, " ")
-    return re.sub(r"\s+", " ", subject).strip(" ：:，,。？? ")  # noqa: B005[:120]
+    return re.sub(r"\s+", " ", subject).strip(" ：:，,。？? ")[:120]  # noqa: B005
 
 
 def _extract_evidence(result: dict[str, Any]) -> list[dict[str, Any]]:
