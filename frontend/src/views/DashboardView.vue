@@ -129,6 +129,15 @@ const issueRate = computed(() => {
   const issues = overview.value?.explicit_issue_feedback ?? 0
   return valid > 0 ? `${((100 * issues) / valid).toFixed(1)}%` : '暂无数据'
 })
+function riskTrendLabel(item: DashboardOverview['watchlist'][number]): string {
+  if (item.is_new && item.recent_count > 0) return '近期新增'
+  if (item.previous_count === 0) return item.recent_count > 0 ? '上期无反馈' : '近期无反馈'
+  if (item.recent_count === 0) return '近期已降至0条'
+  if (item.growth_rate === null || !Number.isFinite(item.growth_rate)) return '环比暂无数据'
+  if (item.growth_rate > 0) return `环比 +${item.growth_rate}%`
+  if (item.growth_rate < 0) return `环比 ${item.growth_rate}%`
+  return '环比持平'
+}
 const topIssue = computed(() => categories.value[0]?.name || '暂无数据')
 const metricCards = computed(() => [
   {
@@ -548,7 +557,7 @@ onBeforeUnmount(() => {
         <div class="panel-heading">
           <div>
             <h2>风险预警与重点观察</h2>
-            <p>最小样本与环比增长同时满足才产生预警</p>
+            <p>按严重度、高频、持续出现或近期增长识别重点问题</p>
           </div>
         </div>
         <div v-if="overview?.watchlist.length" class="watch-list">
@@ -561,7 +570,7 @@ onBeforeUnmount(() => {
             <span class="severity">{{ item.severity }}</span
             ><strong>{{ item.name }}</strong
             ><small>{{ item.product_name }}</small
-            ><em>{{ item.is_new ? '新出现' : `${item.growth_rate}%` }}</em>
+            ><em :title="`近7天 ${item.recent_count} 条，上7天 ${item.previous_count} 条`">{{ riskTrendLabel(item) }}</em>
           </button>
         </div>
         <el-empty v-else description="当前周期没有达到关注规则的问题，可点击上方指标查看规则" />
