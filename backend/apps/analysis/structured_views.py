@@ -138,7 +138,8 @@ class StructuredBatchViewSet(ViewSet):
                 )
                 item.reviewer = request.user
                 item.reviewed_at = timezone.now()
-            item.handler = request.user
+            if new_status != "APPROVED":
+                item.handler = request.user
             item.save()
         return Response({"content_id": content_id, "status": item.status, "reason": item.reason})
 
