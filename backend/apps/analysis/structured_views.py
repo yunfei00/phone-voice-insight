@@ -113,6 +113,29 @@ class StructuredBatchViewSet(ViewSet):
             if new_status in ("SUBMITTED", "APPROVED"):
                 item.annotation = annotation
             if new_status == "APPROVED":
+                # Preserve failed-run history; publish a distinct MANUAL run as the current analysis.
+                content = ReviewRecord.objects.select_related("product", "source").get(pk=content_id)
+                payload = validation.payload
+                AnalysisRun.objects.filter(content_id=content_id, is_current=True).update(is_current=False)
+                manual_run = AnalysisRun.objects.create(
+                    content=content, status=StructuredRunStatus.SUCCEEDED,
+                    provider="manual", model="human-reviewed",
+                    prompt_version="manual_review_v1",
+                    input_hash="manual:" + str(item.pk),
+                    configuration_hash="manual:" + str(item.pk) + ":" + str(timezone.now().timestamp()),
+                    is_current=True, completed_at=timezone.now(),
+                )
+                analysis = StructuredAnalysis.objects.create(
+                    run=manual_run, content=content,
+                    overall_sentiment=payload.overall_sentiment,
+                    language=payload.language, content_type=payload.content_type,
+                    relevance=payload.relevance, summary=payload.summary,
+                    model_mentions=payload.model_mentions, schema_valid=True,
+                    review_required=False,
+                )
+                OpinionAspect.objects.bulk_create(
+                    [OpinionAspect(analysis=analysis, **aspect.model_dump()) for aspect in payload.aspects]
+                )
                 item.reviewer = request.user
                 item.reviewed_at = timezone.now()
             item.handler = request.user
