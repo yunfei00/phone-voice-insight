@@ -46,6 +46,19 @@ const form = reactive({
   token_limit: 50000,
   cost_budget: 1,
 })
+function formatTaskTime(value: string | null | undefined): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const get = (key: string) => parts.find((part) => part.type === key)?.value || ''
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
+}
 async function load() {
   loading.value = true
   error.value = ''
@@ -213,7 +226,11 @@ onUnmounted(() => {
       v-loading="loading"
       :data="batches.filter((batch) => !batch.dry_run)"
       empty-text="暂无 V1 任务"
-      ><el-table-column prop="id" label="任务" width="80" /><el-table-column
+      ><el-table-column prop="id" label="任务" width="80" />
+      <el-table-column label="创建时间" width="175"><template #default="{ row }">{{ formatTaskTime(row.created_at) }}</template></el-table-column>
+      <el-table-column label="开始时间" width="175"><template #default="{ row }">{{ formatTaskTime(row.started_at) }}</template></el-table-column>
+      <el-table-column label="结束时间" width="175"><template #default="{ row }">{{ formatTaskTime(row.finished_at) }}</template></el-table-column>
+      <el-table-column
         prop="product_name"
         label="机型"
       /><el-table-column prop="status" label="状态" /><el-table-column label="进度"
