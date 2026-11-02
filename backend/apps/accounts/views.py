@@ -268,3 +268,36 @@ class DashboardPreferenceView(APIView):
             user=request.user, page_key="dashboard", defaults={"settings": data}
         )
         return Response(preference.settings)
+
+
+class PagePreferenceView(APIView):
+    """Per-user, per-page filter persistence (no chat text or secrets)."""
+    permission_classes = (IsAuthenticated,)
+    allowed = {
+        "ai-assistant": {"product_id", "source_id", "start_date", "end_date"},
+        "issues": {"product_id", "source_id", "start_date", "end_date", "search", "category", "severity", "ordering"},
+        "insight-reports": {"product_id", "report_type"},
+    }
+
+    def get(self, request: Request, page_key: str) -> Response:
+        if page_key not in self.allowed:
+            return Response({"detail": "Unknown page"}, status=404)
+        row = UserPagePreference.objects.filter(user=request.user, page_key=page_key).first()
+        return Response(row.settings if row else {})
+
+    def put(self, request: Request, page_key: str) -> Response:
+        if page_key not in self.allowed:
+            return Response({"detail": "Unknown page"}, status=404)
+        if not isinstance(request.data, dict) or set(request.data) - self.allowed[page_key]:
+            return Response({"detail": "Invalid preference fields"}, status=400)
+        data = dict(request.data)
+        for key in ("product_id", "source_id"):
+            if key in data and data[key] is not None and (type(data[key]) is not int or data[key] <= 0):
+                return Response({key: ["Invalid identifier"]}, status=400)
+        for key, value in data.items():
+            if key not in ("product_id", "source_id") and (not isinstance(value, str) or len(value) > 200):
+                return Response({key: ["Invalid value"]}, status=400)
+        row, _ = UserPagePreference.objects.update_or_create(
+            user=request.user, page_key=page_key, defaults={"settings": data}
+        )
+        return Response(row.settings)
