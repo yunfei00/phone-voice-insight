@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """手机用户声音驾驶舱只读 API。"""
 
 from __future__ import annotations
