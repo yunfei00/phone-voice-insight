@@ -36,3 +36,27 @@ def provider_settings_from_model(configuration: UserAIConfiguration) -> AIProvid
 
 def get_user_ai_provider(user: User) -> AIProvider:
     return get_ai_provider(provider_settings_from_model(get_user_ai_configuration(user)))
+
+
+def get_structured_ai_provider(user: User) -> AIProvider:
+    """Use the administrator-selected analysis model; fall back to the user's configuration."""
+    from apps.assistant.models import AssistantModelSelection
+
+    selected = AssistantModelSelection.objects.select_related("profile").filter(slot="structured").first()
+    if selected is None or selected.profile is None:
+        return get_user_ai_provider(user)
+    profile = selected.profile
+    if not profile.is_active:
+        raise AIProviderError("AI_NOT_CONFIGURED", "Selected structured analysis model is disabled")
+    return get_ai_provider(
+        AIProviderSettings(
+            provider=profile.provider,
+            base_url=profile.base_url,
+            api_key=profile.get_api_key(),
+            model=profile.model,
+            thinking_mode=profile.thinking_mode,
+            timeout_seconds=profile.timeout_seconds,
+            temperature=float(profile.temperature),
+            max_output_tokens=profile.max_output_tokens,
+        )
+    )

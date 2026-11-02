@@ -55,6 +55,7 @@ class AssistantOrchestrator:
         tool_name = ""
         tool_arguments: dict[str, Any] = {}
         try:
+            yield {"type": "status", "stage": "understanding", "label": "正在理解问题"}
             if self._cancelled():
                 self._finish_cancelled()
                 yield {"type": "cancelled", "message_id": str(self.response_message.id)}
@@ -78,6 +79,12 @@ class AssistantOrchestrator:
             else:
                 tool_name, tool_arguments = self._fallback_route(question, filters)
                 route_mode = "controlled_fallback"
+            yield {
+                "type": "status",
+                "stage": "retrieving" if tool_name == "query_posts" else "querying",
+                "label": "正在检索帖子" if tool_name == "query_posts" else "正在查询业务数据",
+                "tool": tool_name,
+            }
             if self._cancelled():
                 self._finish_cancelled()
                 yield {"type": "cancelled", "message_id": str(self.response_message.id)}
@@ -90,12 +97,22 @@ class AssistantOrchestrator:
                     "arguments": tool_arguments,
                     "mode": route_mode,
                     "result_size": _result_size(result),
+                    "elapsed_ms": (result.get("meta") or {}).get("tool_elapsed_ms"),
+                    "status": result.get("status", "ok"),
                 }
             ]
             self.response_message.evidence = evidence
             self.response_message.tool_trace = trace
-            self.response_message.save(update_fields=("evidence", "tool_trace", "updated_at"))
-            yield {"type": "tool", "tool": tool_name, "mode": route_mode, "evidence": evidence}
+            self.response_message.tool_result = result
+            self.response_message.save(update_fields=("evidence", "tool_trace", "tool_result", "updated_at"))
+            yield {
+                "type": "tool",
+                "tool": tool_name,
+                "mode": route_mode,
+                "evidence": evidence,
+                "result": result,
+            }
+            yield {"type": "status", "stage": "generating", "label": "正在生成结论"}
 
             summary_messages = [
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -182,14 +199,30 @@ class AssistantOrchestrator:
         if any(marker in question for marker in ("证据", "原话", "原帖")) and "issue_id" in filters:
             return "get_issue_evidence", arguments
         if any(marker in question for marker in ("趋势", "变化", "新增", "最近七天", "近7天")):
-            return "get_feedback_trends", arguments
-        if any(marker in question for marker in ("搜索", "查找", "提到", "反馈原文")):
-            arguments["keyword"] = _keyword(question)
-            return "search_feedback", arguments
+            return "get_issue_trends", arguments
+        if any(
+            marker in question
+            for marker in (
+                "原始",
+                "原帖",
+                "原文",
+                "用户原话",
+                "真实反馈",
+                "评论",
+                "搜索",
+                "查找",
+                "提到",
+                "反馈原文",
+                "帖子",
+                "评价",
+            )
+        ):
+            arguments["query"] = _keyword(question)
+            return "query_posts", arguments
         if any(marker in question for marker in ("问题", "关注", "不满", "投诉", "严重")):
             return "get_issue_statistics", arguments
         if "trend" in lowered:
-            return "get_feedback_trends", arguments
+            return "get_issue_trends", arguments
         return "get_product_overview", arguments
 
     def _cancelled(self) -> bool:
@@ -262,23 +295,81 @@ def _mentioned_product_ids(question: str) -> list[int]:
 
 
 def _keyword(question: str) -> str:
-    stripped = question.strip("？?。！! ")
-    for prefix in ("搜索", "查找", "帮我找", "有哪些反馈提到"):
-        if stripped.startswith(prefix):
-            stripped = stripped[len(prefix) :].strip("：:，, ")
-    return stripped[:120] or "用户反馈"
+    """Strip conversational instructions; an empty query lists recent raw posts."""
+    import re
+
+    quoted = re.search(r"[“\u300c\"](.{2,80}?)[”\u300d\"]", question)
+    if quoted:
+        return quoted.group(1).strip()
+    subject = question.strip("？?。！! ")
+    for phrase in (
+        "荣耀 Power 2",
+        "荣耀Power 2",
+        "荣耀 Power",
+        "荣耀Power",
+        "原始帖子",
+        "原始数据",
+        "真实用户反馈",
+        "用户反馈",
+        "用户原话",
+        "原帖",
+        "帖子",
+        "评论",
+        "评价",
+        "原文",
+        "帮我",
+        "请",
+        "搜索",
+        "查找",
+        "检索",
+        "找出",
+        "找到",
+        "给我",
+        "看看",
+        "查看",
+        "列出",
+        "展示",
+        "提供",
+        "关于",
+        "有关",
+        "涉及",
+        "提到",
+        "最近一个月",
+        "最近30天",
+        "最近七天",
+        "最近7天",
+        "五条",
+        "5条",
+        "十条",
+        "10条",
+        "几条",
+        "所有",
+        "的",
+        "一下",
+        "有哪些",
+        "是什么",
+        "具体内容",
+        "附原始链接",
+        "附链接",
+    ):
+        subject = subject.replace(phrase, " ")
+    return re.sub(r"\s+", " ", subject).strip(" ：:，,。？? ")[:120]  # noqa: B005
 
 
 def _extract_evidence(result: dict[str, Any]) -> list[dict[str, Any]]:
-    rows = result.get("feedback") or (result.get("issue") or {}).get("evidence") or []
+    rows = result.get("posts") or result.get("feedback") or (result.get("issue") or {}).get("evidence") or []
     evidence = []
     for row in rows[:20]:
         evidence.append(
             {
-                "review_id": row.get("id") or row.get("analysis__content_id"),
+                "review_id": row.get("review_id") or row.get("id") or row.get("analysis__content_id"),
                 "title": row.get("title") or row.get("analysis__content__title") or "用户反馈",
                 "content": (
-                    row.get("content") or row.get("analysis__content__content") or row.get("evidence_text") or ""
+                    row.get("summary")
+                    or row.get("content")
+                    or row.get("analysis__content__content")
+                    or row.get("evidence_text")
+                    or ""
                 )[:800],
                 "source_url": row.get("source_url") or row.get("analysis__content__source_url") or "",
                 "published_at": row.get("published_at") or row.get("analysis__content__published_at"),
@@ -288,7 +379,7 @@ def _extract_evidence(result: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _result_size(result: dict[str, Any]) -> int:
-    for key in ("issues", "products", "feedback", "trends"):
+    for key in ("issues", "products", "posts", "feedback", "trends"):
         if isinstance(result.get(key), list):
             return len(result[key])
     return int((result.get("meta") or {}).get("sample_size") or 0)

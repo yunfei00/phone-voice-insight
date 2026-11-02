@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   cancelStructuredBatch,
@@ -8,17 +8,39 @@ import {
   getSources,
   getStructuredBatches,
   getStructuredBatchFailures,
+  getManualDispositions,
+  setManualDisposition,
+  cancelManualDisposition,
   pauseStructuredBatch,
   resumeStructuredBatch,
   retryStructuredBatch,
 } from '@/api'
 import type { DataSource, Product, StructuredBatch } from '@/types/api'
 import type { StructuredFailure } from '@/api'
+function originalPostUrl(value: string | undefined): string {
+  if (!value) return ''
+  try {
+    const url = new URL(value)
+    return ['https:', 'http:'].includes(url.protocol) ? url.href : ''
+  } catch {
+    return ''
+  }
+}
 const failureDialog = ref(false)
 const failureLoading = ref(false)
 const failureRows = ref<StructuredFailure[]>([])
+const dispositions = ref<
+  Record<string, { status: string; reason: string; annotation?: Record<string, unknown> }>
+>({})
 const failureBatchId = ref<number | null>(null)
 const failureError = ref('')
+const statusLabels: Record<string, string> = {
+  IN_REVIEW: '待人工标注',
+  DEFERRED: '已暂缓',
+  EXCLUDED: '已排除',
+  SUBMITTED: '待审核',
+  APPROVED: '审核通过',
+}
 const loading = ref(false)
 const submitting = ref(false)
 const advancedVisible = ref(false)
@@ -46,6 +68,23 @@ const form = reactive({
   token_limit: 50000,
   cost_budget: 1,
 })
+function formatTaskTime(value: string | null | undefined): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const get = (key: string) => parts.find((part) => part.type === key)?.value || ''
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
+}
 async function load() {
   loading.value = true
   error.value = ''
@@ -134,6 +173,7 @@ async function showFailures(id: number) {
   try {
     const result = await getStructuredBatchFailures(id)
     failureRows.value = result.results
+    dispositions.value = await getManualDispositions(result.results.map((row) => row.content))
     if (result.next) failureError.value = '失败记录超过 100 条，当前仅展示前 100 条。'
   } catch {
     failureError.value = '失败明细加载失败，请稍后重试。'
@@ -141,10 +181,98 @@ async function showFailures(id: number) {
     failureLoading.value = false
   }
 }
+async function handleFailedReview(
+  contentId: number,
+  status: 'IN_REVIEW' | 'DEFERRED' | 'EXCLUDED',
+) {
+  try {
+    const reason =
+      status === 'IN_REVIEW'
+        ? '连续失败，转人工诊断'
+        : (
+            await ElMessageBox.prompt('请输入处理原因（必填）', '人工处理', {
+              confirmButtonText: '确认',
+              cancelButtonText: '取消',
+              inputValidator: (value) => Boolean(value.trim()) || '必须填写处理原因',
+            })
+          ).value
+    await setManualDisposition({ content_id: contentId, status, reason })
+    dispositions.value[contentId] = { status, reason }
+    ElMessage.success('已转入人工处理，请点击页面顶部「进入人工处理待办」继续')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error('人工处理保存失败')
+  }
+}
+async function withdrawFailedManual(contentId: number) {
+  try {
+    await ElMessageBox.confirm(
+      '撤销人工处理后，原 AI 失败记录保持不变，确认撤销吗？',
+      '撤销人工处理',
+      {
+        type: 'warning',
+        confirmButtonText: '确认撤销',
+        cancelButtonText: '取消',
+      },
+    )
+    await cancelManualDisposition(contentId)
+    delete dispositions.value[contentId]
+    ElMessage.success('人工处理已撤销，仍保留原失败状态')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error('撤销人工处理失败')
+  }
+}
+async function submitManualAnnotation(contentId: number) {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '请填写符合 TAXONOMY JSON Schema 的完整结构化结果（必须包含与原帖匹配的证据区间）',
+      '提交人工标注',
+      { inputType: 'textarea', confirmButtonText: '提交审核', cancelButtonText: '取消' },
+    )
+    const annotation = JSON.parse(value) as Record<string, unknown>
+    await setManualDisposition({
+      content_id: contentId,
+      status: 'SUBMITTED',
+      reason: '人工结构化标注',
+      annotation,
+    })
+    dispositions.value[contentId] = { status: 'SUBMITTED', reason: '人工结构化标注' }
+    ElMessage.success('标注已通过结构化校验，等待管理员审核')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error('提交失败：请检查 JSON 格式、字段与证据区间')
+  }
+}
+async function approveManualAnnotation(contentId: number) {
+  try {
+    const record = dispositions.value[contentId] as {
+      status: string
+      reason: string
+      annotation?: Record<string, unknown>
+    }
+    if (!record?.annotation) {
+      ElMessage.warning('未获取到标注数据，请重新打开失败详情')
+      return
+    }
+    await ElMessageBox.confirm('确认标注已核对原文证据？', '审核人工标注', { type: 'warning' })
+    await setManualDisposition({
+      content_id: contentId,
+      status: 'APPROVED',
+      reason: '管理员审核通过',
+      annotation: record.annotation,
+    })
+    dispositions.value[contentId] = { ...record, status: 'APPROVED' }
+    ElMessage.success('审核状态已保存')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error('审核失败：请确认管理员权限')
+  }
+}
 async function retry(id: number) {
   try {
     await retryStructuredBatch(id)
-    ElMessage.success('失败项目已创建重试任务')
+    ElMessage.success('已在原任务中重新执行失败帖子，任务 ID 不变')
     await load()
   } catch {
     ElMessage.warning('该任务没有可重试的失败项目')
@@ -165,6 +293,7 @@ onUnmounted(() => {
     <header class="page-header">
       <div>
         <h1 class="page-title">AI 任务中心</h1>
+        <router-link to="/manual-analysis">进入人工处理待办 →</router-link>
         <p>创建分析任务、查看处理进度和失败明细。</p>
       </div>
     </header>
@@ -213,20 +342,39 @@ onUnmounted(() => {
       v-loading="loading"
       :data="batches.filter((batch) => !batch.dry_run)"
       empty-text="暂无 V1 任务"
-      ><el-table-column prop="id" label="任务" width="80" /><el-table-column
-        prop="product_name"
-        label="机型"
-      /><el-table-column prop="status" label="状态" /><el-table-column label="进度"
+      ><el-table-column prop="id" label="任务" width="80" />
+      <el-table-column label="创建时间" width="175"
+        ><template #default="{ row }">{{
+          formatTaskTime(row.created_at)
+        }}</template></el-table-column
+      >
+      <el-table-column label="开始时间" width="175"
+        ><template #default="{ row }">{{
+          formatTaskTime(row.started_at)
+        }}</template></el-table-column
+      >
+      <el-table-column label="结束时间" width="175"
+        ><template #default="{ row }">{{
+          formatTaskTime(row.finished_at)
+        }}</template></el-table-column
+      >
+      <el-table-column prop="product_name" label="机型" /><el-table-column
+        prop="status"
+        label="状态"
+      /><el-table-column label="进度"
         ><template #default="{ row }"
           >{{ row.success_count + row.failed_count + row.skipped_count }}/{{
             row.requested_count
           }}</template
         ></el-table-column
-      ><el-table-column prop="success_count" label="成功" width="80" /><el-table-column
-        prop="failed_count"
-        label="失败"
+      ><el-table-column prop="retry_count" label="重试轮次" width="95" /><el-table-column
+        prop="success_count"
+        label="成功"
         width="80"
-      /><el-table-column label="实际成本" width="120">
+      /><el-table-column prop="failed_count" label="失败" width="80" /><el-table-column
+        label="实际成本"
+        width="120"
+      >
         <template #default="{ row }">{{
           Number(row.actual_cost) > 0 ? '¥' + Number(row.actual_cost).toFixed(4) : '—'
         }}</template> </el-table-column
@@ -271,13 +419,38 @@ onUnmounted(() => {
         max-height="450"
         empty-text="暂无失败记录"
       >
-        <el-table-column prop="content" label="帖子 ID" width="100" />
+        <el-table-column label="帖子 ID" width="130">
+          <template #default="{ row }">
+            <el-link
+              v-if="originalPostUrl(row.source_url)"
+              :href="originalPostUrl(row.source_url)"
+              target="_blank"
+              rel="noopener noreferrer"
+              type="primary"
+              >{{ row.external_id || row.content }}</el-link
+            >
+            <span v-else>{{ row.external_id || row.content }}</span>
+          </template>
+        </el-table-column>
         <el-table-column
           prop="content_excerpt"
           label="帖子内容"
           min-width="200"
           show-overflow-tooltip
         />
+        <el-table-column label="原帖" width="110">
+          <template #default="{ row }">
+            <el-link
+              v-if="originalPostUrl(row.source_url)"
+              :href="originalPostUrl(row.source_url)"
+              target="_blank"
+              rel="noopener noreferrer"
+              type="primary"
+              >查看原帖</el-link
+            >
+            <span v-else>暂无链接</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="error_code" label="错误代码" width="150" />
         <el-table-column
           prop="error_message"
@@ -286,6 +459,45 @@ onUnmounted(() => {
           show-overflow-tooltip
         />
         <el-table-column prop="attempt_count" label="尝试次数" width="90" />
+        <el-table-column label="人工处理" min-width="280">
+          <template #default="{ row }">
+            <span v-if="dispositions[row.content]"
+              >{{
+                statusLabels[dispositions[row.content].status] || dispositions[row.content].status
+              }}
+            </span>
+            <el-button
+              v-if="dispositions[row.content] && dispositions[row.content].status !== 'APPROVED'"
+              link
+              type="danger"
+              @click="withdrawFailedManual(row.content)"
+              >撤销人工</el-button
+            >
+            <el-button
+              v-if="dispositions[row.content]?.status === 'IN_REVIEW'"
+              link
+              type="primary"
+              @click="submitManualAnnotation(row.content)"
+              >填写结构化标注</el-button
+            >
+            <el-button
+              v-if="dispositions[row.content]?.status === 'SUBMITTED'"
+              link
+              type="success"
+              @click="approveManualAnnotation(row.content)"
+              >审核通过</el-button
+            >
+            <template v-if="!dispositions[row.content]">
+              <el-button link type="primary" @click="handleFailedReview(row.content, 'IN_REVIEW')"
+                >转人工</el-button
+              >
+              <el-button link @click="handleFailedReview(row.content, 'DEFERRED')">暂缓</el-button>
+              <el-button link type="warning" @click="handleFailedReview(row.content, 'EXCLUDED')"
+                >排除</el-button
+              >
+            </template>
+          </template>
+        </el-table-column>
       </el-table>
     </el-dialog>
   </section>

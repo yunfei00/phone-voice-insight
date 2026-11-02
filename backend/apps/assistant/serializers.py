@@ -102,6 +102,7 @@ class AssistantMessageSerializer(serializers.ModelSerializer):
             "model_name_snapshot",
             "provider_snapshot",
             "evidence",
+            "tool_result",
             "prompt_tokens",
             "completion_tokens",
             "total_tokens",

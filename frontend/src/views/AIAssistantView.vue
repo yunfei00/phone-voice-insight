@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ChatDotRound, Clock } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import {
@@ -9,6 +9,8 @@ import {
   createAssistantConversation,
   deleteAssistantConversation,
   getAssistantConversations,
+  getPagePreference,
+  savePagePreference,
   getAssistantMessages,
   getProducts,
   getSources,
@@ -19,6 +21,7 @@ import AssistantComposer from '@/components/assistant/AssistantComposer.vue'
 import AssistantEvidence from '@/components/assistant/AssistantEvidence.vue'
 import AssistantMarkdown from '@/components/assistant/AssistantMarkdown.vue'
 import AssistantSidebar from '@/components/assistant/AssistantSidebar.vue'
+import AssistantToolResult from '@/components/assistant/AssistantToolResult.vue'
 import type { AssistantConversation, AssistantMessage, DataSource, Product } from '@/types/api'
 
 const route = useRoute()
@@ -34,6 +37,7 @@ const draft = ref('')
 const loading = ref(false)
 const messagesLoading = ref(false)
 const generating = ref(false)
+const currentStage = ref('')
 const chatScroll = ref<HTMLElement>()
 let controller: AbortController | undefined
 
@@ -63,11 +67,26 @@ async function loadBase() {
     conversations.value = conversationData
     products.value = productData.results
     sources.value = sourceData.results
-    productId.value = queryString('product_id') ? Number(queryString('product_id')) : undefined
-    sourceId.value = queryString('source_id') ? Number(queryString('source_id')) : undefined
-    const start = queryString('start_date')
-    const end = queryString('end_date')
-    if (start && end) dateRange.value = [start, end]
+    let saved: Record<string, unknown> = {}
+    try {
+      saved = await getPagePreference('ai-assistant')
+    } catch {
+      /* optional */
+    }
+    const chosenProduct = queryString('product_id') ?? saved.product_id
+    const chosenSource = queryString('source_id') ?? saved.source_id
+    productId.value =
+      chosenProduct && products.value.some((p) => p.id === Number(chosenProduct))
+        ? Number(chosenProduct)
+        : undefined
+    sourceId.value =
+      chosenSource && sources.value.some((p) => p.id === Number(chosenSource))
+        ? Number(chosenSource)
+        : undefined
+    const start = queryString('start_date') ?? saved.start_date
+    const end = queryString('end_date') ?? saved.end_date
+    if (typeof start === 'string' && typeof end === 'string' && start && end)
+      dateRange.value = [start, end]
     if (queryString('question')) draft.value = queryString('question') || ''
     if (conversationData.length) await selectConversation(conversationData[0].id)
     else await newConversation()
@@ -149,6 +168,7 @@ function optimisticMessage(
     model_name_snapshot: activeConversation.value?.model_display || '',
     provider_snapshot: '',
     evidence: [],
+    tool_result: {},
     prompt_tokens: null,
     completion_tokens: null,
     total_tokens: null,
@@ -182,8 +202,12 @@ async function send() {
         end_date: dateRange.value?.[1],
       },
       (event) => {
+        if (event.type === 'status') currentStage.value = event.label || ''
         if (event.type === 'delta') answer.content += event.content || ''
-        if (event.type === 'tool' && event.evidence) answer.evidence = event.evidence
+        if (event.type === 'tool') {
+          if (event.evidence) answer.evidence = event.evidence
+          if (event.result) answer.tool_result = event.result
+        }
         if (event.type === 'error') {
           answer.status = 'FAILED'
           answer.error_code = event.code || 'ASSISTANT_ERROR'
@@ -191,7 +215,10 @@ async function send() {
           ElMessage.error(answer.error_message)
         }
         if (event.type === 'cancelled') answer.status = 'CANCELLED'
-        if (event.type === 'done') answer.status = 'COMPLETED'
+        if (event.type === 'done') {
+          answer.status = 'COMPLETED'
+          currentStage.value = ''
+        }
         void scrollToBottom()
       },
       controller.signal,
@@ -204,6 +231,7 @@ async function send() {
     }
   } finally {
     generating.value = false
+    currentStage.value = ''
     controller = undefined
     try {
       if (answer.status !== 'FAILED') {
@@ -236,6 +264,14 @@ function useQuestion(question: string) {
   draft.value = question
 }
 
+watch([productId, sourceId, dateRange], () => {
+  void savePagePreference('ai-assistant', {
+    product_id: productId.value ?? null,
+    source_id: sourceId.value ?? null,
+    start_date: dateRange.value?.[0] ?? '',
+    end_date: dateRange.value?.[1] ?? '',
+  }).catch(() => undefined)
+})
 onMounted(loadBase)
 </script>
 
@@ -302,6 +338,9 @@ onMounted(loadBase)
             <AssistantMarkdown
               :content="item.content || (item.status === 'RUNNING' ? '正在查询真实数据…' : '')"
             />
+            <div v-if="item.status === 'RUNNING' && currentStage" class="execution-stage">
+              <span></span>{{ currentStage }}
+            </div>
             <el-alert
               v-if="item.status === 'FAILED'"
               :title="item.error_message || '回答生成失败'"
@@ -309,6 +348,7 @@ onMounted(loadBase)
               :closable="false"
             />
             <el-tag v-if="item.status === 'CANCELLED'" type="info">已停止生成</el-tag>
+            <AssistantToolResult :result="item.tool_result || {}" />
             <AssistantEvidence :items="item.evidence" />
             <small v-if="item.role === 'ASSISTANT' && item.model_name_snapshot"
               >{{ item.model_name_snapshot
@@ -396,6 +436,32 @@ onMounted(loadBase)
   gap: 4px;
   color: #96adc6;
   font-size: 12px;
+}
+.execution-stage {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 0;
+  color: #42d6c6;
+  font-size: 12px;
+}
+.execution-stage span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #42d6c6;
+  box-shadow: 0 0 10px #42d6c6;
+  animation: stage-pulse 1.2s ease-in-out infinite;
+}
+@keyframes stage-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .execution-stage span {
+    animation: none;
+  }
 }
 .chat-scroll {
   min-height: 0;

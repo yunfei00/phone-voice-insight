@@ -4,14 +4,30 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
 from ai.providers.base import AIConnectivityResponse, AIProvider, AIProviderError, AIProviderResponse
 from ai.schemas.review_analysis import ReviewAnalysisInput
+
+
+def _is_local_endpoint(base_url: str) -> bool:
+    """Treat loopback, RFC1918 and other non-public IP endpoints as local inference."""
+    host = urlsplit(base_url).hostname
+    if not host:
+        return False
+    if host.lower() in {"localhost", "host.docker.internal"}:
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+        return not address.is_global
+    except ValueError:
+        return False
 
 
 class OpenAICompatibleProvider(AIProvider):
@@ -57,7 +73,19 @@ class OpenAICompatibleProvider(AIProvider):
             temperature=self.temperature,
         )
         try:
-            content = str(payload["choices"][0]["message"]["content"])
+            message = payload["choices"][0]["message"]
+            raw_content = message.get("content")
+            content = raw_content if isinstance(raw_content, str) else ""
+            if not content.strip():
+                finish_reason = str(payload["choices"][0].get("finish_reason") or "unknown")
+                reasoning = message.get("reasoning_content")
+                detail = "reasoning_only" if reasoning else "empty_content"
+                raise AIProviderError(
+                    "AI_EMPTY_RESPONSE",
+                    f"AI returned no JSON content ({detail}, finish_reason={finish_reason})",
+                    retriable=True,
+                    request_id=request_id,
+                )
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise AIProviderError(
                 "AI_RESPONSE_FORMAT_ERROR",
@@ -130,11 +158,16 @@ class OpenAICompatibleProvider(AIProvider):
             }
             if self.thinking_mode:
                 request_payload["thinking"] = {"type": self.thinking_mode}
+            request_bytes = len(json.dumps(request_payload, ensure_ascii=False).encode("utf-8"))
             response = httpx.post(
                 f"{self.base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
                 json=request_payload,
-                timeout=self.timeout_seconds,
+                timeout=(
+                    httpx.Timeout(connect=30.0, read=None, write=60.0, pool=30.0)
+                    if _is_local_endpoint(self.base_url)
+                    else self.timeout_seconds
+                ),
                 follow_redirects=False,
                 trust_env=False,
             )
@@ -165,6 +198,16 @@ class OpenAICompatibleProvider(AIProvider):
                 "AI_AUTHENTICATION_FAILED",
                 "AI provider authentication failed",
                 http_status=response.status_code,
+                request_id=request_id,
+            )
+        if response.status_code == 413:
+            raise AIProviderError(
+                "AI_REQUEST_TOO_LARGE",
+                f"HTTP 413: request_bytes={request_bytes}, "
+                f"prompt_chars={sum(len(m.get('content', '')) for m in messages)}, "
+                f"server={response.headers.get('server', 'unknown')[:60]}, "
+                f"content_type={response.headers.get('content-type', 'unknown')[:60]}",
+                http_status=413,
                 request_id=request_id,
             )
         if response.status_code >= 400:

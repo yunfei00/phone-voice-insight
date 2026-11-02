@@ -122,13 +122,21 @@ const expectedNavigationLabels = [
   '产品对比中心',
   '用户问题洞察',
   'AI洞察报告',
+]
+const analystNavigationLabels = [
+  ...expectedNavigationLabels,
   '手机产品',
   '帖子视图',
   '原始数据',
   '数据质量',
   'AI结构化分析',
 ]
-const advancedNavigationLabels = [...expectedNavigationLabels, 'AI任务中心', '运行监控']
+const advancedNavigationLabels = [
+  ...analystNavigationLabels,
+  'AI任务中心',
+  '人工处理待办',
+  '运行监控',
+]
 
 async function mountApp(path = '/dashboard', role: 'ADMIN' | 'ANALYST' | 'VIEWER' = 'VIEWER') {
   const container = document.createElement('div')
@@ -255,7 +263,7 @@ describe('App', () => {
   )
 
   it('原始数据页面使用紧凑字段完整率并隐藏用户填写地区', async () => {
-    const { app, container } = await mountApp('/reviews')
+    const { app, container } = await mountApp('/reviews', 'ANALYST')
     await new Promise((resolve) => setTimeout(resolve, 0))
     await nextTick()
 

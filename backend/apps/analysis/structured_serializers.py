@@ -42,6 +42,9 @@ class StructuredAnalysisSerializer(serializers.ModelSerializer):
 class AnalysisRunSerializer(serializers.ModelSerializer):
     analysis_id = serializers.IntegerField(source="structured_analysis.id", read_only=True, default=None)
     content_excerpt = serializers.SerializerMethodField()
+    source_url = serializers.CharField(source="content.source_url", read_only=True)
+    external_id = serializers.CharField(source="content.external_id", read_only=True)
+    content_title = serializers.CharField(source="content.title", read_only=True)
 
     def get_content_excerpt(self, obj: AnalysisRun) -> str:
         return obj.content.content[:120]

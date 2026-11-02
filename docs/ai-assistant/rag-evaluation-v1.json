@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "cases": [
+    {"id": "signal", "query": "地下车库信号", "title": "地库网络恢复测试", "content": "地下车库信号恢复需要十几秒"},
+    {"id": "navigation", "query": "导航漂移", "title": "导航定位体验", "content": "高架桥下导航偶尔漂移"},
+    {"id": "battery", "query": "续航下降", "title": "续航体验", "content": "系统更新后夜间待机续航下降"},
+    {"id": "charge", "query": "充电变慢", "title": "充电速度", "content": "低温环境下充电变慢"},
+    {"id": "heat", "query": "游戏发热", "title": "性能和温度", "content": "长时间游戏后机身发热明显"},
+    {"id": "screen", "query": "屏幕偏色", "title": "屏幕观感", "content": "低亮度时屏幕轻微偏色"},
+    {"id": "camera", "query": "夜景噪点", "title": "相机夜景", "content": "夜景照片暗部噪点较多"},
+    {"id": "audio", "query": "通话杂音", "title": "通话质量", "content": "免提通话偶尔出现杂音"},
+    {"id": "system", "query": "应用闪退", "title": "系统稳定性", "content": "切换应用时偶尔闪退"},
+    {"id": "touch", "query": "触控断触", "title": "触控体验", "content": "边缘区域偶尔出现触控断触"}
+  ]
+}

@@ -11,7 +11,13 @@ from celery import shared_task
 from django.utils import timezone
 
 from apps.accounts.ai_service import get_user_ai_provider
-from apps.analysis.models import AnalysisBatch, AnalysisBatchStatus, StructuredRunStatus
+from apps.analysis.models import (
+    AnalysisBatch,
+    AnalysisBatchStatus,
+    AnalysisRun,
+    StructuredManualDisposition,
+    StructuredRunStatus,
+)
 from apps.analysis.services.analysis_runner import error_counts, run_analysis_batch
 from apps.analysis.services.structured_engine import analyze_content
 from apps.reviews.models import AnalysisCorpusItem
@@ -48,7 +54,7 @@ def run_analysis_batch_task(
 
 @shared_task(name="run_structured_analysis_batch_task", autoretry_for=(), max_retries=0)
 def run_structured_analysis_batch_task(
-    batch_id: int, content_ids: list[int], *, max_retries: int = 1
+    batch_id: int, content_ids: list[int], *, max_retries: int = 1, retry_failed: bool = False
 ) -> dict[str, Any]:
     batch = AnalysisBatch.objects.select_related("created_by").get(pk=batch_id)
     if batch.created_by is None:
@@ -56,11 +62,26 @@ def run_structured_analysis_batch_task(
         batch.error_message = "BATCH_OWNER_MISSING"
         batch.save()
         return {"batch_id": batch_id, "status": batch.status}
+    if retry_failed:
+        previous = (
+            AnalysisRun.objects.filter(
+                batch_id=batch_id,
+                content_id__in=content_ids,
+                is_current=True,
+                status=StructuredRunStatus.FAILED,
+            )
+            .values("content_id")
+            .distinct()
+            .count()
+        )
+        batch.failed_count = max(0, batch.failed_count - previous)
     batch.status = AnalysisBatchStatus.RUNNING
     batch.started_at = timezone.now()
     batch.save()
     try:
-        provider = get_user_ai_provider(batch.created_by)
+        from apps.accounts.ai_service import get_structured_ai_provider
+
+        provider = get_structured_ai_provider(batch.created_by)
     except Exception as exc:
         batch.status = AnalysisBatchStatus.FAILED
         batch.error_message = f"{type(exc).__name__}: {exc}"[:1000]
@@ -78,6 +99,10 @@ def run_structured_analysis_batch_task(
         if batch.cost_budget is not None and batch.actual_cost >= batch.cost_budget:
             batch.status = AnalysisBatchStatus.BUDGET_EXCEEDED
             break
+        if StructuredManualDisposition.objects.filter(content_id=content_id, status="EXCLUDED").exists():
+            batch.skipped_count += 1
+            batch.save(update_fields=("skipped_count", "updated_at"))
+            continue
         wait_seconds = next_allowed - time.monotonic()
         if wait_seconds > 0:
             time.sleep(wait_seconds)
@@ -173,7 +198,14 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
                 .filter(failures__gte=3)
                 .values("content_id")
             )
-            corpus = final_corpus_reviews().exclude(pk__in=completed).exclude(pk__in=failed)
+            from apps.analysis.models import StructuredManualDisposition
+
+            corpus = (
+                final_corpus_reviews()
+                .exclude(pk__in=completed)
+                .exclude(pk__in=failed)
+                .exclude(pk__in=StructuredManualDisposition.objects.values("content_id"))
+            )
             if product_id is not None:
                 corpus = corpus.filter(product_id=product_id)
             first = corpus.order_by("id").first()

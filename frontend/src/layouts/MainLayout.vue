@@ -58,13 +58,24 @@ const baseNavigationItems = [
   { path: '/data-quality', label: '数据质量', icon: CircleCheck },
   { path: '/structured-analysis', label: 'AI结构化分析', icon: DataAnalysis },
   { path: '/ai-tasks', label: 'AI任务中心', icon: List, advanced: true },
+  { path: '/manual-analysis', label: '人工处理待办', icon: CircleCheck, advanced: true },
   { path: '/ai-settings', label: 'AI配置', icon: Setting, advanced: true },
   { path: '/system', label: '运行监控', icon: Cpu, advanced: true },
 ]
 const navigationItems = computed(() => [
   ...baseNavigationItems
     .filter((item) =>
-      item.path === '/ai-settings' ? auth.isAdmin : !item.advanced || auth.canWrite,
+      item.path === '/ai-settings'
+        ? auth.isAdmin
+        : auth.canWrite ||
+          (!item.advanced &&
+            ![
+              '/products',
+              '/threads',
+              '/reviews',
+              '/data-quality',
+              '/structured-analysis',
+            ].includes(item.path)),
     )
     .flatMap((item) =>
       item.path === '/products' && auth.isAdmin

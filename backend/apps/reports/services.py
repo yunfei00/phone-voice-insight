@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """驾驶舱统一统计口径与确定性报告生成。"""
 
 from __future__ import annotations
@@ -219,16 +220,57 @@ def issue_rows(params: Mapping[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
-def watchlist(params: Mapping[str, Any]) -> list[dict[str, Any]]:
+def watchlist_diagnostics(params: Mapping[str, Any]) -> dict[str, Any]:
+    """Explain every candidate's inclusion; the selected period drives the watchlist."""
     minimum = settings.DASHBOARD_WATCH_MIN_COUNT
     growth_threshold = settings.DASHBOARD_WATCH_GROWTH_PERCENT
+    rows = issue_rows(params)
     watched = []
-    for row in issue_rows(params):
-        enough = row["recent_count"] >= minimum
-        growing = row["is_new"] or (row["growth_rate"] is not None and row["growth_rate"] >= growth_threshold)
-        if enough and growing:
-            watched.append(row)
-    return watched[:5]
+    rejected = []
+    for row in rows:
+        count = int(row["feedback_count"])
+        recent = int(row["recent_count"])
+        growth = row["growth_rate"]
+        growing = recent >= minimum and (row["is_new"] or (growth is not None and growth >= growth_threshold))
+        persistent = recent >= minimum and int(row["previous_count"]) >= minimum
+        severe = row["severity"] in ("CRITICAL", "HIGH") and count >= 2
+        high_volume = count >= minimum
+        reasons = []
+        if severe:
+            reasons.append("高严重度问题")
+        if growing:
+            reasons.append("近期明显增长")
+        if persistent:
+            reasons.append("连续两周高频")
+        if high_volume:
+            reasons.append("所选周期高频")
+        item = {**row, "watch_reasons": reasons}
+        if reasons:
+            watched.append(item)
+        else:
+            item["excluded_reason"] = f"所选周期反馈 {count} 条，未达到高频门槛 {minimum} 条且无严重度/趋势触发"
+            rejected.append(item)
+    watched.sort(
+        key=lambda row: (
+            row["severity"] in ("CRITICAL", "HIGH"),
+            row["recent_count"] >= minimum
+            and (row["is_new"] or (row["growth_rate"] is not None and row["growth_rate"] >= growth_threshold)),
+            row["feedback_count"],
+        ),
+        reverse=True,
+    )
+    return {
+        "watchlist": watched[:5],
+        "total_candidates": len(rows),
+        "eligible_count": len(watched),
+        "excluded_count": len(rejected),
+        "excluded": rejected[:20],
+        "thresholds": {"min_feedback": minimum, "growth_percent": growth_threshold},
+    }
+
+
+def watchlist(params: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return watchlist_diagnostics(params)["watchlist"]
 
 
 def overview(params: Mapping[str, Any]) -> dict[str, Any]:

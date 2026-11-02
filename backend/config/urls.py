@@ -6,7 +6,9 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 from rest_framework.routers import DefaultRouter
 
 from apps.accounts.views import (
+    DashboardPreferenceView,
     OllamaModelsView,
+    PagePreferenceView,
     UserAIConfigurationView,
     UserAIConnectivityView,
     UserViewSet,
@@ -23,7 +25,7 @@ from apps.analysis.structured_views import (
     TaxonomyViewSet,
 )
 from apps.analysis.views import AnalysisBatchViewSet, AnalysisResultViewSet
-from apps.assistant.views import AssistantConversationViewSet, AssistantModelProfileViewSet
+from apps.assistant.views import AssistantConversationViewSet, AssistantModelProfileViewSet, RagIndexViewSet
 from apps.collection.views import CollectionScheduleViewSet, CollectionTargetStateViewSet, CollectionTaskViewSet
 from apps.common.views import health
 from apps.products.views import BrandViewSet, ProductViewSet
@@ -32,6 +34,7 @@ from apps.reports.views import (
     DashboardComparisonView,
     DashboardIssueDetailView,
     DashboardIssueListView,
+    DashboardMetricEvidenceView,
     DashboardOperationsView,
     DashboardOverviewView,
     DashboardProductsView,
@@ -66,6 +69,7 @@ router.register("structured-batches", StructuredBatchViewSet, basename="structur
 router.register("taxonomies", TaxonomyViewSet, basename="taxonomy")
 router.register("assistant/models", AssistantModelProfileViewSet, basename="assistant-model")
 router.register("assistant/conversations", AssistantConversationViewSet, basename="assistant-conversation")
+router.register("assistant/rag-index", RagIndexViewSet, basename="assistant-rag-index")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -73,11 +77,18 @@ urlpatterns = [
     path("api/v1/auth/login/", login, name="login"),
     path("api/v1/auth/logout/", logout, name="logout"),
     path("api/v1/auth/me/", me, name="me"),
+    path("api/v1/page-preferences/<str:page_key>/", PagePreferenceView.as_view(), name="page-preference"),
+    path("api/v1/dashboard/preference/", DashboardPreferenceView.as_view(), name="dashboard-preference"),
     path("api/v1/auth/change-password/", change_password, name="change-password"),
     path("api/v1/ai-configuration/", UserAIConfigurationView.as_view(), name="ai-configuration"),
     path("api/v1/ai-configuration/ollama-models/", OllamaModelsView.as_view(), name="ollama-models"),
     path("api/v1/ai-configuration/test/", UserAIConnectivityView.as_view(), name="ai-configuration-test"),
     path("api/v1/dashboard/overview/", DashboardOverviewView.as_view(), name="dashboard-overview"),
+    path(
+        "api/v1/dashboard/metrics/<str:metric>/evidence/",
+        DashboardMetricEvidenceView.as_view(),
+        name="dashboard-metric-evidence",
+    ),
     path("api/v1/dashboard/trends/", DashboardTrendsView.as_view(), name="dashboard-trends"),
     path("api/v1/dashboard/categories/", DashboardCategoriesView.as_view(), name="dashboard-categories"),
     path("api/v1/dashboard/products/", DashboardProductsView.as_view(), name="dashboard-products"),

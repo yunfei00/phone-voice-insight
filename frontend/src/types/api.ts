@@ -760,6 +760,13 @@ export interface DashboardOverview {
   published_time_fallback_count: number
   disclaimer: string
   watchlist: DashboardIssue[]
+  watch_diagnostics?: {
+    total_candidates: number
+    eligible_count: number
+    excluded_count: number
+    excluded: Array<DashboardIssue & { excluded_reason: string }>
+    thresholds: { min_feedback: number; growth_percent: number }
+  }
 }
 
 export interface DashboardTrend {
@@ -909,6 +916,7 @@ export interface AssistantModelProfilePayload {
 
 export interface AssistantModelList {
   assistant_model_id: number | null
+  structured_model_id: number | null
   default_model: {
     id: null
     name: string
@@ -952,6 +960,7 @@ export interface AssistantMessage {
   model_name_snapshot: string
   provider_snapshot: string
   evidence: AssistantEvidenceItem[]
+  tool_result: Record<string, unknown>
   prompt_tokens: number | null
   completion_tokens: number | null
   total_tokens: number | null
@@ -962,12 +971,15 @@ export interface AssistantMessage {
 }
 
 export interface AssistantStreamEvent {
-  type: 'start' | 'tool' | 'delta' | 'done' | 'cancelled' | 'error'
+  type: 'start' | 'status' | 'tool' | 'delta' | 'done' | 'cancelled' | 'error'
   message_id?: string
   content?: string
   message?: string
   code?: string
   tool?: string
   evidence?: AssistantEvidenceItem[]
+  result?: Record<string, unknown>
+  stage?: 'understanding' | 'querying' | 'retrieving' | 'generating'
+  label?: string
   model?: string
 }

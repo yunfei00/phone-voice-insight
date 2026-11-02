@@ -60,6 +60,54 @@ export const logout = async (): Promise<void> => {
   await apiClient.post('/auth/logout/')
 }
 
+export type DashboardMetricKey =
+  | 'raw_feedback'
+  | 'valid_feedback'
+  | 'ai_analyzed'
+  | 'explicit_issue_feedback'
+  | 'watch_issue_count'
+export interface DashboardMetricEvidence {
+  metric: DashboardMetricKey
+  count: number
+  page: number
+  page_size: number
+  start_date: string
+  end_date: string
+  results: Array<{
+    id: number | string
+    title: string
+    product: string
+    source: string
+    published_at: string | null
+    source_url: string
+    description: string
+  }>
+}
+export const getDashboardMetricEvidence = async (
+  metric: DashboardMetricKey,
+  params: DashboardFilters & { page?: number; page_size?: number },
+): Promise<DashboardMetricEvidence> =>
+  (
+    await apiClient.get<DashboardMetricEvidence>(`/dashboard/metrics/${metric}/evidence/`, {
+      params,
+    })
+  ).data
+
+export interface DashboardPreference {
+  product_id?: number | null
+  source_id?: number | null
+  preset: '7' | '30' | '90' | 'custom'
+  start_date?: string | null
+  end_date?: string | null
+}
+
+export const getDashboardPreference = async (): Promise<Partial<DashboardPreference>> =>
+  (await apiClient.get<Partial<DashboardPreference>>('/dashboard/preference/')).data
+
+export const saveDashboardPreference = async (value: DashboardPreference): Promise<void> => {
+  await apiClient.put('/dashboard/preference/', value)
+}
+
 export const getCurrentUser = async (): Promise<UserAccount> =>
   (await apiClient.get<UserAccount>('/auth/me/')).data
 
@@ -375,6 +423,9 @@ export const getStructuredAggregates = async (
   ).data
 
 export interface StructuredFailure {
+  source_url: string
+  external_id: string | null
+  content_title: string
   id: number
   content: number
   content_excerpt: string
@@ -409,6 +460,10 @@ export const getStructuredBatches = async (
 export interface StructuredCorpusProgress {
   total: number
   completed: number
+  ai_completed: number
+  manual_handled: number
+  manual_excluded: number
+  manual_pending: number
   remaining: number
   active: boolean
   batch: StructuredBatch | null
@@ -757,6 +812,10 @@ export const selectAssistantModel = async (modelId: number): Promise<void> => {
   await apiClient.post('/assistant/models/select-assistant/', { model_id: modelId })
 }
 
+export const selectStructuredModel = async (modelId: number): Promise<void> => {
+  await apiClient.post('/assistant/models/select-structured/', { model_id: modelId })
+}
+
 export const getAssistantModels = async (): Promise<AssistantModelList> =>
   (await apiClient.get<AssistantModelList>('/assistant/models/')).data
 
@@ -886,4 +945,69 @@ export async function streamAssistantChat(
     }
     if (done) break
   }
+}
+
+export type ManualDispositionStatus =
+  'IN_REVIEW' | 'DEFERRED' | 'EXCLUDED' | 'SUBMITTED' | 'APPROVED'
+export const getManualDispositions = async (
+  contentIds: number[],
+): Promise<
+  Record<string, { status: string; reason: string; annotation?: Record<string, unknown> }>
+> =>
+  (
+    await apiClient.get('/structured-batches/manual-dispositions/', {
+      params: { content_ids: contentIds.join(',') },
+    })
+  ).data
+
+export const setManualDisposition = async (payload: {
+  content_id: number
+  status: ManualDispositionStatus
+  reason: string
+  annotation?: Record<string, unknown>
+}): Promise<void> => {
+  await apiClient.post('/structured-batches/manual-disposition/', payload)
+}
+
+export const quickExcludeManual = async (
+  contentIds: number[],
+  reasonCode: string,
+): Promise<void> => {
+  await apiClient.post('/structured-batches/quick-exclude/', {
+    content_ids: contentIds,
+    reason_code: reasonCode,
+  })
+}
+export const undoExcludeManual = async (contentIds: number[]): Promise<void> => {
+  await apiClient.post('/structured-batches/undo-exclude/', { content_ids: contentIds })
+}
+
+export const cancelManualDisposition = async (contentId: number): Promise<void> => {
+  await apiClient.post('/structured-batches/cancel-manual/', { content_id: contentId })
+}
+
+export interface ManualQueueItem {
+  source_url: string
+  content_id: number
+  title: string
+  content: string
+  product: string
+  status: string
+  reason: string
+  annotation: Record<string, unknown>
+}
+export const getManualQueue = async (
+  status?: string,
+): Promise<{ count: number; results: ManualQueueItem[] }> =>
+  (await apiClient.get('/structured-batches/manual-queue/', { params: status ? { status } : {} }))
+    .data
+
+export type PersistedPage = 'ai-assistant' | 'issues' | 'insight-reports'
+export const getPagePreference = async (page: PersistedPage): Promise<Record<string, unknown>> =>
+  (await apiClient.get<Record<string, unknown>>(`/page-preferences/${page}/`)).data
+export const savePagePreference = async (
+  page: PersistedPage,
+  data: Record<string, unknown>,
+): Promise<void> => {
+  await apiClient.put(`/page-preferences/${page}/`, data)
 }

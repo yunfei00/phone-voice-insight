@@ -203,6 +203,8 @@ def _fake_summary(messages: list[dict[str, Any]]) -> str:
             f"明确问题 {item['overview']['explicit_issue_feedback']} 条"
             for item in data["products"]
         )
+    elif "posts" in data:
+        body = f"找到 **{len(data['posts'])}** 个匹配帖子，已附上可追溯证据和匹配依据。"
     elif "feedback" in data:
         body = f"找到 **{len(data['feedback'])}** 条匹配的有效用户反馈，已附上可追溯证据。"
     elif "issue" in data:
