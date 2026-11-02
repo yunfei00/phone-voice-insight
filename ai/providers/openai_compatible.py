@@ -199,6 +199,8 @@ class OpenAICompatibleProvider(AIProvider):
                 http_status=response.status_code,
                 request_id=request_id,
             )
+        if response.status_code == 413:
+            raise AIProviderError("AI_REQUEST_TOO_LARGE", "AI request exceeds provider size limit (HTTP 413)", http_status=413, request_id=request_id)
         if response.status_code >= 400:
             raise AIProviderError(
                 "AI_PROVIDER_ERROR",
