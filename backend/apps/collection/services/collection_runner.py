@@ -719,38 +719,130 @@ def run_collection(
                 if scanned >= max_threads:
                     break
                 scanned += 1
-                listing_data = dict(thread_link.payload)
-                thread_id = str(listing_data["thread_id"])
-                thread_external_id = f"thread:{thread_id}"
-                thread_was_known = ReviewRecord.objects.filter(
-                    source_id=source_target.source_id,
-                    record_type="THREAD",
-                    external_id=thread_external_id,
-                ).exists()
-                if thread_was_known:
-                    known_threads += 1
-                # Avoid downloading every page of unchanged known threads on each six-hour run.
-                # Periodic deep scans still cover edits, deleted replies and unreliable counters.
-                listed_replies = parse_human_count(listing_data.get("reply_count"))
-                deep_scan_interval = _int_config(config, "incremental_deep_scan_every", 4, 48)
-                if (
-                    thread_was_known
-                    and listed_replies is not None
-                    and task.id % deep_scan_interval != 0
-                ):
-                    stored_replies = ReviewRecord.objects.filter(
+                try:
+                    listing_data = dict(thread_link.payload)
+                    thread_id = str(listing_data["thread_id"])
+                    thread_external_id = f"thread:{thread_id}"
+                    thread_was_known = ReviewRecord.objects.filter(
                         source_id=source_target.source_id,
-                        record_type__in=("REPLY", "OFFICIAL_REPLY"),
-                        raw_data__thread_id=thread_id,
-                    ).count()
-                    if stored_replies == listed_replies:
-                        fast_skipped_threads += 1
+                        record_type="THREAD",
+                        external_id=thread_external_id,
+                    ).exists()
+                    if thread_was_known:
+                        known_threads += 1
+                    # Avoid downloading every page of unchanged known threads on each six-hour run.
+                    # Periodic deep scans still cover edits, deleted replies and unreliable counters.
+                    listed_replies = parse_human_count(listing_data.get("reply_count"))
+                    deep_scan_interval = _int_config(config, "incremental_deep_scan_every", 4, 48)
+                    if (
+                        thread_was_known
+                        and listed_replies is not None
+                        and task.id % deep_scan_interval != 0
+                    ):
+                        stored_replies = ReviewRecord.objects.filter(
+                            source_id=source_target.source_id,
+                            record_type__in=("REPLY", "OFFICIAL_REPLY"),
+                            raw_data__thread_id=thread_id,
+                        ).count()
+                        if stored_replies == listed_replies:
+                            fast_skipped_threads += 1
+                            checkpoint = {
+                                "topic_page": topic_page,
+                                "thread_index": thread_index + 1,
+                                "last_thread_id": thread_id,
+                                "skip_reason": "UNCHANGED_REPLY_COUNT",
+                                "fast_skipped_threads": fast_skipped_threads,
+                            }
+                            _save_progress(
+                                task.id,
+                                run.id,
+                                inserted=inserted,
+                                skipped=skipped,
+                                failed=failed,
+                                checkpoint=checkpoint,
+                                progress_stats={
+                                    "new_threads": new_threads,
+                                    "known_threads": known_threads,
+                                    "new_records": inserted,
+                                    "duplicate_records": duplicate_records,
+                                    "stopped_at_known_boundary": False,
+                                },
+                            )
+                            continue
+                    thread_url = str(listing_data["thread_url"])
+                    thread_target = _build_collector_target(source_target, target_url=thread_url)
+                    thread_request = CollectionRequest(
+                        target=thread_target,
+                        checkpoint=CollectionCheckpoint(
+                            metadata={
+                                "page_kind": "thread",
+                                "thread_id": thread_id,
+                                "listing_data": listing_data,
+                            }
+                        ),
+                    )
+                    raw_thread = collector.fetch_page(thread_request)
+                    _request_log(task.id, source_target.source.code, topic_page, thread_id, raw_thread.metadata)
+                    first_html = (
+                        raw_thread.content.decode("utf-8", errors="replace")
+                        if isinstance(raw_thread.content, bytes)
+                        else raw_thread.content
+                    )
+                    if not is_valid_thread_page(first_html):
+                        raise CollectorError(f"帖子 {thread_id} 返回异常页面", code="INVALID_THREAD_PAGE")
+                    raw_records = collector.parse_records(raw_thread)
+                    if not raw_records:
+                        raise CollectorError(f"帖子 {thread_id} 未解析出记录", code="EMPTY_THREAD")
+                    reply_pages = extract_thread_page_count(first_html, thread_id=thread_id)
+                    for reply_page in range(2, reply_pages + 1):
+                        check_collection_stop(task.id)
+                        paged_request = CollectionRequest(
+                            target=thread_target,
+                            checkpoint=CollectionCheckpoint(
+                                page=reply_page,
+                                metadata={
+                                    "page_kind": "thread",
+                                    "thread_id": thread_id,
+                                    "listing_data": listing_data,
+                                },
+                            ),
+                        )
+                        raw_reply_page = collector.fetch_page(paged_request)
+                        reply_html = (
+                            raw_reply_page.content.decode("utf-8", errors="replace")
+                            if isinstance(raw_reply_page.content, bytes)
+                            else raw_reply_page.content
+                        )
+                        if not is_valid_thread_page(reply_html):
+                            raise CollectorError(
+                                f"帖子 {thread_id} 第 {reply_page} 页返回异常页面",
+                                code="INVALID_THREAD_PAGE",
+                            )
+                        paged_records = collector.parse_records(raw_reply_page)
+                        if not paged_records:
+                            raise CollectorError(
+                                f"帖子 {thread_id} 第 {reply_page} 页无记录",
+                                code="EMPTY_THREAD_PAGE",
+                            )
+                        raw_records.extend(paged_records[1:])
+
+                    thread_payload = raw_records[0].payload
+                    raw_data = thread_payload.get("raw_data", {})
+                    topic_tags = raw_data.get("topic_tags", []) if isinstance(raw_data, dict) else []
+                    aliases = target.config.get("product_aliases", [])
+                    if not is_product_related(
+                        title=str(thread_payload.get("title", "")),
+                        content=str(thread_payload.get("content", "")),
+                        topic_tags=[str(value) for value in topic_tags] if isinstance(topic_tags, list) else [],
+                        aliases=[str(value) for value in aliases] if isinstance(aliases, list) else [],
+                        excluded_aliases=[str(value) for value in target.config.get("excluded_product_aliases", [])],
+                    ):
+                        skipped += 1
                         checkpoint = {
                             "topic_page": topic_page,
                             "thread_index": thread_index + 1,
                             "last_thread_id": thread_id,
-                            "skip_reason": "UNCHANGED_REPLY_COUNT",
-                            "fast_skipped_threads": fast_skipped_threads,
+                            "skip_reason": "PRODUCT_NOT_MATCHED",
                         }
                         _save_progress(
                             task.id,
@@ -768,80 +860,39 @@ def run_collection(
                             },
                         )
                         continue
-                thread_url = str(listing_data["thread_url"])
-                thread_target = _build_collector_target(source_target, target_url=thread_url)
-                thread_request = CollectionRequest(
-                    target=thread_target,
-                    checkpoint=CollectionCheckpoint(
-                        metadata={
-                            "page_kind": "thread",
-                            "thread_id": thread_id,
-                            "listing_data": listing_data,
-                        }
-                    ),
-                )
-                raw_thread = collector.fetch_page(thread_request)
-                _request_log(task.id, source_target.source.code, topic_page, thread_id, raw_thread.metadata)
-                first_html = (
-                    raw_thread.content.decode("utf-8", errors="replace")
-                    if isinstance(raw_thread.content, bytes)
-                    else raw_thread.content
-                )
-                if not is_valid_thread_page(first_html):
-                    raise CollectorError(f"帖子 {thread_id} 返回异常页面", code="INVALID_THREAD_PAGE")
-                raw_records = collector.parse_records(raw_thread)
-                if not raw_records:
-                    raise CollectorError(f"帖子 {thread_id} 未解析出记录", code="EMPTY_THREAD")
-                reply_pages = extract_thread_page_count(first_html, thread_id=thread_id)
-                for reply_page in range(2, reply_pages + 1):
-                    check_collection_stop(task.id)
-                    paged_request = CollectionRequest(
-                        target=thread_target,
-                        checkpoint=CollectionCheckpoint(
-                            page=reply_page,
-                            metadata={
-                                "page_kind": "thread",
-                                "thread_id": thread_id,
-                                "listing_data": listing_data,
-                            },
-                        ),
-                    )
-                    raw_reply_page = collector.fetch_page(paged_request)
-                    reply_html = (
-                        raw_reply_page.content.decode("utf-8", errors="replace")
-                        if isinstance(raw_reply_page.content, bytes)
-                        else raw_reply_page.content
-                    )
-                    if not is_valid_thread_page(reply_html):
-                        raise CollectorError(
-                            f"帖子 {thread_id} 第 {reply_page} 页返回异常页面",
-                            code="INVALID_THREAD_PAGE",
-                        )
-                    paged_records = collector.parse_records(raw_reply_page)
-                    if not paged_records:
-                        raise CollectorError(
-                            f"帖子 {thread_id} 第 {reply_page} 页无记录",
-                            code="EMPTY_THREAD_PAGE",
-                        )
-                    raw_records.extend(paged_records[1:])
 
-                thread_payload = raw_records[0].payload
-                raw_data = thread_payload.get("raw_data", {})
-                topic_tags = raw_data.get("topic_tags", []) if isinstance(raw_data, dict) else []
-                aliases = target.config.get("product_aliases", [])
-                if not is_product_related(
-                    title=str(thread_payload.get("title", "")),
-                    content=str(thread_payload.get("content", "")),
-                    topic_tags=[str(value) for value in topic_tags] if isinstance(topic_tags, list) else [],
-                    aliases=[str(value) for value in aliases] if isinstance(aliases, list) else [],
-                    excluded_aliases=[str(value) for value in target.config.get("excluded_product_aliases", [])],
-                ):
-                    skipped += 1
+                    for raw_record in raw_records:
+                        normalized = collector.normalize_record(raw_record)
+                        result = persist_review(source_target, normalized)
+                        if result.inserted:
+                            inserted += 1
+                            if normalized.record_type == "THREAD":
+                                new_threads += 1
+                            type_counts[normalized.record_type] += 1
+                            if len(samples) < 10:
+                                samples.append(
+                                    {
+                                        "id": result.review.id,
+                                        "record_type": normalized.record_type,
+                                        "title": normalized.title,
+                                        "content_preview": normalized.content[:80],
+                                        "published_at": normalized.published_at.isoformat()
+                                        if normalized.published_at
+                                        else None,
+                                        "author_role": normalized.author_role,
+                                        "is_official": normalized.is_official,
+                                        "source_url": normalized.source_url,
+                                        "parent_external_id": normalized.parent_external_id,
+                                    }
+                                )
+                        else:
+                            skipped += 1
+                            duplicate_records += 1
+
                     checkpoint = {
                         "topic_page": topic_page,
                         "thread_index": thread_index + 1,
                         "last_thread_id": thread_id,
-                        "skip_reason": "PRODUCT_NOT_MATCHED",
                     }
                     _save_progress(
                         task.id,
@@ -858,68 +909,58 @@ def run_collection(
                             "stopped_at_known_boundary": False,
                         },
                     )
-                    continue
-
-                for raw_record in raw_records:
-                    normalized = collector.normalize_record(raw_record)
-                    result = persist_review(source_target, normalized)
-                    if result.inserted:
-                        inserted += 1
-                        if normalized.record_type == "THREAD":
-                            new_threads += 1
-                        type_counts[normalized.record_type] += 1
-                        if len(samples) < 10:
-                            samples.append(
-                                {
-                                    "id": result.review.id,
-                                    "record_type": normalized.record_type,
-                                    "title": normalized.title,
-                                    "content_preview": normalized.content[:80],
-                                    "published_at": normalized.published_at.isoformat()
-                                    if normalized.published_at
-                                    else None,
-                                    "author_role": normalized.author_role,
-                                    "is_official": normalized.is_official,
-                                    "source_url": normalized.source_url,
-                                    "parent_external_id": normalized.parent_external_id,
-                                }
-                            )
-                    else:
+                    logger.info(
+                        "collection_thread collection_task_id=%s source=%s topic_page=%s thread_id=%s "
+                        "parsed_records=%s inserted_records=%s skipped_records=%s checkpoint=%s",
+                        task.id,
+                        source_target.source.code,
+                        topic_page,
+                        thread_id,
+                        len(raw_records),
+                        inserted,
+                        skipped,
+                        checkpoint,
+                    )
+                except CollectionStopRequested:
+                    raise
+                except Exception as exc:
+                    failed += 1
+                    error_code = str(getattr(exc, "code", "COLLECTION_ERROR")).upper()
+                    blocked = error_code in {
+                        "HTTP_401", "HTTP_403", "AUTH_REQUIRED", "LOGIN_REQUIRED",
+                        "LOGIN_WALL", "PERMISSION_DENIED", "ACCESS_DENIED",
+                        "BLOCKED_PERMISSION_PAGE", "BLOCKED_INFO_PAGE",
+                    }
+                    if blocked:
+                        failed -= 1
                         skipped += 1
-                        duplicate_records += 1
-
-                checkpoint = {
-                    "topic_page": topic_page,
-                    "thread_index": thread_index + 1,
-                    "last_thread_id": thread_id,
-                }
-                _save_progress(
-                    task.id,
-                    run.id,
-                    inserted=inserted,
-                    skipped=skipped,
-                    failed=failed,
-                    checkpoint=checkpoint,
-                    progress_stats={
-                        "new_threads": new_threads,
-                        "known_threads": known_threads,
-                        "new_records": inserted,
-                        "duplicate_records": duplicate_records,
-                        "stopped_at_known_boundary": False,
-                    },
-                )
-                logger.info(
-                    "collection_thread collection_task_id=%s source=%s topic_page=%s thread_id=%s "
-                    "parsed_records=%s inserted_records=%s skipped_records=%s checkpoint=%s",
-                    task.id,
-                    source_target.source.code,
-                    topic_page,
-                    thread_id,
-                    len(raw_records),
-                    inserted,
-                    skipped,
-                    checkpoint,
-                )
+                    error_details = checkpoint.setdefault("thread_errors", [])
+                    if len(error_details) < 50:
+                        error_details.append({
+                            "thread_id": str(thread_link.payload.get("thread_id", "")),
+                            "thread_url": str(thread_link.payload.get("thread_url", "")),
+                            "code": error_code,
+                            "reason": str(exc)[:300],
+                            "outcome": "BLOCKED_SKIPPED" if blocked else "FAILED",
+                        })
+                    checkpoint.update({
+                        "topic_page": topic_page,
+                        "thread_index": thread_index + 1,
+                        "last_thread_id": str(thread_link.payload.get("thread_id", "")),
+                    })
+                    _save_progress(
+                        task.id, run.id, inserted=inserted, skipped=skipped,
+                        failed=failed, checkpoint=checkpoint,
+                        progress_stats={
+                            "new_threads": new_threads, "known_threads": known_threads,
+                            "new_records": inserted, "duplicate_records": duplicate_records,
+                            "stopped_at_known_boundary": False,
+                        },
+                    )
+                    logger.warning(
+                        "incremental_thread_error task=%s thread=%s code=%s",
+                        task.id, thread_link.payload.get("thread_id"), error_code,
+                    )
             if scanned >= max_threads:
                 break
             checkpoint = {"topic_page": topic_page + 1, "thread_index": 0}
