@@ -38,6 +38,30 @@ import type {
   AICorpusSummary,
 } from '@/api'
 
+function displayTaskTime(value: string | null | undefined): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const part = (name: string) => parts.find((item) => item.type === name)?.value ?? '00'
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
+}
+
+function displayTaskDuration(start: string | null | undefined, end: string | null | undefined): string {
+  if (!start) return '—'
+  const startMs = new Date(start).getTime()
+  const endMs = end ? new Date(end).getTime() : Date.now()
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return '—'
+  const seconds = Math.floor((endMs - startMs) / 1000)
+  if (seconds < 60) return `${seconds}秒`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`
+  return `${Math.floor(seconds / 3600)}时${Math.floor((seconds % 3600) / 60)}分`
+}
+
 const emptySummary = (): DataQualitySummary => ({
   total: 0,
   eligible: 0,
@@ -883,6 +907,10 @@ onUnmounted(() => {
       <el-table :data="governanceTasks" empty-text="暂无后台治理任务">
         <el-table-column prop="id" label="任务 ID" width="100" />
         <el-table-column prop="status" label="状态" width="120" />
+        <el-table-column label="创建时间" width="175"><template #default="{ row }: { row: GovernanceTaskInfo }">{{ displayTaskTime(row.created_at) }}</template></el-table-column>
+        <el-table-column label="开始时间" width="175"><template #default="{ row }: { row: GovernanceTaskInfo }">{{ displayTaskTime(row.started_at) }}</template></el-table-column>
+        <el-table-column label="完成时间" width="175"><template #default="{ row }: { row: GovernanceTaskInfo }">{{ displayTaskTime(row.finished_at) }}</template></el-table-column>
+        <el-table-column label="耗时" width="105"><template #default="{ row }: { row: GovernanceTaskInfo }">{{ displayTaskDuration(row.started_at, row.finished_at) }}</template></el-table-column>
         <el-table-column label="进度" min-width="200">
           <template #default="{ row }: { row: GovernanceTaskInfo }">
             <el-progress
