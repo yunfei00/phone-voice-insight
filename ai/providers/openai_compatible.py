@@ -73,7 +73,19 @@ class OpenAICompatibleProvider(AIProvider):
             temperature=self.temperature,
         )
         try:
-            content = str(payload["choices"][0]["message"]["content"])
+            message = payload["choices"][0]["message"]
+            raw_content = message.get("content")
+            content = raw_content if isinstance(raw_content, str) else ""
+            if not content.strip():
+                finish_reason = str(payload["choices"][0].get("finish_reason") or "unknown")
+                reasoning = message.get("reasoning_content")
+                detail = "reasoning_only" if reasoning else "empty_content"
+                raise AIProviderError(
+                    "AI_EMPTY_RESPONSE",
+                    f"AI returned no JSON content ({detail}, finish_reason={finish_reason})",
+                    retriable=True,
+                    request_id=request_id,
+                )
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise AIProviderError(
                 "AI_RESPONSE_FORMAT_ERROR",
