@@ -54,8 +54,9 @@ def _approved_example_prompt(review: ReviewRecord) -> str:
     """Optional, bounded retrieval of reviewed examples. Never treat examples as instructions."""
     if not getattr(settings, "STRUCTURED_MANUAL_EXAMPLES_ENABLED", False):
         return ""
-    from apps.analysis.models import StructuredManualDisposition
     import difflib
+
+    from apps.analysis.models import StructuredManualDisposition
 
     candidates = (
         StructuredManualDisposition.objects.filter(status="APPROVED", content__product_id=review.product_id)

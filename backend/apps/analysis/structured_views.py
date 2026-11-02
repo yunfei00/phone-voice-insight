@@ -25,9 +25,9 @@ from apps.analysis.models import (
     AnalysisBatchStatus,
     AnalysisReviewRecord,
     AnalysisRun,
-    StructuredManualDisposition,
     OpinionAspect,
     StructuredAnalysis,
+    StructuredManualDisposition,
     StructuredRunStatus,
 )
 from apps.analysis.structured_serializers import (

@@ -18,7 +18,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
 from apps.accounts.ai_service import get_user_ai_provider
-from apps.accounts.models import UserAIConfiguration, UserProfile, UserRole, UserPagePreference
+from apps.accounts.models import UserAIConfiguration, UserPagePreference, UserProfile, UserRole
 from apps.accounts.permissions import IsAdministrator, IsAnalystOrAdministrator, get_user_role
 from apps.accounts.serializers import (
     LoginSerializer,

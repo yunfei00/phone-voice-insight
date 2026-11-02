@@ -131,7 +131,12 @@ const analystNavigationLabels = [
   '数据质量',
   'AI结构化分析',
 ]
-const advancedNavigationLabels = [...analystNavigationLabels, 'AI任务中心', '人工处理待办', '运行监控']
+const advancedNavigationLabels = [
+  ...analystNavigationLabels,
+  'AI任务中心',
+  '人工处理待办',
+  '运行监控',
+]
 
 async function mountApp(path = '/dashboard', role: 'ADMIN' | 'ANALYST' | 'VIEWER' = 'VIEWER') {
   const container = document.createElement('div')

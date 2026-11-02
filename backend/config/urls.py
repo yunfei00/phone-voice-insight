@@ -6,12 +6,12 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 from rest_framework.routers import DefaultRouter
 
 from apps.accounts.views import (
+    DashboardPreferenceView,
     OllamaModelsView,
+    PagePreferenceView,
     UserAIConfigurationView,
     UserAIConnectivityView,
     UserViewSet,
-    DashboardPreferenceView,
-    PagePreferenceView,
     change_password,
     login,
     logout,
@@ -34,9 +34,9 @@ from apps.reports.views import (
     DashboardComparisonView,
     DashboardIssueDetailView,
     DashboardIssueListView,
+    DashboardMetricEvidenceView,
     DashboardOperationsView,
     DashboardOverviewView,
-    DashboardMetricEvidenceView,
     DashboardProductsView,
     DashboardReportDetailView,
     DashboardReportGenerateView,

@@ -7,8 +7,8 @@ from __future__ import annotations
 import ipaddress
 import json
 import time
-from urllib.parse import urlsplit
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 

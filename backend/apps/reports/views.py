@@ -68,8 +68,8 @@ class DashboardMetricEvidenceView(APIView):
             accepted_analyses,
             filtered_reviews,
             issue_aspects,
-            valid_qualities,
             parse_range,
+            valid_qualities,
         )
 
         allowed = {"raw_feedback", "valid_feedback", "ai_analyzed", "explicit_issue_feedback", "watch_issue_count"}
