@@ -111,7 +111,10 @@ def _identity(review: ReviewRecord, provider: AIProvider) -> tuple[str, str]:
 
 def _decode(content: str) -> dict[str, object]:
     match = _FENCE.fullmatch(content)
-    parsed = json.loads(match.group(1) if match else content.strip())
+    cleaned = (match.group(1) if match else content.strip()).strip()
+    if not cleaned:
+        raise ValueError("EMPTY_JSON_CONTENT")
+    parsed = json.loads(cleaned)
     if not isinstance(parsed, dict):
         raise ValueError("AI response must be a JSON object")
     return parsed
