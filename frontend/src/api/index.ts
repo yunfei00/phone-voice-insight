@@ -936,3 +936,15 @@ export const getManualDispositions = async (contentIds: number[]): Promise<Recor
 export const setManualDisposition = async (payload: {content_id: number; status: ManualDispositionStatus; reason: string; annotation?: Record<string, unknown>}): Promise<void> => {
   await apiClient.post('/structured-batches/manual-disposition/', payload)
 }
+
+export interface ManualQueueItem {
+  content_id: number
+  title: string
+  content: string
+  product: string
+  status: string
+  reason: string
+  annotation: Record<string, unknown>
+}
+export const getManualQueue = async (status?: string): Promise<{count: number; results: ManualQueueItem[]}> =>
+  (await apiClient.get('/structured-batches/manual-queue/', {params: status ? {status} : {}})).data
