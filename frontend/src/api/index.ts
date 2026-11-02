@@ -799,6 +799,10 @@ export const selectAssistantModel = async (modelId: number): Promise<void> => {
   await apiClient.post('/assistant/models/select-assistant/', { model_id: modelId })
 }
 
+export const selectStructuredModel = async (modelId: number): Promise<void> => {
+  await apiClient.post('/assistant/models/select-structured/', { model_id: modelId })
+}
+
 export const getAssistantModels = async (): Promise<AssistantModelList> =>
   (await apiClient.get<AssistantModelList>('/assistant/models/')).data
 
