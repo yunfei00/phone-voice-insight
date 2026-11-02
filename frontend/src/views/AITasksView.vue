@@ -22,6 +22,7 @@ const failureRows = ref<StructuredFailure[]>([])
 const dispositions = ref<Record<string, {status: string; reason: string; annotation?: Record<string, unknown>}>>({})
 const failureBatchId = ref<number | null>(null)
 const failureError = ref('')
+const statusLabels: Record<string, string> = {IN_REVIEW: '待人工标注', DEFERRED: '已暂缓', EXCLUDED: '已排除', SUBMITTED: '待审核', APPROVED: '审核通过'}
 const loading = ref(false)
 const submitting = ref(false)
 const advancedVisible = ref(false)
@@ -357,7 +358,7 @@ onUnmounted(() => {
         <el-table-column prop="attempt_count" label="尝试次数" width="90" />
         <el-table-column label="人工处理" min-width="280">
           <template #default="{ row }">
-            <span v-if="dispositions[row.content]">已处理：{{ dispositions[row.content].status }} </span>
+            <span v-if="dispositions[row.content]">{{ statusLabels[dispositions[row.content].status] || dispositions[row.content].status }} </span>
             <el-button v-if="dispositions[row.content]?.status === 'IN_REVIEW'" link type="primary" @click="submitManualAnnotation(row.content)">填写结构化标注</el-button>
             <el-button v-if="dispositions[row.content]?.status === 'SUBMITTED'" link type="success" @click="approveManualAnnotation(row.content)">审核通过</el-button>
             <template v-else>
