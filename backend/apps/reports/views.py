@@ -32,6 +32,7 @@ from apps.reports.services import (
     today_token_usage,
     trends,
     watchlist,
+    watchlist_diagnostics,
 )
 from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewQuality
 
@@ -49,7 +50,7 @@ def _safe_response(callback: Any) -> Response:
 
 class DashboardOverviewView(APIView):
     def get(self, request: Request) -> Response:
-        return _safe_response(lambda: {**overview(_params(request)), "watchlist": watchlist(_params(request))})
+        return _safe_response(lambda: {**overview(_params(request)), "watchlist": watchlist(_params(request)), "watch_diagnostics": watchlist_diagnostics(_params(request))})
 
 
 class DashboardMetricEvidenceView(APIView):
@@ -71,12 +72,13 @@ class DashboardMetricEvidenceView(APIView):
             page_size = min(max(int(params.get("page_size", "20")), 1), 100)
             offset = (page - 1) * page_size
             if metric == "watch_issue_count":
-                rows = watchlist(params)
+                diagnostics = watchlist_diagnostics(params)
+                rows = diagnostics["watchlist"]
                 count = len(rows)
                 items = [{
                     "id": row["id"], "title": row["name"], "product": row["product_name"],
                     "source": "", "published_at": None, "source_url": "",
-                    "description": f'最近样本 {row["recent_count"]}；增长 {row["growth_rate"]}%',
+                    "description": "；".join(row["watch_reasons"]) + f'；周期反馈 {row["feedback_count"]} 条',
                 } for row in rows[offset:offset + page_size]]
             else:
                 if metric == "raw_feedback":
