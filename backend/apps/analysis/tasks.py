@@ -11,7 +11,7 @@ from celery import shared_task
 from django.utils import timezone
 
 from apps.accounts.ai_service import get_user_ai_provider
-from apps.analysis.models import AnalysisBatch, AnalysisBatchStatus, StructuredRunStatus
+from apps.analysis.models import AnalysisBatch, AnalysisBatchStatus, AnalysisRun, StructuredRunStatus
 from apps.analysis.services.analysis_runner import error_counts, run_analysis_batch
 from apps.analysis.services.structured_engine import analyze_content
 from apps.reviews.models import AnalysisCorpusItem
