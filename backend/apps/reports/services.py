@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """驾驶舱统一统计口径与确定性报告生成。"""
 
 from __future__ import annotations
