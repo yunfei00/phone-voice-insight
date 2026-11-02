@@ -62,12 +62,6 @@ function applyCustomDates(): void {
   update({ start_date: customStart.value, end_date: end })
 }
 
-function applyDates(value: [Date, Date] | null): void {
-  if (!value) return
-  preset.value = 'custom'
-  update({ start_date: iso(value[0]), end_date: iso(value[1]) })
-}
-
 watch(
   () => [props.modelValue.start_date, props.modelValue.end_date],
   ([start, end]) => {
