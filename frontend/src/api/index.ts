@@ -414,6 +414,9 @@ export const getStructuredAggregates = async (
   ).data
 
 export interface StructuredFailure {
+  source_url: string
+  external_id: string | null
+  content_title: string
   id: number
   content: number
   content_excerpt: string
