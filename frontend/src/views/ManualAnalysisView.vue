@@ -106,6 +106,13 @@ async function openEditor(item: ManualQueueItem) {
     : [newAspect()]
   editorOpen.value = true
 }
+function validSourceUrl(url: string | undefined): string {
+  if (!url) return ''
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : ''
+  } catch { return '' }
+}
 function evidenceOffset(source: string, evidence: string): number {
   return source.indexOf(evidence)
 }
@@ -192,6 +199,7 @@ onMounted(load)
         <el-table-column prop="content_id" label="帖子 ID" width="110" />
         <el-table-column prop="product" label="机型" width="140" />
         <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
+        <el-table-column label="原帖" width="110"><template #default="{row}"><el-link v-if="validSourceUrl(row.source_url)" :href="validSourceUrl(row.source_url)" target="_blank" rel="noopener noreferrer" type="primary">查看原帖</el-link><span v-else>暂无链接</span></template></el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{row}">{{ labels[row.status] || row.status }}</template>
         </el-table-column>
@@ -210,6 +218,7 @@ onMounted(load)
       <template v-if="selected">
         <h3>一、查看帖子原文</h3>
         <p>帖子 #{{ selected.content_id }} · {{ selected.product }} · {{ selected.title }}</p>
+        <p><el-link v-if="validSourceUrl(selected.source_url)" :href="validSourceUrl(selected.source_url)" target="_blank" rel="noopener noreferrer" type="primary">在新窗口打开原始帖子</el-link><span v-else>暂无原帖链接，请以平台已采集的原文为准</span></p>
         <el-input :model-value="selected.content" type="textarea" :rows="5" readonly />
         <h3>二、填写整体判断</h3>
         <el-form label-position="top">
