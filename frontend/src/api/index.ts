@@ -927,12 +927,12 @@ export async function streamAssistantChat(
   }
 }
 
-export type ManualDispositionStatus = 'IN_REVIEW' | 'DEFERRED' | 'EXCLUDED'
-export const getManualDispositions = async (contentIds: number[]): Promise<Record<string, {status: string; reason: string}>> =>
+export type ManualDispositionStatus = 'IN_REVIEW' | 'DEFERRED' | 'EXCLUDED' | 'SUBMITTED' | 'APPROVED'
+export const getManualDispositions = async (contentIds: number[]): Promise<Record<string, {status: string; reason: string; annotation?: Record<string, unknown>}>> =>
   (await apiClient.get('/structured-batches/manual-dispositions/', {
     params: { content_ids: contentIds.join(',') },
   })).data
 
-export const setManualDisposition = async (payload: {content_id: number; status: ManualDispositionStatus; reason: string}): Promise<void> => {
+export const setManualDisposition = async (payload: {content_id: number; status: ManualDispositionStatus; reason: string; annotation?: Record<string, unknown>}): Promise<void> => {
   await apiClient.post('/structured-batches/manual-disposition/', payload)
 }
