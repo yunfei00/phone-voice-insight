@@ -558,7 +558,7 @@ class StructuredBatchViewSet(ViewSet):
         return Response({"batch": StructuredBatchSerializer(batch).data, "celery_task_id": result.id})
 
     @action(detail=True, methods=("post",), url_path="retry-failed")
-    def retry_failed(self, request: Request, pk: str | None = None) -> Response:
+    def retry_failed(self, _request: Request, pk: str | None = None) -> Response:
         assert pk is not None
         with transaction.atomic():
             original = AnalysisBatch.objects.select_for_update().get(pk=pk)
