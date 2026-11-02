@@ -7,6 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import {
   getDashboardPreference,
+  getDashboardMetricEvidence,
   saveDashboardPreference,
   getDashboardCategories,
   getDashboardOverview,
@@ -15,6 +16,7 @@ import {
 } from '@/api'
 import DashboardFilters from '@/components/DashboardFilters.vue'
 import TechChart from '@/components/TechChart.vue'
+import type { DashboardMetricEvidence, DashboardMetricKey } from '@/api'
 import type {
   DashboardCategory,
   DashboardFilters as FilterValues,
@@ -114,36 +116,90 @@ let refreshTimer: number | undefined
 
 const metricCards = computed(() => [
   {
+    key: 'raw_feedback',
     label: '原始反馈量',
     value: overview.value?.raw_feedback ?? 0,
     note: '筛选范围内采集到的原始记录',
   },
   {
+    key: 'valid_feedback',
     label: '有效反馈量',
     value: overview.value?.valid_feedback ?? 0,
     note: '通过规则治理且排除官方内容',
   },
   {
+    key: 'ai_analyzed',
     label: 'AI 已分析量',
     value: overview.value?.ai_analyzed ?? 0,
     note: 'ACCEPTED 且结构化校验通过',
   },
   {
+    key: 'explicit_issue_feedback',
     label: '明确问题反馈量',
     value: overview.value?.explicit_issue_feedback ?? 0,
     note: '按独立反馈去重的明确负面问题',
   },
   {
+    key: 'watch_issue_count',
     label: '重点观察问题',
     value: overview.value?.watch_issue_count ?? 0,
     note: '满足样本量和增长阈值的问题',
   },
   {
+    key: undefined,
     label: '最新数据时间',
     value: overview.value?.latest_data_at ? formatTime(overview.value.latest_data_at) : '暂无',
     note: '最新一条数据的采集时间',
   },
 ])
+
+const evidenceVisible = ref(false)
+const evidenceLoading = ref(false)
+const evidenceError = ref('')
+const evidenceMetric = ref<DashboardMetricKey>('raw_feedback')
+const evidencePage = ref(1)
+const evidence = ref<DashboardMetricEvidence>()
+const evidenceSnapshot = ref<FilterValues>({})
+const metricDescriptions: Record<DashboardMetricKey, string> = {
+  raw_feedback: '原始反馈记录数，包含帖子和回复；以发布时间为准，缺失时采用采集时间。',
+  valid_feedback: '原始记录中治理判定可用于 AI 且排除官方内容的去重记录数。',
+  ai_analyzed: '当前有效的结构化分析中，通过校验、不需要人工复核的独立原始记录数。',
+  explicit_issue_feedback: '结构化分析中有明确负面问题证据的独立原始记录数，同一记录多个问题只计算一次。',
+  watch_issue_count: '同时满足最近样本量和增长阈值的重点问题数，最多展示五项。',
+}
+async function loadEvidence(): Promise<void> {
+  evidenceLoading.value = true
+  evidenceError.value = ''
+  try {
+    evidence.value = await getDashboardMetricEvidence(evidenceMetric.value, {
+      ...evidenceSnapshot.value, page: evidencePage.value, page_size: 20,
+    })
+  } catch (reason) {
+    evidenceError.value = reason instanceof Error ? reason.message : '核对明细加载失败'
+  } finally {
+    evidenceLoading.value = false
+  }
+}
+function openEvidence(key: DashboardMetricKey | undefined): void {
+  if (!key) return
+  evidenceMetric.value = key
+  evidenceSnapshot.value = { ...filters.value }
+  evidencePage.value = 1
+  evidence.value = undefined
+  evidenceVisible.value = true
+  void loadEvidence()
+}
+function evidencePageChange(page: number): void {
+  evidencePage.value = page
+  void loadEvidence()
+}
+function openEvidenceRecord(id: number | string): void {
+  if (evidenceMetric.value === 'watch_issue_count') {
+    void router.push({ path: '/issues', query: { ...evidenceSnapshot.value } })
+  } else {
+    void router.push({ path: '/reviews', query: { product: evidenceSnapshot.value.product_id, search: String(id) } })
+  }
+}
 
 const trendOption = computed<EChartsOption>(() => ({
   tooltip: { trigger: 'axis' },
@@ -369,8 +425,8 @@ onBeforeUnmount(() => {
         :content="card.note"
         placement="top"
       >
-        <article class="metric-card">
-          <span>{{ card.label }}</span
+        <article class="metric-card" :class="{ clickable: card.key }" :role="card.key ? 'button' : undefined" :tabindex="card.key ? 0 : undefined" @click="openEvidence(card.key as DashboardMetricKey | undefined)" @keydown.enter="openEvidence(card.key as DashboardMetricKey | undefined)" @keydown.space.prevent="openEvidence(card.key as DashboardMetricKey | undefined)">
+          <span>{{ card.label }} <small v-if="card.key">点击核对明细 ›</small></span
           ><strong>{{ card.value }}</strong
           ><small>{{ card.note }}</small>
         </article>
@@ -461,6 +517,31 @@ onBeforeUnmount(() => {
         <el-empty v-else description="当前没有满足阈值的重点观察问题" />
       </article>
     </section>
+    <el-dialog v-model="evidenceVisible" title="驾驶舱指标核对明细" width="min(920px, 96vw)" destroy-on-close>
+      <div class="evidence-summary">
+        <h3>{{ metricCards.find((card) => card.key === evidenceMetric)?.label }}</h3>
+        <p>{{ metricDescriptions[evidenceMetric] }}</p>
+        <p>产品 ID：{{ evidenceSnapshot.product_id || '全部' }} · 来源 ID：{{ evidenceSnapshot.source_id || '全部' }}</p>
+        <p>实际统计日期：{{ evidence?.start_date || evidenceSnapshot.start_date || '默认最近30天' }} 至 {{ evidence?.end_date || evidenceSnapshot.end_date || '今天' }}</p>
+        <strong>核对总数：{{ evidence?.count ?? '加载中' }}</strong>
+      </div>
+      <el-alert v-if="evidenceError" type="error" :title="evidenceError" :closable="false" show-icon />
+      <el-table :data="evidence?.results || []" v-loading="evidenceLoading" height="390" stripe>
+        <el-table-column prop="id" label="记录 ID" width="110" />
+        <el-table-column prop="product" label="产品" width="125" />
+        <el-table-column prop="source" label="来源" width="125" />
+        <el-table-column prop="title" label="帖子/问题" min-width="170" show-overflow-tooltip />
+        <el-table-column prop="published_at" label="时间" width="170" />
+        <el-table-column label="核对" width="110">
+          <template #default="{ row }">
+            <el-link v-if="row.source_url" :href="row.source_url" target="_blank" type="primary">原帖链接</el-link>
+            <el-button v-else link type="primary" @click="openEvidenceRecord(row.id)">查看记录</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-pagination class="evidence-pagination" background layout="total, prev, pager, next" :total="evidence?.count || 0" :page-size="20" :current-page="evidencePage" @current-change="evidencePageChange" />
+      <p class="evidence-note">核对明细与驾驶舱使用相同的后端筛选条件；原始帖子链接仅在数据源提供时展示。</p>
+    </el-dialog>
     <p class="dashboard-disclaimer">{{ overview?.disclaimer }}</p>
   </div>
 </template>
@@ -540,6 +621,12 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   box-shadow: 0 14px 34px #020a1333;
 }
+.metric-card.clickable { cursor: pointer; }
+.metric-card.clickable:hover, .metric-card.clickable:focus-visible { border-color: var(--pvi-blue); outline: none; }
+.evidence-summary { margin-bottom: 16px; }
+.evidence-summary h3 { margin: 0 0 8px; }
+.evidence-summary p, .evidence-note { color: var(--pvi-muted); font-size: 13px; }
+.evidence-pagination { margin-top: 16px; justify-content: flex-end; }
 .metric-card span,
 .metric-card small {
   display: block;
