@@ -21,7 +21,15 @@ const rightId = ref<number>()
 const data = ref<DashboardComparison>()
 const loading = ref(false)
 const error = ref('')
-const mode = ref<'count' | 'ratio'>('count')
+const mode = ref<'count' | 'ratio'>('ratio')
+const issueRate = (side: DashboardComparison['left']): string => side.valid_feedback > 0 ? `${(100 * side.explicit_issue_feedback / side.valid_feedback).toFixed(1)}%` : '暂无数据'
+const comparisonSummary = computed(() => {
+  if (!data.value) return '请选择两款产品进行比较。'
+  const left = data.value.left, right = data.value.right
+  if (!left.valid_feedback || !right.valid_feedback) return '至少一款产品缺少有效反馈，暂不能比较问题反馈占比。'
+  const gap = (100 * (left.explicit_issue_feedback / left.valid_feedback - right.explicit_issue_feedback / right.valid_feedback)).toFixed(1)
+  return `${left.product_name} 的问题反馈占比为 ${issueRate(left)}，${right.product_name} 为 ${issueRate(right)}，相差 ${Math.abs(Number(gap)).toFixed(1)} 个百分点。此结果仅代表收集到的有效反馈，不代表产品真实故障率或质量排名。`
+})
 
 const chartOption = computed<EChartsOption>(() => ({
   tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
@@ -154,28 +162,18 @@ onMounted(async () => {
       >
         <h2>{{ side.product_name }}</h2>
         <div class="side-metrics">
-          <span
-            >原始反馈<strong>{{ side.raw_feedback }}</strong></span
-          ><span
-            >有效反馈<strong>{{ side.valid_feedback }}</strong></span
-          ><span
-            >AI 已分析<strong>{{ side.ai_analyzed }}</strong></span
-          ><span
-            >明确问题<strong>{{ side.explicit_issue_feedback }}</strong></span
-          ><span
-            >负面占比<strong>{{
-              side.negative_ratio === null ? '—' : `${(side.negative_ratio * 100).toFixed(1)}%`
-            }}</strong
-            ><small>分母 {{ side.ratio_denominator }}</small></span
-          >
+          <span>用户问题率<strong>{{ issueRate(side) }}</strong><small>明确问题反馈 / 有效反馈</small></span>
+          <span>明确问题反馈<strong>{{ side.explicit_issue_feedback }}</strong></span>
+          <span>有效样本<strong>{{ side.valid_feedback }}</strong><small>用于评估对比可信度</small></span>
         </div>
       </article>
     </section>
+    <section v-if="data" class="tech-panel comparison-summary"><h2>产品体验对比结论</h2><p>{{ comparisonSummary }}</p><small>对比采用相同来源与时间筛选；样本量、结构化分析覆盖率可能影响结果。</small></section>
     <section class="tech-panel chart-section">
       <div class="panel-heading">
         <div>
-          <h2>问题类别对比</h2>
-          <p>比例分母为各产品已完成分析的有效用户反馈</p>
+          <h2>关键体验问题对比</h2>
+          <p>比例分母为各产品已完成分析的有效用户反馈；与顶部问题率分母不同</p>
         </div>
         <el-radio-group v-model="mode" size="small"
           ><el-radio-button value="count">数量</el-radio-button
@@ -256,7 +254,7 @@ onMounted(async () => {
 }
 .side-metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 .side-metrics span {
@@ -273,6 +271,9 @@ onMounted(async () => {
   display: block;
   margin-top: 4px;
 }
+.comparison-summary { margin-bottom: 16px; }
+.comparison-summary p { line-height: 1.8; }
+.comparison-summary small { color: var(--pvi-muted); }
 .chart-section {
   margin-top: 16px;
 }
