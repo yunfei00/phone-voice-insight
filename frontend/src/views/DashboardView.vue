@@ -6,6 +6,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 
 import {
+  getDashboardPreference,
+  saveDashboardPreference,
   getDashboardCategories,
   getDashboardOverview,
   getDashboardProducts,
@@ -89,6 +91,12 @@ function savePreference(value: FilterValues): void {
     const preset = rolling ? String(rolling) :
       saved.preset !== 'custom' && !value.start_date && !value.end_date ? '30' : 'custom'
     window.localStorage.setItem(preferenceKey, JSON.stringify({ ...value, preset }))
+    void saveDashboardPreference({
+      product_id: value.product_id ?? null,
+      source_id: value.source_id ?? null,
+      preset: preset as '7' | '30' | '90' | 'custom',
+      ...(preset === 'custom' ? { start_date: value.start_date, end_date: value.end_date } : {}),
+    }).catch(() => { /* Keep the local fallback if the network is unavailable. */ })
   } catch {
     // Storage may be disabled; dashboard still works with in-memory filters.
   }
@@ -279,7 +287,29 @@ function syncFullscreen(): void {
 }
 
 onMounted(() => {
-  load()
+  void (async () => {
+    try {
+      const preference = await getDashboardPreference()
+      if (preference.preset) {
+        const fromServer: FilterValues = {
+          product_id: preference.product_id ?? undefined,
+          source_id: preference.source_id ?? undefined,
+          ...(preference.preset === 'custom'
+            ? { start_date: preference.start_date || '', end_date: preference.end_date || '' }
+            : rollingDates(Number(preference.preset))),
+        }
+        // Explicit URL filters take precedence over stored user preferences.
+        filters.value = {
+          product_id: route.query.product_id !== undefined ? queryId(route.query.product_id) : fromServer.product_id,
+          source_id: route.query.source_id !== undefined ? queryId(route.query.source_id) : fromServer.source_id,
+          start_date: typeof route.query.start_date === 'string' ? route.query.start_date : fromServer.start_date,
+          end_date: typeof route.query.end_date === 'string' ? route.query.end_date : fromServer.end_date,
+        }
+        try { window.localStorage.setItem(preferenceKey, JSON.stringify({ ...filters.value, preset: preference.preset })) } catch { /* ignore */ }
+      }
+    } catch { /* Offline: keep the local preference. */ }
+    await load()
+  })()
   refreshTimer = window.setInterval(() => {
     if (document.visibilityState === 'visible') load()
   }, 300_000)
