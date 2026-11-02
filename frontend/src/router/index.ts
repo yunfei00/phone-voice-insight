@@ -60,13 +60,13 @@ export const routes: RouteRecordRaw[] = [
         path: 'products',
         name: 'products',
         component: () => import('@/views/ProductsView.vue'),
-        meta: { title: '手机产品' },
+        meta: { title: '手机产品', writeOnly: true },
       },
       {
         path: 'collection-tasks',
         name: 'collection-tasks',
         component: () => import('@/views/CollectionTasksView.vue'),
-        meta: { title: '采集任务' },
+        meta: { title: '采集任务', writeOnly: true },
       },
       {
         path: 'threads',
@@ -78,19 +78,19 @@ export const routes: RouteRecordRaw[] = [
         path: 'reviews',
         name: 'reviews',
         component: () => import('@/views/ReviewsView.vue'),
-        meta: { title: '原始反馈' },
+        meta: { title: '原始反馈', writeOnly: true },
       },
       {
         path: 'data-quality',
         name: 'data-quality',
         component: () => import('@/views/DataQualityView.vue'),
-        meta: { title: '数据质量' },
+        meta: { title: '数据质量', writeOnly: true },
       },
       {
         path: 'structured-analysis',
         name: 'structured-analysis',
         component: () => import('@/views/StructuredAnalysisView.vue'),
-        meta: { title: 'AI 结构化分析' },
+        meta: { title: 'AI 结构化分析', writeOnly: true },
       },
       {
         path: 'ai-tasks',
