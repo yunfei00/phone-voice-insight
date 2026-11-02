@@ -285,7 +285,7 @@ class PagePreferenceView(APIView):
     def get(self, request: Request, page_key: str) -> Response:
         if page_key not in self.allowed:
             return Response({"detail": "Unknown page"}, status=404)
-        row = UserPagePreference.objects.filter(user=request.user, page_key=page_key).first()
+        row = UserPagePreference.objects.filter(user=cast(DjangoUser, request.user), page_key=page_key).first()
         return Response(row.settings if row else {})
 
     def put(self, request: Request, page_key: str) -> Response:
