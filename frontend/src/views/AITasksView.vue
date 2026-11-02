@@ -361,7 +361,7 @@ onUnmounted(() => {
             <span v-if="dispositions[row.content]">{{ statusLabels[dispositions[row.content].status] || dispositions[row.content].status }} </span>
             <el-button v-if="dispositions[row.content]?.status === 'IN_REVIEW'" link type="primary" @click="submitManualAnnotation(row.content)">填写结构化标注</el-button>
             <el-button v-if="dispositions[row.content]?.status === 'SUBMITTED'" link type="success" @click="approveManualAnnotation(row.content)">审核通过</el-button>
-            <template v-else>
+            <template v-if="!dispositions[row.content]">
               <el-button link type="primary" @click="handleFailedReview(row.content, 'IN_REVIEW')">转人工</el-button>
               <el-button link @click="handleFailedReview(row.content, 'DEFERRED')">暂缓</el-button>
               <el-button link type="warning" @click="handleFailedReview(row.content, 'EXCLUDED')">排除</el-button>
