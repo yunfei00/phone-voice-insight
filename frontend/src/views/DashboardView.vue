@@ -197,7 +197,7 @@ function openEvidenceRecord(id: number | string): void {
   if (evidenceMetric.value === 'watch_issue_count') {
     void router.push({ path: '/issues', query: { ...evidenceSnapshot.value } })
   } else {
-    void router.push({ path: '/reviews', query: { product: evidenceSnapshot.value.product_id, search: String(id) } })
+    void router.push({ path: '/reviews', query: { product: evidenceSnapshot.value.product_id } })
   }
 }
 
@@ -531,11 +531,13 @@ onBeforeUnmount(() => {
         <el-table-column prop="product" label="产品" width="125" />
         <el-table-column prop="source" label="来源" width="125" />
         <el-table-column prop="title" label="帖子/问题" min-width="170" show-overflow-tooltip />
+        <el-table-column prop="description" label="原文摘要/判定依据" min-width="210" show-overflow-tooltip />
         <el-table-column prop="published_at" label="时间" width="170" />
         <el-table-column label="核对" width="110">
           <template #default="{ row }">
             <el-link v-if="row.source_url" :href="row.source_url" target="_blank" type="primary">原帖链接</el-link>
-            <el-button v-else link type="primary" @click="openEvidenceRecord(row.id)">查看记录</el-button>
+            <el-button v-else-if="evidenceMetric === 'watch_issue_count'" link type="primary" @click="openEvidenceRecord(row.id)">查看问题</el-button>
+            <span v-else>无原帖链接</span>
           </template>
         </el-table-column>
       </el-table>
