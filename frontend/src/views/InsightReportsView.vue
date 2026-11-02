@@ -16,6 +16,19 @@ const selected = ref<InsightReport>()
 const loading = ref(false)
 const generating = ref(false)
 const error = ref('')
+function reportIssueRate(): string {
+  const v = selected.value?.snapshot.overview.valid_feedback ?? 0
+  const n = selected.value?.snapshot.overview.explicit_issue_feedback ?? 0
+  return v > 0 ? `${(100 * n / v).toFixed(1)}%` : '暂无数据'
+}
+function executiveSummary(): string {
+  const snapshot = selected.value?.snapshot
+  if (!snapshot || snapshot.data_insufficient || !snapshot.overview.valid_feedback)
+    return '当前有效样本不足，暂不能形成可靠的用户体验结论。'
+  const top = snapshot.top_issues[0]
+  const watch = snapshot.watchlist.length
+  return `本期有效反馈 ${snapshot.overview.valid_feedback} 条，明确问题反馈占比 ${reportIssueRate()}。${top ? `重点关注「${top.name}」（${top.feedback_count} 条反馈）。` : '暂无明确的高频问题。'}${watch ? `另有 ${watch} 项近期增长或新增问题值得持续跟踪。` : '目前未发现达到观察规则的增长问题。'}`
+}
 async function load(): Promise<void> {
   void savePagePreference('insight-reports', {product_id: productId.value ?? null, report_type: reportType.value})
   loading.value = true
@@ -114,7 +127,7 @@ onMounted(async () => {
           }}</el-tag></button
         ><el-empty
           v-if="!reports.length"
-          description="暂无报告，可点击立即生成报告（需管理员权限）"
+          description="当前筛选范围暂无已生成的报告"
         />
       </aside>
       <article class="tech-panel report-content">
@@ -130,20 +143,12 @@ onMounted(async () => {
             type="warning"
             :closable="false"
           />
+          <section class="executive-summary"><h3>一、本期核心结论</h3><p>{{ executiveSummary() }}</p><small>根据报告快照的实际数据生成，不代表全部手机用户或真实故障率。</small></section>
           <div class="report-metrics">
-            <span
-              >原始反馈<strong>{{ selected.snapshot.overview.raw_feedback }}</strong></span
-            ><span
-              >有效反馈<strong>{{ selected.snapshot.overview.valid_feedback }}</strong></span
-            ><span
-              >AI 已分析<strong>{{ selected.snapshot.overview.ai_analyzed }}</strong></span
-            ><span
-              >明确问题<strong>{{
-                selected.snapshot.overview.explicit_issue_feedback
-              }}</strong></span
-            >
+            <span>用户问题率<strong>{{ reportIssueRate() }}</strong></span>
+            <span>重点观察问题<strong>{{ selected.snapshot.watchlist.length }}</strong></span>
           </div>
-          <h3>TOP 3 问题</h3>
+          <h3>二、重点问题 TOP 3</h3>
           <ol>
             <li v-for="item in selected.snapshot.top_issues" :key="item.id">
               <strong>{{ item.name }}</strong
@@ -152,14 +157,17 @@ onMounted(async () => {
               >
             </li>
           </ol>
-          <h3>近期增长观察</h3>
+          <h3>三、新增风险与异常变化</h3>
           <div v-if="selected.snapshot.watchlist.length" class="watch-report">
             <p v-for="item in selected.snapshot.watchlist" :key="item.id">
               {{ item.name }}：{{ item.is_new ? '新出现' : `${item.growth_rate}%` }}
             </p>
           </div>
           <p v-else class="muted">当前没有达到最小样本与增长阈值的问题。</p>
+          <h3>四、建议关注事项</h3>
+          <p class="muted">建议优先核查重点问题的反馈证据，持续观察新增或增长问题；样本不足时不作产品优劣判断。</p>
           <footer>
+            <p>数据说明：有效样本 {{ selected.snapshot.overview.valid_feedback }} 条 · AI 已分析 {{ selected.snapshot.overview.ai_analyzed }} 条 · 原始反馈 {{ selected.snapshot.overview.raw_feedback }} 条。</p>
             {{ selected.snapshot.disclaimer }}<br />统计截止：{{ format(selected.data_cutoff) }}
           </footer></template
         ><el-empty v-else description="请选择一份报告" />
@@ -232,9 +240,11 @@ onMounted(async () => {
 .report-content h2 {
   font-size: 28px;
 }
+.executive-summary { margin-top: 20px; line-height: 1.8; }
+.executive-summary small { color: var(--pvi-muted); }
 .report-metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
   margin: 20px 0;
 }
