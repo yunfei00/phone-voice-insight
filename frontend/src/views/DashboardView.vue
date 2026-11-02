@@ -173,7 +173,7 @@ function evidencePageChange(page: number): void {
   evidencePage.value = page
   void loadEvidence()
 }
-function openEvidenceRecord(id: number | string): void {
+function openEvidenceRecord(): void {
   if (evidenceMetric.value === 'watch_issue_count') {
     void router.push({ path: '/issues', query: { ...evidenceSnapshot.value } })
   } else {
@@ -241,15 +241,6 @@ const categoryOption = computed<EChartsOption>(() => ({
     },
   ],
 }))
-
-function formatTime(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
-}
 
 async function load(): Promise<void> {
   loading.value = true
