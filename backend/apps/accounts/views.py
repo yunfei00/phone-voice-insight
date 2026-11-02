@@ -18,7 +18,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
 from apps.accounts.ai_service import get_user_ai_provider
-from apps.accounts.models import UserAIConfiguration, UserProfile, UserRole
+from apps.accounts.models import UserAIConfiguration, UserProfile, UserRole, UserPagePreference
 from apps.accounts.permissions import IsAdministrator, IsAnalystOrAdministrator, get_user_role
 from apps.accounts.serializers import (
     LoginSerializer,
@@ -227,3 +227,44 @@ class OllamaModelsView(APIView):
         except (httpx.HTTPError, ValueError, TypeError, KeyError):
             return Response({"error_code": "OLLAMA_UNREACHABLE"}, status=status.HTTP_502_BAD_GATEWAY)
         return Response({"models": models})
+
+
+class DashboardPreferenceView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        preference = UserPagePreference.objects.filter(user=request.user, page_key="dashboard").first()
+        return Response(preference.settings if preference else {})
+
+    def put(self, request: Request) -> Response:
+        from rest_framework import serializers
+
+        class PreferenceSerializer(serializers.Serializer):
+            product_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+            source_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+            preset = serializers.ChoiceField(choices=("7", "30", "90", "custom"))
+            start_date = serializers.DateField(required=False, allow_null=True)
+            end_date = serializers.DateField(required=False, allow_null=True)
+
+            def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+                if attrs["preset"] == "custom":
+                    if not attrs.get("start_date") or not attrs.get("end_date"):
+                        raise serializers.ValidationError("自定义日期必须提供开始和结束日期。")
+                    if attrs["start_date"] > attrs["end_date"]:
+                        raise serializers.ValidationError("开始日期不能晚于结束日期。")
+                return attrs
+
+        serializer = PreferenceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.data
+        from apps.products.models import Product
+        from apps.sources.models import DataSource
+
+        if data.get("product_id") and not Product.objects.filter(pk=data["product_id"], is_active=True).exists():
+            return Response({"product_id": ["产品不存在或已停用"]}, status=400)
+        if data.get("source_id") and not DataSource.objects.filter(pk=data["source_id"], is_active=True).exists():
+            return Response({"source_id": ["来源不存在或已停用"]}, status=400)
+        preference, _ = UserPagePreference.objects.update_or_create(
+            user=request.user, page_key="dashboard", defaults={"settings": data}
+        )
+        return Response(preference.settings)
