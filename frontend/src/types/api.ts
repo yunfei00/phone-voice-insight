@@ -910,6 +910,7 @@ export interface AssistantModelProfilePayload {
 
 export interface AssistantModelList {
   assistant_model_id: number | null
+  structured_model_id: number | null
   default_model: {
     id: null
     name: string
