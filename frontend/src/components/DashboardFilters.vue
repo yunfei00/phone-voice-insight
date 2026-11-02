@@ -16,6 +16,8 @@ const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
 const dateRange = ref<[Date, Date] | null>(null)
 const preset = ref('30')
+const customStart = ref('')
+const customEnd = ref(iso(new Date()))
 
 function iso(date: Date): string {
   const year = date.getFullYear()
@@ -52,6 +54,14 @@ function applyPreset(value: string): void {
   update({ start_date: iso(start), end_date: iso(end) })
 }
 
+function applyCustomDates(): void {
+  if (!customStart.value) return
+  const end = customEnd.value || iso(new Date())
+  if (customStart.value > end) return
+  preset.value = 'custom'
+  update({ start_date: customStart.value, end_date: end })
+}
+
 function applyDates(value: [Date, Date] | null): void {
   if (!value) return
   preset.value = 'custom'
@@ -64,6 +74,8 @@ watch(
     if (start && end) {
       dateRange.value = [new Date(`${start}T00:00:00`), new Date(`${end}T00:00:00`)]
       preset.value = inferPreset(start, end)
+      customStart.value = start
+      customEnd.value = end
     }
   },
   { immediate: true },
@@ -105,19 +117,30 @@ onMounted(async () => {
       <el-option label="最近 90 天" value="90" />
       <el-option label="自定义" value="custom" />
     </el-select>
-    <el-date-picker
-      v-if="preset === 'custom'"
-      v-model="dateRange"
-      type="daterange"
-      start-placeholder="开始日期"
-      end-placeholder="结束日期"
-      :clearable="false"
-      @change="applyDates"
-    />
+    <div v-if="preset === 'custom'" class="custom-range">
+      <el-date-picker
+        v-model="customStart"
+        type="date"
+        value-format="YYYY-MM-DD"
+        placeholder="开始日期"
+        :clearable="false"
+        @change="applyCustomDates"
+      />
+      <span>至</span>
+      <el-date-picker
+        v-model="customEnd"
+        type="date"
+        value-format="YYYY-MM-DD"
+        placeholder="截止日期（默认今天）"
+        :clearable="false"
+        @change="applyCustomDates"
+      />
+    </div>
   </div>
 </template>
 
 <style scoped>
+.custom-range { display: flex; align-items: center; gap: 8px; }
 .dashboard-filters {
   display: flex;
   flex-wrap: wrap;
@@ -133,6 +156,7 @@ onMounted(async () => {
 }
 
 @media (max-width: 720px) {
+  .custom-range { flex-wrap: wrap; width: 100%; }
   .dashboard-filters,
   .dashboard-filters :deep(.el-select),
   .dashboard-filters :deep(.el-date-editor) {
