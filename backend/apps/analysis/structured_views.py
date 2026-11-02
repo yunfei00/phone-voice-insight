@@ -74,7 +74,7 @@ class StructuredBatchViewSet(ViewSet):
         rows = StructuredManualDisposition.objects.filter(content_id__in=content_ids)
         return Response({str(row.content_id): {
             "status": row.status, "reason": row.reason,
-            "failure_category": row.failure_category,
+            "failure_category": row.failure_category, "annotation": row.annotation,
         } for row in rows})
 
     @action(detail=False, methods=("post",), url_path="manual-disposition")
@@ -84,19 +84,37 @@ class StructuredBatchViewSet(ViewSet):
         except (ValueError, TypeError):
             return Response({"error_code": "INVALID_CONTENT_ID"}, status=400)
         new_status = request.data.get("status")
-        if new_status not in ("IN_REVIEW", "DEFERRED", "EXCLUDED"):
+        if new_status not in ("IN_REVIEW", "DEFERRED", "EXCLUDED", "SUBMITTED", "APPROVED"):
             return Response({"error_code": "INVALID_STATUS"}, status=400)
         if not ReviewRecord.objects.filter(pk=content_id).exists():
             return Response({"error_code": "CONTENT_NOT_FOUND"}, status=404)
         reason = str(request.data.get("reason", "")).strip()
-        if new_status in ("DEFERRED", "EXCLUDED") and not reason:
+        if new_status in ("DEFERRED", "EXCLUDED", "SUBMITTED", "APPROVED") and not reason:
             return Response({"error_code": "REASON_REQUIRED"}, status=400)
+        annotation = request.data.get("annotation", {})
+        if new_status in ("SUBMITTED", "APPROVED"):
+            if not isinstance(annotation, dict):
+                return Response({"error_code": "ANNOTATION_REQUIRED"}, status=400)
+            content = ReviewRecord.objects.get(pk=content_id)
+            validation = validate_structured_payload(annotation, content.content)
+            if not validation.valid or validation.payload is None:
+                return Response({"error_code": "INVALID_ANNOTATION", "errors": validation.errors}, status=400)
+            annotation = validation.payload.model_dump(mode="json")
+        if new_status == "APPROVED" and not request.user.is_staff:
+            return Response({"error_code": "REVIEWER_REQUIRED"}, status=403)
         with transaction.atomic():
             item, _ = StructuredManualDisposition.objects.select_for_update().get_or_create(
                 content_id=content_id, defaults={"handler": request.user}
             )
+            if new_status == "APPROVED" and item.status != "SUBMITTED":
+                return Response({"error_code": "SUBMISSION_REQUIRED"}, status=409)
             item.status = new_status
             item.reason = reason
+            if new_status in ("SUBMITTED", "APPROVED"):
+                item.annotation = annotation
+            if new_status == "APPROVED":
+                item.reviewer = request.user
+                item.reviewed_at = timezone.now()
             item.handler = request.user
             item.save()
         return Response({"content_id": content_id, "status": item.status, "reason": item.reason})
