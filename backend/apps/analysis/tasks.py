@@ -11,7 +11,7 @@ from celery import shared_task
 from django.utils import timezone
 
 from apps.accounts.ai_service import get_user_ai_provider
-from apps.analysis.models import AnalysisBatch, AnalysisBatchStatus, AnalysisRun, StructuredRunStatus
+from apps.analysis.models import AnalysisBatch, AnalysisBatchStatus, AnalysisRun, StructuredManualDisposition, StructuredRunStatus
 from apps.analysis.services.analysis_runner import error_counts, run_analysis_batch
 from apps.analysis.services.structured_engine import analyze_content
 from apps.reviews.models import AnalysisCorpusItem
@@ -85,6 +85,10 @@ def run_structured_analysis_batch_task(
         if batch.cost_budget is not None and batch.actual_cost >= batch.cost_budget:
             batch.status = AnalysisBatchStatus.BUDGET_EXCEEDED
             break
+        if StructuredManualDisposition.objects.filter(content_id=content_id, status="EXCLUDED").exists():
+            batch.skipped_count += 1
+            batch.save(update_fields=("skipped_count", "updated_at"))
+            continue
         wait_seconds = next_allowed - time.monotonic()
         if wait_seconds > 0:
             time.sleep(wait_seconds)
