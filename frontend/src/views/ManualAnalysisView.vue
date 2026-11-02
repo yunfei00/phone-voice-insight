@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getManualQueue, getTaxonomy, setManualDisposition, type ManualQueueItem } from '@/api'
+import { getManualQueue, getTaxonomy, setManualDisposition, cancelManualDisposition, type ManualQueueItem } from '@/api'
 import type { TaxonomyDefinition } from '@/types/api'
 
 type Choice = { label: string; value: string }
@@ -78,6 +78,21 @@ async function load() {
     ElMessage.error('人工待办加载失败')
   } finally {
     loading.value = false
+  }
+}
+async function withdraw(item: ManualQueueItem) {
+  try {
+    await ElMessageBox.confirm(
+      '撤销后将移出人工待办，帖子原来的 AI 失败记录仍保留，可以再次自动重试。确认撤销吗？',
+      '撤销人工处理',
+      {type:'warning', confirmButtonText:'确认撤销', cancelButtonText:'取消'},
+    )
+    await cancelManualDisposition(item.content_id)
+    ElMessage.success('已撤销人工处理，原失败记录保持不变')
+    await load()
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error('撤销失败，请稍后重试')
   }
 }
 async function openEditor(item: ManualQueueItem) {
@@ -210,6 +225,7 @@ onMounted(load)
               {{ row.status === 'SUBMITTED' ? '查看或修改' : '开始处理' }}
             </el-button>
             <el-button v-if="row.status === 'SUBMITTED'" link type="success" @click="approve(row)">审核通过</el-button>
+            <el-button v-if="row.status !== 'APPROVED'" link type="danger" @click="withdraw(row)">撤销人工</el-button>
           </template>
         </el-table-column>
       </el-table>
