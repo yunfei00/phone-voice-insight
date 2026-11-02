@@ -938,6 +938,7 @@ export const setManualDisposition = async (payload: {content_id: number; status:
 }
 
 export interface ManualQueueItem {
+  source_url: string
   content_id: number
   title: string
   content: string
