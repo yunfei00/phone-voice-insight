@@ -379,7 +379,8 @@ def run_honor_full_chunk(
             except Exception as exc:
                 item.attempts += 1
                 error_code = str(getattr(exc, "code", "COLLECTION_ERROR")).upper()
-                # Only explicit access-control responses qualify for a verified skip.
+                # Explicit permission errors are skipped; generic information/block pages
+                # are skipped only after bounded retries. Parser/network errors stay failures.
                 blocked_codes = {
                     "HTTP_401",
                     "HTTP_403",
@@ -396,6 +397,8 @@ def run_honor_full_chunk(
                 # generic parser, network, or topic failures.
                 known_blocked_info_threads = {"30417234", "29949239"}
                 access_blocked = error_code in blocked_codes or (
+                    error_code == "BLOCKED_INFO_PAGE" and item.attempts >= max_attempts
+                ) or (
                     error_code in {"BLOCKED_INFO_PAGE", "INVALID_THREAD_PAGE"}
                     and str(item.thread_id) in known_blocked_info_threads
                 )
