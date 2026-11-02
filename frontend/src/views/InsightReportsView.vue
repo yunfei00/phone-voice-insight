@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { getPagePreference, savePagePreference, CopyDocument } from '@element-plus/icons-vue'
+import { CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { onMounted, ref } from 'vue'
 
-import { generateInsightReport, getInsightReport, getInsightReports, getProducts } from '@/api'
+import { getPagePreference, savePagePreference, generateInsightReport, getInsightReport, getInsightReports, getProducts } from '@/api'
 import type { InsightReport, Product } from '@/types/api'
 
 const products = ref<Product[]>([])
