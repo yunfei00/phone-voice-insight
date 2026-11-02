@@ -64,6 +64,19 @@ class StructuredBatchViewSet(ViewSet):
     permission_classes = (IsAnalystOrAdministrator,)
 
 
+    @action(detail=False, methods=("get",), url_path="manual-queue")
+    def manual_queue(self, request: Request) -> Response:
+        records = StructuredManualDisposition.objects.select_related("content", "content__product").order_by("-updated_at")
+        if value := request.query_params.get("status"):
+            records = records.filter(status=value)
+        rows = records[:100]
+        return Response({"count": records.count(), "results": [
+            {"content_id": item.content_id, "title": item.content.title,
+             "content": item.content.content, "product": item.content.product.name,
+             "status": item.status, "reason": item.reason, "annotation": item.annotation}
+            for item in rows
+        ]})
+
     @action(detail=False, methods=("get",), url_path="manual-dispositions")
     def manual_dispositions(self, request: Request) -> Response:
         ids = request.query_params.get("content_ids", "")
