@@ -944,6 +944,13 @@ export const setManualDisposition = async (payload: {content_id: number; status:
   await apiClient.post('/structured-batches/manual-disposition/', payload)
 }
 
+export const quickExcludeManual = async (contentIds: number[], reasonCode: string): Promise<void> => {
+  await apiClient.post('/structured-batches/quick-exclude/', {content_ids: contentIds, reason_code: reasonCode})
+}
+export const undoExcludeManual = async (contentIds: number[]): Promise<void> => {
+  await apiClient.post('/structured-batches/undo-exclude/', {content_ids: contentIds})
+}
+
 export const cancelManualDisposition = async (contentId: number): Promise<void> => {
   await apiClient.post('/structured-batches/cancel-manual/', {content_id: contentId})
 }
