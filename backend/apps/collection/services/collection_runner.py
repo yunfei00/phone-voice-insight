@@ -671,7 +671,29 @@ def run_collection(
     configured_threads = _int_config(config, "max_threads", 100, 200)
     requested_limit = limit_override or task.requested_limit or configured_threads
     max_threads = min(max(int(requested_limit), 1), configured_threads, 200)
-    checkpoint: dict[str, Any] = {}
+    # Persist source-side reply counters across successful incremental runs.
+    # DB reply counts may differ from the source's displayed counter.
+    previous_incremental = (
+        CollectionTask.objects.filter(
+            source_target=source_target,
+            task_type=CollectionTaskType.INCREMENTAL,
+            status=CollectionStatus.SUCCESS,
+        )
+        .exclude(pk=task.pk)
+        .order_by("-finished_at", "-id")
+        .first()
+    )
+    previous_counts = (
+        (previous_incremental.last_checkpoint or {}).get("reply_count_snapshot", {})
+        if previous_incremental else {}
+    )
+    if not isinstance(previous_counts, dict):
+        previous_counts = {}
+    reply_count_snapshot: dict[str, int] = {
+        str(k): int(v) for k, v in previous_counts.items()
+        if str(v).isdigit()
+    }
+    checkpoint: dict[str, Any] = {"reply_count_snapshot": reply_count_snapshot}
     start_page = 1
     start_index = 0
     inserted = skipped = failed = scanned = duplicate_records = 0
@@ -695,7 +717,7 @@ def run_collection(
             _request_log(task.id, source_target.source.code, topic_page, "", raw_topic.metadata)
             thread_links = collector.parse_records(raw_topic)
             if not thread_links:
-                checkpoint = {"topic_page": topic_page, "thread_index": 0, "completed": True}
+                checkpoint = {**checkpoint,"topic_page": topic_page, "thread_index": 0, "completed": True}
                 _save_progress(
                     task.id,
                     run.id,
@@ -739,14 +761,9 @@ def run_collection(
                         and listed_replies is not None
                         and task.id % deep_scan_interval != 0
                     ):
-                        stored_replies = ReviewRecord.objects.filter(
-                            source_id=source_target.source_id,
-                            record_type__in=("REPLY", "OFFICIAL_REPLY"),
-                            raw_data__thread_id=thread_id,
-                        ).count()
-                        if stored_replies == listed_replies:
+                        if reply_count_snapshot.get(thread_id) == listed_replies:
                             fast_skipped_threads += 1
-                            checkpoint = {
+                            checkpoint = {**checkpoint,
                                 "topic_page": topic_page,
                                 "thread_index": thread_index + 1,
                                 "last_thread_id": thread_id,
@@ -838,7 +855,7 @@ def run_collection(
                         excluded_aliases=[str(value) for value in target.config.get("excluded_product_aliases", [])],
                     ):
                         skipped += 1
-                        checkpoint = {
+                        checkpoint = {**checkpoint,
                             "topic_page": topic_page,
                             "thread_index": thread_index + 1,
                             "last_thread_id": thread_id,
@@ -889,7 +906,9 @@ def run_collection(
                             skipped += 1
                             duplicate_records += 1
 
-                    checkpoint = {
+                    if listed_replies is not None:
+                        reply_count_snapshot[thread_id] = listed_replies
+                    checkpoint = {**checkpoint,
                         "topic_page": topic_page,
                         "thread_index": thread_index + 1,
                         "last_thread_id": thread_id,
@@ -963,7 +982,7 @@ def run_collection(
                     )
             if scanned >= max_threads:
                 break
-            checkpoint = {"topic_page": topic_page + 1, "thread_index": 0}
+            checkpoint = {**checkpoint,"topic_page": topic_page + 1, "thread_index": 0}
             _save_progress(
                 task.id,
                 run.id,
