@@ -65,7 +65,7 @@ const baseNavigationItems = [
 const navigationItems = computed(() => [
   ...baseNavigationItems
     .filter((item) =>
-      item.path === '/ai-settings' ? auth.isAdmin : !item.advanced || auth.canWrite,
+      item.path === '/ai-settings' ? auth.isAdmin : (auth.canWrite || (!item.advanced && !['/products', '/reviews', '/data-quality', '/structured-analysis'].includes(item.path))),
     )
     .flatMap((item) =>
       item.path === '/products' && auth.isAdmin
