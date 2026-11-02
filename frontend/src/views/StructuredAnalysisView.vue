@@ -520,7 +520,11 @@ onUnmounted(() => {
         有效语料 {{ corpusProgress.total }} · 已完成 {{ corpusProgress.completed }} · 剩余
         {{ corpusProgress.remaining }}
       </p>
-      <p>AI 完成 {{ corpusProgress.ai_completed }} · 人工已处置 {{ corpusProgress.manual_handled }}（排除 {{ corpusProgress.manual_excluded }}） · 人工处理中 {{ corpusProgress.manual_pending }}</p>
+      <p>
+        AI 完成 {{ corpusProgress.ai_completed }} · 人工已处置
+        {{ corpusProgress.manual_handled }}（排除 {{ corpusProgress.manual_excluded }}） ·
+        人工处理中 {{ corpusProgress.manual_pending }}
+      </p>
       <p v-if="corpusProgress.batch">
         批次 #{{ corpusProgress.batch.id }} · {{ batchStatusLabel(corpusProgress.batch.status) }} ·
         本批

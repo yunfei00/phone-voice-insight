@@ -84,7 +84,11 @@ urlpatterns = [
     path("api/v1/ai-configuration/ollama-models/", OllamaModelsView.as_view(), name="ollama-models"),
     path("api/v1/ai-configuration/test/", UserAIConnectivityView.as_view(), name="ai-configuration-test"),
     path("api/v1/dashboard/overview/", DashboardOverviewView.as_view(), name="dashboard-overview"),
-    path("api/v1/dashboard/metrics/<str:metric>/evidence/", DashboardMetricEvidenceView.as_view(), name="dashboard-metric-evidence"),
+    path(
+        "api/v1/dashboard/metrics/<str:metric>/evidence/",
+        DashboardMetricEvidenceView.as_view(),
+        name="dashboard-metric-evidence",
+    ),
     path("api/v1/dashboard/trends/", DashboardTrendsView.as_view(), name="dashboard-trends"),
     path("api/v1/dashboard/categories/", DashboardCategoriesView.as_view(), name="dashboard-categories"),
     path("api/v1/dashboard/products/", DashboardProductsView.as_view(), name="dashboard-products"),

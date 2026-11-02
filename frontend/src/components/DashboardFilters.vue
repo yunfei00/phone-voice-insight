@@ -134,7 +134,11 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.custom-range { display: flex; align-items: center; gap: 8px; }
+.custom-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .dashboard-filters {
   display: flex;
   flex-wrap: wrap;
@@ -150,7 +154,10 @@ onMounted(async () => {
 }
 
 @media (max-width: 720px) {
-  .custom-range { flex-wrap: wrap; width: 100%; }
+  .custom-range {
+    flex-wrap: wrap;
+    width: 100%;
+  }
   .dashboard-filters,
   .dashboard-filters :deep(.el-select),
   .dashboard-filters :deep(.el-date-editor) {

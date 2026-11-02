@@ -272,6 +272,7 @@ class DashboardPreferenceView(APIView):
 
 class PagePreferenceView(APIView):
     """Per-user, per-page filter persistence (no chat text or secrets)."""
+
     permission_classes = (IsAuthenticated,)
     allowed = {
         "ai-assistant": {"product_id", "source_id", "start_date", "end_date"},

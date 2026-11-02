@@ -336,10 +336,16 @@ onMounted(() => {
         <h3>AI 结构化分析 / AI 任务中心使用模型</h3>
         <div class="model-actions">
           <el-select v-model="structuredSelection" placeholder="选择分析模型" style="width: 300px">
-            <el-option v-for="item in assistantModels?.results.filter((profile) => profile.is_active)"
-              :key="item.id" :label="`${item.name}（${item.model}）`" :value="item.id" />
+            <el-option
+              v-for="item in assistantModels?.results.filter((profile) => profile.is_active)"
+              :key="item.id"
+              :label="`${item.name}（${item.model}）`"
+              :value="item.id"
+            />
           </el-select>
-          <el-button type="primary" :loading="assigning" @click="assignStructuredModel">设为结构化分析模型</el-button>
+          <el-button type="primary" :loading="assigning" @click="assignStructuredModel"
+            >设为结构化分析模型</el-button
+          >
         </div>
         <h3>智能助手使用模型</h3>
         <div class="model-actions">

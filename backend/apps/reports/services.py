@@ -252,7 +252,8 @@ def watchlist_diagnostics(params: Mapping[str, Any]) -> dict[str, Any]:
     watched.sort(
         key=lambda row: (
             row["severity"] in ("CRITICAL", "HIGH"),
-            row["recent_count"] >= minimum and (row["is_new"] or (row["growth_rate"] is not None and row["growth_rate"] >= growth_threshold)),
+            row["recent_count"] >= minimum
+            and (row["is_new"] or (row["growth_rate"] is not None and row["growth_rate"] >= growth_threshold)),
             row["feedback_count"],
         ),
         reverse=True,

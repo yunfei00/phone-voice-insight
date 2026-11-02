@@ -205,7 +205,8 @@ class OpenAICompatibleProvider(AIProvider):
                 "AI_REQUEST_TOO_LARGE",
                 f"HTTP 413: request_bytes={request_bytes}, prompt_chars={sum(len(m.get('content', '')) for m in messages)}, "
                 f"server={response.headers.get('server', 'unknown')[:60]}, content_type={response.headers.get('content-type', 'unknown')[:60]}",
-                http_status=413, request_id=request_id,
+                http_status=413,
+                request_id=request_id,
             )
         if response.status_code >= 400:
             raise AIProviderError(

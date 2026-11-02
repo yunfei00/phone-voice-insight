@@ -344,14 +344,30 @@ class AnalysisReviewRecord(TimeStampedModel):
 
 class StructuredManualDisposition(TimeStampedModel):
     """Human takeover for a repeatedly failed review; does not impersonate AI success."""
+
     content = models.OneToOneField(ReviewRecord, on_delete=models.CASCADE, related_name="manual_structured_disposition")
-    status = models.CharField(max_length=20, default="IN_REVIEW", choices=[
-        ("IN_REVIEW", "待人工处理"), ("DEFERRED", "暂缓"), ("EXCLUDED", "排除"),
-        ("SUBMITTED", "待审核"), ("APPROVED", "已审核"),
-    ])
+    status = models.CharField(
+        max_length=20,
+        default="IN_REVIEW",
+        choices=[
+            ("IN_REVIEW", "待人工处理"),
+            ("DEFERRED", "暂缓"),
+            ("EXCLUDED", "排除"),
+            ("SUBMITTED", "待审核"),
+            ("APPROVED", "已审核"),
+        ],
+    )
     failure_category = models.CharField(max_length=40, default="UNKNOWN")
     reason = models.TextField(blank=True)
     annotation = models.JSONField(default=dict, blank=True)
-    handler = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="manual_structured_handled")
-    reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="manual_structured_approved")
+    handler = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="manual_structured_handled"
+    )
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="manual_structured_approved",
+    )
     reviewed_at = models.DateTimeField(null=True, blank=True)

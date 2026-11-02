@@ -68,14 +68,25 @@ async function loadBase() {
     products.value = productData.results
     sources.value = sourceData.results
     let saved: Record<string, unknown> = {}
-    try { saved = await getPagePreference('ai-assistant') } catch { /* optional */ }
+    try {
+      saved = await getPagePreference('ai-assistant')
+    } catch {
+      /* optional */
+    }
     const chosenProduct = queryString('product_id') ?? saved.product_id
     const chosenSource = queryString('source_id') ?? saved.source_id
-    productId.value = chosenProduct && products.value.some(p => p.id === Number(chosenProduct)) ? Number(chosenProduct) : undefined
-    sourceId.value = chosenSource && sources.value.some(p => p.id === Number(chosenSource)) ? Number(chosenSource) : undefined
+    productId.value =
+      chosenProduct && products.value.some((p) => p.id === Number(chosenProduct))
+        ? Number(chosenProduct)
+        : undefined
+    sourceId.value =
+      chosenSource && sources.value.some((p) => p.id === Number(chosenSource))
+        ? Number(chosenSource)
+        : undefined
     const start = queryString('start_date') ?? saved.start_date
     const end = queryString('end_date') ?? saved.end_date
-    if (typeof start === 'string' && typeof end === 'string' && start && end) dateRange.value = [start, end]
+    if (typeof start === 'string' && typeof end === 'string' && start && end)
+      dateRange.value = [start, end]
     if (queryString('question')) draft.value = queryString('question') || ''
     if (conversationData.length) await selectConversation(conversationData[0].id)
     else await newConversation()

@@ -63,20 +63,32 @@ class StructuredRunViewSet(ReadOnlyModelViewSet):
 class StructuredBatchViewSet(ViewSet):
     permission_classes = (IsAnalystOrAdministrator,)
 
-
     @action(detail=False, methods=("get",), url_path="manual-queue")
     def manual_queue(self, request: Request) -> Response:
-        records = StructuredManualDisposition.objects.select_related("content", "content__product").order_by("-updated_at")
+        records = StructuredManualDisposition.objects.select_related("content", "content__product").order_by(
+            "-updated_at"
+        )
         if value := request.query_params.get("status"):
             records = records.filter(status=value)
         rows = records[:100]
-        return Response({"count": records.count(), "results": [
-            {"content_id": item.content_id, "title": item.content.title,
-             "content": item.content.content, "product": item.content.product.name,
-             "source_url": item.content.source_url,
-             "status": item.status, "reason": item.reason, "annotation": item.annotation}
-            for item in rows
-        ]})
+        return Response(
+            {
+                "count": records.count(),
+                "results": [
+                    {
+                        "content_id": item.content_id,
+                        "title": item.content.title,
+                        "content": item.content.content,
+                        "product": item.content.product.name,
+                        "source_url": item.content.source_url,
+                        "status": item.status,
+                        "reason": item.reason,
+                        "annotation": item.annotation,
+                    }
+                    for item in rows
+                ],
+            }
+        )
 
     @action(detail=False, methods=("post",), url_path="cancel-manual")
     def cancel_manual(self, request: Request) -> Response:
@@ -151,10 +163,17 @@ class StructuredBatchViewSet(ViewSet):
         except ValueError:
             return Response({"error_code": "INVALID_CONTENT_IDS"}, status=400)
         rows = StructuredManualDisposition.objects.filter(content_id__in=content_ids)
-        return Response({str(row.content_id): {
-            "status": row.status, "reason": row.reason,
-            "failure_category": row.failure_category, "annotation": row.annotation,
-        } for row in rows})
+        return Response(
+            {
+                str(row.content_id): {
+                    "status": row.status,
+                    "reason": row.reason,
+                    "failure_category": row.failure_category,
+                    "annotation": row.annotation,
+                }
+                for row in rows
+            }
+        )
 
     @action(detail=False, methods=("post",), url_path="manual-disposition")
     def manual_disposition(self, request: Request) -> Response:
@@ -197,19 +216,26 @@ class StructuredBatchViewSet(ViewSet):
                 payload = validation.payload
                 AnalysisRun.objects.filter(content_id=content_id, is_current=True).update(is_current=False)
                 manual_run = AnalysisRun.objects.create(
-                    content=content, status=StructuredRunStatus.SUCCEEDED,
-                    provider="manual", model="human-reviewed",
+                    content=content,
+                    status=StructuredRunStatus.SUCCEEDED,
+                    provider="manual",
+                    model="human-reviewed",
                     prompt_version="manual_review_v1",
                     input_hash="manual:" + str(item.pk),
                     configuration_hash="manual:" + str(item.pk) + ":" + str(timezone.now().timestamp()),
-                    is_current=True, completed_at=timezone.now(),
+                    is_current=True,
+                    completed_at=timezone.now(),
                 )
                 analysis = StructuredAnalysis.objects.create(
-                    run=manual_run, content=content,
+                    run=manual_run,
+                    content=content,
                     overall_sentiment=payload.overall_sentiment,
-                    language=payload.language, content_type=payload.content_type,
-                    relevance=payload.relevance, summary=payload.summary,
-                    model_mentions=payload.model_mentions, schema_valid=True,
+                    language=payload.language,
+                    content_type=payload.content_type,
+                    relevance=payload.relevance,
+                    summary=payload.summary,
+                    model_mentions=payload.model_mentions,
+                    schema_valid=True,
                     review_required=False,
                 )
                 OpinionAspect.objects.bulk_create(
@@ -354,19 +380,29 @@ class StructuredBatchViewSet(ViewSet):
         pending = corpus.exclude(id__in=completed).exclude(id__in=manual)
         remaining = pending.count()
         ai_completed = corpus.filter(id__in=completed).count()
-        manual_handled = corpus.exclude(id__in=completed).filter(
-            id__in=StructuredManualDisposition.objects.filter(
-                status__in=("EXCLUDED", "APPROVED"),
-            ).values("content_id")
-        ).count()
-        manual_pending = corpus.exclude(id__in=completed).filter(
-            id__in=StructuredManualDisposition.objects.filter(
-                status__in=("IN_REVIEW", "SUBMITTED", "DEFERRED")
-            ).values("content_id")
-        ).count()
-        manual_excluded = corpus.exclude(id__in=completed).filter(
-            id__in=StructuredManualDisposition.objects.filter(status="EXCLUDED").values("content_id")
-        ).count()
+        manual_handled = (
+            corpus.exclude(id__in=completed)
+            .filter(
+                id__in=StructuredManualDisposition.objects.filter(
+                    status__in=("EXCLUDED", "APPROVED"),
+                ).values("content_id")
+            )
+            .count()
+        )
+        manual_pending = (
+            corpus.exclude(id__in=completed)
+            .filter(
+                id__in=StructuredManualDisposition.objects.filter(
+                    status__in=("IN_REVIEW", "SUBMITTED", "DEFERRED")
+                ).values("content_id")
+            )
+            .count()
+        )
+        manual_excluded = (
+            corpus.exclude(id__in=completed)
+            .filter(id__in=StructuredManualDisposition.objects.filter(status="EXCLUDED").values("content_id"))
+            .count()
+        )
         active = (
             AnalysisBatch.objects.filter(
                 created_by=cast(User, request.user),
@@ -423,7 +459,12 @@ class StructuredBatchViewSet(ViewSet):
                 is_current=True,
                 status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
             ).values("content_id")
-            corpus = final_corpus_reviews().filter(product_id=product_id).exclude(pk__in=completed).exclude(pk__in=StructuredManualDisposition.objects.values("content_id"))
+            corpus = (
+                final_corpus_reviews()
+                .filter(product_id=product_id)
+                .exclude(pk__in=completed)
+                .exclude(pk__in=StructuredManualDisposition.objects.values("content_id"))
+            )
             source_ids = list(corpus.order_by().values_list("source_id", flat=True).distinct())
             queued = 0
             batch_ids = []
@@ -521,13 +562,19 @@ class StructuredBatchViewSet(ViewSet):
         assert pk is not None
         with transaction.atomic():
             original = AnalysisBatch.objects.select_for_update().get(pk=pk)
-            if original.status in (AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING, AnalysisBatchStatus.PAUSED):
+            if original.status in (
+                AnalysisBatchStatus.PENDING,
+                AnalysisBatchStatus.RUNNING,
+                AnalysisBatchStatus.PAUSED,
+            ):
                 return Response({"error_code": "BATCH_BUSY"}, status=status.HTTP_409_CONFLICT)
             manual_ids = StructuredManualDisposition.objects.values("content_id")
             failed_ids = list(
                 AnalysisRun.objects.filter(batch=original, is_current=True, status=StructuredRunStatus.FAILED)
                 .exclude(content_id__in=manual_ids)
-                .order_by("content_id").values_list("content_id", flat=True).distinct()
+                .order_by("content_id")
+                .values_list("content_id", flat=True)
+                .distinct()
             )
             if not failed_ids:
                 return Response({"error_code": "NO_FAILED_ITEMS"}, status=status.HTTP_409_CONFLICT)
@@ -541,7 +588,8 @@ class StructuredBatchViewSet(ViewSet):
             result = run_structured_analysis_batch_task.delay(batch_id, failed_ids, retry_failed=True)
         except Exception as exc:
             AnalysisBatch.objects.filter(pk=batch_id, status=AnalysisBatchStatus.PENDING).update(
-                status=AnalysisBatchStatus.FAILED, error_message=f"TASK_DISPATCH_FAILED: {type(exc).__name__}"[:1000],
+                status=AnalysisBatchStatus.FAILED,
+                error_message=f"TASK_DISPATCH_FAILED: {type(exc).__name__}"[:1000],
                 finished_at=timezone.now(),
             )
             return Response({"error_code": "TASK_DISPATCH_FAILED"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)

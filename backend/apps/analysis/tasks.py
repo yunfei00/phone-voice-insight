@@ -11,7 +11,13 @@ from celery import shared_task
 from django.utils import timezone
 
 from apps.accounts.ai_service import get_user_ai_provider
-from apps.analysis.models import AnalysisBatch, AnalysisBatchStatus, AnalysisRun, StructuredManualDisposition, StructuredRunStatus
+from apps.analysis.models import (
+    AnalysisBatch,
+    AnalysisBatchStatus,
+    AnalysisRun,
+    StructuredManualDisposition,
+    StructuredRunStatus,
+)
 from apps.analysis.services.analysis_runner import error_counts, run_analysis_batch
 from apps.analysis.services.structured_engine import analyze_content
 from apps.reviews.models import AnalysisCorpusItem
@@ -57,16 +63,24 @@ def run_structured_analysis_batch_task(
         batch.save()
         return {"batch_id": batch_id, "status": batch.status}
     if retry_failed:
-        previous = AnalysisRun.objects.filter(
-            batch_id=batch_id, content_id__in=content_ids,
-            is_current=True, status=StructuredRunStatus.FAILED,
-        ).values("content_id").distinct().count()
+        previous = (
+            AnalysisRun.objects.filter(
+                batch_id=batch_id,
+                content_id__in=content_ids,
+                is_current=True,
+                status=StructuredRunStatus.FAILED,
+            )
+            .values("content_id")
+            .distinct()
+            .count()
+        )
         batch.failed_count = max(0, batch.failed_count - previous)
     batch.status = AnalysisBatchStatus.RUNNING
     batch.started_at = timezone.now()
     batch.save()
     try:
         from apps.accounts.ai_service import get_structured_ai_provider
+
         provider = get_structured_ai_provider(batch.created_by)
     except Exception as exc:
         batch.status = AnalysisBatchStatus.FAILED
@@ -185,8 +199,12 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
                 .values("content_id")
             )
             from apps.analysis.models import StructuredManualDisposition
-            corpus = final_corpus_reviews().exclude(pk__in=completed).exclude(pk__in=failed).exclude(
-                pk__in=StructuredManualDisposition.objects.values("content_id")
+
+            corpus = (
+                final_corpus_reviews()
+                .exclude(pk__in=completed)
+                .exclude(pk__in=failed)
+                .exclude(pk__in=StructuredManualDisposition.objects.values("content_id"))
             )
             if product_id is not None:
                 corpus = corpus.filter(product_id=product_id)

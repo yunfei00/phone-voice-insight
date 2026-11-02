@@ -48,13 +48,15 @@ def get_structured_ai_provider(user: User) -> AIProvider:
     profile = selected.profile
     if not profile.is_active:
         raise AIProviderError("AI_NOT_CONFIGURED", "Selected structured analysis model is disabled")
-    return get_ai_provider(AIProviderSettings(
-        provider=profile.provider,
-        base_url=profile.base_url,
-        api_key=profile.get_api_key(),
-        model=profile.model,
-        thinking_mode=profile.thinking_mode,
-        timeout_seconds=profile.timeout_seconds,
-        temperature=float(profile.temperature),
-        max_output_tokens=profile.max_output_tokens,
-    ))
+    return get_ai_provider(
+        AIProviderSettings(
+            provider=profile.provider,
+            base_url=profile.base_url,
+            api_key=profile.get_api_key(),
+            model=profile.model,
+            thinking_mode=profile.thinking_mode,
+            timeout_seconds=profile.timeout_seconds,
+            temperature=float(profile.temperature),
+            max_output_tokens=profile.max_output_tokens,
+        )
+    )

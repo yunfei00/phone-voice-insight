@@ -69,7 +69,9 @@ class AssistantModelProfileViewSet(viewsets.ModelViewSet):
             {
                 "results": self.get_serializer(profiles, many=True).data,
                 "assistant_model_id": selection.profile_id if selection else None,
-                "structured_model_id": AssistantModelSelection.objects.filter(slot="structured").values_list("profile_id", flat=True).first(),
+                "structured_model_id": AssistantModelSelection.objects.filter(slot="structured")
+                .values_list("profile_id", flat=True)
+                .first(),
             }
         )
 

@@ -52,11 +52,12 @@ function readPreference(): SavedDashboardFilters {
     const preset = ['7', '30', '90', 'custom'].includes(String(value.preset))
       ? String(value.preset)
       : '30'
-    const dates = preset === 'custom' &&
+    const dates =
+      preset === 'custom' &&
       /^\d{4}-\d{2}-\d{2}$/.test(String(value.start_date || '')) &&
       /^\d{4}-\d{2}-\d{2}$/.test(String(value.end_date || ''))
-      ? { start_date: String(value.start_date), end_date: String(value.end_date) }
-      : rollingDates(Number(preset === 'custom' ? '30' : preset))
+        ? { start_date: String(value.start_date), end_date: String(value.end_date) }
+        : rollingDates(Number(preset === 'custom' ? '30' : preset))
     return {
       product_id: Number.isSafeInteger(product_id) && product_id > 0 ? product_id : undefined,
       source_id: Number.isSafeInteger(source_id) && source_id > 0 ? source_id : undefined,
@@ -74,14 +75,18 @@ const queryId = (value: unknown): number | undefined => {
   return Number.isSafeInteger(id) && id > 0 ? id : undefined
 }
 const filters = ref<FilterValues>({
-  product_id: route.query.product_id !== undefined
-    ? queryId(route.query.product_id) : savedFilters.product_id,
-  source_id: route.query.source_id !== undefined
-    ? queryId(route.query.source_id) : savedFilters.source_id,
-  start_date: typeof route.query.start_date === 'string'
-    ? route.query.start_date : savedFilters.start_date || '',
-  end_date: typeof route.query.end_date === 'string'
-    ? route.query.end_date : savedFilters.end_date || '',
+  product_id:
+    route.query.product_id !== undefined
+      ? queryId(route.query.product_id)
+      : savedFilters.product_id,
+  source_id:
+    route.query.source_id !== undefined ? queryId(route.query.source_id) : savedFilters.source_id,
+  start_date:
+    typeof route.query.start_date === 'string'
+      ? route.query.start_date
+      : savedFilters.start_date || '',
+  end_date:
+    typeof route.query.end_date === 'string' ? route.query.end_date : savedFilters.end_date || '',
 })
 function savePreference(value: FilterValues): void {
   try {
@@ -90,15 +95,20 @@ function savePreference(value: FilterValues): void {
       const range = rollingDates(days)
       return range.start_date === value.start_date && range.end_date === value.end_date
     })
-    const preset = rolling ? String(rolling) :
-      saved.preset !== 'custom' && !value.start_date && !value.end_date ? '30' : 'custom'
+    const preset = rolling
+      ? String(rolling)
+      : saved.preset !== 'custom' && !value.start_date && !value.end_date
+        ? '30'
+        : 'custom'
     window.localStorage.setItem(preferenceKey, JSON.stringify({ ...value, preset }))
     void saveDashboardPreference({
       product_id: value.product_id ?? null,
       source_id: value.source_id ?? null,
       preset: preset as '7' | '30' | '90' | 'custom',
       ...(preset === 'custom' ? { start_date: value.start_date, end_date: value.end_date } : {}),
-    }).catch(() => { /* Keep the local fallback if the network is unavailable. */ })
+    }).catch(() => {
+      /* Keep the local fallback if the network is unavailable. */
+    })
   } catch {
     // Storage may be disabled; dashboard still works with in-memory filters.
   }
@@ -117,17 +127,38 @@ let refreshTimer: number | undefined
 const issueRate = computed(() => {
   const valid = overview.value?.valid_feedback ?? 0
   const issues = overview.value?.explicit_issue_feedback ?? 0
-  return valid > 0 ? `${(100 * issues / valid).toFixed(1)}%` : '暂无数据'
+  return valid > 0 ? `${((100 * issues) / valid).toFixed(1)}%` : '暂无数据'
 })
 const topIssue = computed(() => categories.value[0]?.name || '暂无数据')
 const metricCards = computed(() => [
-  { key: 'explicit_issue_feedback', label: '用户问题率', value: issueRate.value, note: '明确问题反馈 / 有效反馈（非产品故障率）' },
-  { key: 'watch_issue_count', label: '重点风险问题', value: overview.value?.watch_issue_count ?? 0, note: '达到高频、严重或增长规则的问题' },
-  { key: undefined, label: '最受关注问题', value: topIssue.value, note: '当前筛选周期反馈最多的问题类别' },
-  { key: undefined, label: '有效样本', value: overview.value?.valid_feedback ?? 0, note: '仅用于说明统计样本规模' },
+  {
+    key: 'explicit_issue_feedback',
+    label: '用户问题率',
+    value: issueRate.value,
+    note: '明确问题反馈 / 有效反馈（非产品故障率）',
+  },
+  {
+    key: 'watch_issue_count',
+    label: '重点风险问题',
+    value: overview.value?.watch_issue_count ?? 0,
+    note: '达到高频、严重或增长规则的问题',
+  },
+  {
+    key: undefined,
+    label: '最受关注问题',
+    value: topIssue.value,
+    note: '当前筛选周期反馈最多的问题类别',
+  },
+  {
+    key: undefined,
+    label: '有效样本',
+    value: overview.value?.valid_feedback ?? 0,
+    note: '仅用于说明统计样本规模',
+  },
 ])
 const leaderSummary = computed(() => {
-  if (!overview.value?.valid_feedback) return '当前筛选范围缺少足够的有效反馈，暂不能形成可靠的用户体验结论。'
+  if (!overview.value?.valid_feedback)
+    return '当前筛选范围缺少足够的有效反馈，暂不能形成可靠的用户体验结论。'
   const issueCount = overview.value.explicit_issue_feedback
   const watch = overview.value.watch_issue_count
   return `本期有效反馈 ${overview.value.valid_feedback} 条，其中明确问题反馈 ${issueCount} 条，问题反馈占比 ${issueRate.value}。最受关注的类别为「${topIssue.value}」。${watch ? `有 ${watch} 项问题达到重点观察规则，建议优先核查风险变化与原帖证据。` : '目前没有达到重点观察规则的问题。'}`
@@ -144,15 +175,19 @@ const metricDescriptions: Record<DashboardMetricKey, string> = {
   raw_feedback: '原始反馈记录数，包含帖子和回复；以发布时间为准，缺失时采用采集时间。',
   valid_feedback: '原始记录中治理判定可用于 AI 且排除官方内容的去重记录数。',
   ai_analyzed: '当前有效的结构化分析中，通过校验、不需要人工复核的独立原始记录数。',
-  explicit_issue_feedback: '结构化分析中有明确负面问题证据的独立原始记录数，同一记录多个问题只计算一次。',
-  watch_issue_count: '按所选时间范围统计高频、严重、持续或近期增长的问题，最多展示五项；不是全部负面反馈。',
+  explicit_issue_feedback:
+    '结构化分析中有明确负面问题证据的独立原始记录数，同一记录多个问题只计算一次。',
+  watch_issue_count:
+    '按所选时间范围统计高频、严重、持续或近期增长的问题，最多展示五项；不是全部负面反馈。',
 }
 async function loadEvidence(): Promise<void> {
   evidenceLoading.value = true
   evidenceError.value = ''
   try {
     evidence.value = await getDashboardMetricEvidence(evidenceMetric.value, {
-      ...evidenceSnapshot.value, page: evidencePage.value, page_size: 20,
+      ...evidenceSnapshot.value,
+      page: evidencePage.value,
+      page_size: 20,
     })
   } catch (reason) {
     evidenceError.value = reason instanceof Error ? reason.message : '核对明细加载失败'
@@ -327,14 +362,33 @@ onMounted(() => {
         }
         // Explicit URL filters take precedence over stored user preferences.
         filters.value = {
-          product_id: route.query.product_id !== undefined ? queryId(route.query.product_id) : fromServer.product_id,
-          source_id: route.query.source_id !== undefined ? queryId(route.query.source_id) : fromServer.source_id,
-          start_date: typeof route.query.start_date === 'string' ? route.query.start_date : fromServer.start_date,
-          end_date: typeof route.query.end_date === 'string' ? route.query.end_date : fromServer.end_date,
+          product_id:
+            route.query.product_id !== undefined
+              ? queryId(route.query.product_id)
+              : fromServer.product_id,
+          source_id:
+            route.query.source_id !== undefined
+              ? queryId(route.query.source_id)
+              : fromServer.source_id,
+          start_date:
+            typeof route.query.start_date === 'string'
+              ? route.query.start_date
+              : fromServer.start_date,
+          end_date:
+            typeof route.query.end_date === 'string' ? route.query.end_date : fromServer.end_date,
         }
-        try { window.localStorage.setItem(preferenceKey, JSON.stringify({ ...filters.value, preset: preference.preset })) } catch { /* ignore */ }
+        try {
+          window.localStorage.setItem(
+            preferenceKey,
+            JSON.stringify({ ...filters.value, preset: preference.preset }),
+          )
+        } catch {
+          /* ignore */
+        }
       }
-    } catch { /* Offline: keep the local preference. */ }
+    } catch {
+      /* Offline: keep the local preference. */
+    }
     await load()
   })()
   refreshTimer = window.setInterval(() => {
@@ -396,14 +450,31 @@ onBeforeUnmount(() => {
         :content="card.note"
         placement="top"
       >
-        <article class="metric-card" :class="{ clickable: card.key }" :role="card.key ? 'button' : undefined" :tabindex="card.key ? 0 : undefined" @click="openEvidence(card.key as DashboardMetricKey | undefined)" @keydown.enter="openEvidence(card.key as DashboardMetricKey | undefined)" @keydown.space.prevent="openEvidence(card.key as DashboardMetricKey | undefined)">
+        <article
+          class="metric-card"
+          :class="{ clickable: card.key }"
+          :role="card.key ? 'button' : undefined"
+          :tabindex="card.key ? 0 : undefined"
+          @click="openEvidence(card.key as DashboardMetricKey | undefined)"
+          @keydown.enter="openEvidence(card.key as DashboardMetricKey | undefined)"
+          @keydown.space.prevent="openEvidence(card.key as DashboardMetricKey | undefined)"
+        >
           <span>{{ card.label }} <small v-if="card.key">点击核对明细 ›</small></span
           ><strong>{{ card.value }}</strong
           ><small>{{ card.note }}</small>
         </article>
       </el-tooltip>
     </section>
-    <section class="tech-panel leader-summary"><div class="panel-heading"><div><h2>本期用户声音摘要</h2><p>基于当前筛选条件的真实统计数据生成，不包含模型推测</p></div></div><p>{{ leaderSummary }}</p><small>统计仅代表已收集的用户反馈，不代表全部手机用户或真实故障率。</small></section>
+    <section class="tech-panel leader-summary">
+      <div class="panel-heading">
+        <div>
+          <h2>本期用户声音摘要</h2>
+          <p>基于当前筛选条件的真实统计数据生成，不包含模型推测</p>
+        </div>
+      </div>
+      <p>{{ leaderSummary }}</p>
+      <small>统计仅代表已收集的用户反馈，不代表全部手机用户或真实故障率。</small>
+    </section>
     <section class="dashboard-grid two-columns">
       <article class="tech-panel chart-panel">
         <div class="panel-heading">
@@ -456,7 +527,14 @@ onBeforeUnmount(() => {
             <strong>{{ item.product_name }}</strong>
             <div>
               <span>有效样本 {{ item.valid_feedback }}</span
-              ><span>问题率 {{ item.valid_feedback ? (100 * item.explicit_issue_feedback / item.valid_feedback).toFixed(1) + '%' : '暂无' }}</span>
+              ><span
+                >问题率
+                {{
+                  item.valid_feedback
+                    ? ((100 * item.explicit_issue_feedback) / item.valid_feedback).toFixed(1) + '%'
+                    : '暂无'
+                }}</span
+              >
             </div>
             <div>
               <span>明确问题 {{ item.explicit_issue_feedback }}</span
@@ -489,34 +567,91 @@ onBeforeUnmount(() => {
         <el-empty v-else description="当前周期没有达到关注规则的问题，可点击上方指标查看规则" />
       </article>
     </section>
-    <el-dialog v-model="evidenceVisible" title="驾驶舱指标核对明细" width="min(920px, 96vw)" destroy-on-close>
+    <el-dialog
+      v-model="evidenceVisible"
+      title="驾驶舱指标核对明细"
+      width="min(920px, 96vw)"
+      destroy-on-close
+    >
       <div class="evidence-summary">
         <h3>{{ metricCards.find((card) => card.key === evidenceMetric)?.label }}</h3>
         <p>{{ metricDescriptions[evidenceMetric] }}</p>
-        <p>产品 ID：{{ evidenceSnapshot.product_id || '全部' }} · 来源 ID：{{ evidenceSnapshot.source_id || '全部' }}</p>
-        <p>实际统计日期：{{ evidence?.start_date || evidenceSnapshot.start_date || '默认最近30天' }} 至 {{ evidence?.end_date || evidenceSnapshot.end_date || '今天' }}</p>
+        <p>
+          产品 ID：{{ evidenceSnapshot.product_id || '全部' }} · 来源 ID：{{
+            evidenceSnapshot.source_id || '全部'
+          }}
+        </p>
+        <p>
+          实际统计日期：{{
+            evidence?.start_date || evidenceSnapshot.start_date || '默认最近30天'
+          }}
+          至 {{ evidence?.end_date || evidenceSnapshot.end_date || '今天' }}
+        </p>
         <strong>核对总数：{{ evidence?.count ?? '加载中' }}</strong>
-        <p v-if="evidenceMetric === 'watch_issue_count' && overview?.watch_diagnostics">识别问题类别 {{ overview.watch_diagnostics.total_candidates }} · 符合关注规则 {{ overview.watch_diagnostics.eligible_count }} · 未入选 {{ overview.watch_diagnostics.excluded_count }} · 高频门槛 {{ overview.watch_diagnostics.thresholds.min_feedback }} 条</p>
-        <div v-if="evidenceMetric === 'watch_issue_count' && overview?.watch_diagnostics?.excluded?.length"><strong>未入选示例及原因</strong><p v-for="item in overview.watch_diagnostics.excluded.slice(0, 10)" :key="item.id">{{ item.name }}：{{ item.excluded_reason }}</p></div>
+        <p v-if="evidenceMetric === 'watch_issue_count' && overview?.watch_diagnostics">
+          识别问题类别 {{ overview.watch_diagnostics.total_candidates }} · 符合关注规则
+          {{ overview.watch_diagnostics.eligible_count }} · 未入选
+          {{ overview.watch_diagnostics.excluded_count }} · 高频门槛
+          {{ overview.watch_diagnostics.thresholds.min_feedback }} 条
+        </p>
+        <div
+          v-if="
+            evidenceMetric === 'watch_issue_count' && overview?.watch_diagnostics?.excluded?.length
+          "
+        >
+          <strong>未入选示例及原因</strong>
+          <p v-for="item in overview.watch_diagnostics.excluded.slice(0, 10)" :key="item.id">
+            {{ item.name }}：{{ item.excluded_reason }}
+          </p>
+        </div>
       </div>
-      <el-alert v-if="evidenceError" type="error" :title="evidenceError" :closable="false" show-icon />
+      <el-alert
+        v-if="evidenceError"
+        type="error"
+        :title="evidenceError"
+        :closable="false"
+        show-icon
+      />
       <el-table :data="evidence?.results || []" v-loading="evidenceLoading" height="390" stripe>
         <el-table-column prop="id" label="记录 ID" width="110" />
         <el-table-column prop="product" label="产品" width="125" />
         <el-table-column prop="source" label="来源" width="125" />
         <el-table-column prop="title" label="帖子/问题" min-width="170" show-overflow-tooltip />
-        <el-table-column prop="description" label="原文摘要/判定依据" min-width="210" show-overflow-tooltip />
+        <el-table-column
+          prop="description"
+          label="原文摘要/判定依据"
+          min-width="210"
+          show-overflow-tooltip
+        />
         <el-table-column prop="published_at" label="时间" width="170" />
         <el-table-column label="核对" width="110">
           <template #default="{ row }">
-            <el-link v-if="row.source_url" :href="row.source_url" target="_blank" type="primary">原帖链接</el-link>
-            <el-button v-else-if="evidenceMetric === 'watch_issue_count'" link type="primary" @click="openEvidenceRecord(row.id)">查看问题</el-button>
+            <el-link v-if="row.source_url" :href="row.source_url" target="_blank" type="primary"
+              >原帖链接</el-link
+            >
+            <el-button
+              v-else-if="evidenceMetric === 'watch_issue_count'"
+              link
+              type="primary"
+              @click="openEvidenceRecord(row.id)"
+              >查看问题</el-button
+            >
             <span v-else>无原帖链接</span>
           </template>
         </el-table-column>
       </el-table>
-      <el-pagination class="evidence-pagination" background layout="total, prev, pager, next" :total="evidence?.count || 0" :page-size="20" :current-page="evidencePage" @current-change="evidencePageChange" />
-      <p class="evidence-note">核对明细与驾驶舱使用相同的后端筛选条件；原始帖子链接仅在数据源提供时展示。</p>
+      <el-pagination
+        class="evidence-pagination"
+        background
+        layout="total, prev, pager, next"
+        :total="evidence?.count || 0"
+        :page-size="20"
+        :current-page="evidencePage"
+        @current-change="evidencePageChange"
+      />
+      <p class="evidence-note">
+        核对明细与驾驶舱使用相同的后端筛选条件；原始帖子链接仅在数据源提供时展示。
+      </p>
     </el-dialog>
     <p class="dashboard-disclaimer">{{ overview?.disclaimer }}</p>
   </div>
@@ -597,12 +732,29 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   box-shadow: 0 14px 34px #020a1333;
 }
-.metric-card.clickable { cursor: pointer; }
-.metric-card.clickable:hover, .metric-card.clickable:focus-visible { border-color: var(--pvi-blue); outline: none; }
-.evidence-summary { margin-bottom: 16px; }
-.evidence-summary h3 { margin: 0 0 8px; }
-.evidence-summary p, .evidence-note { color: var(--pvi-muted); font-size: 13px; }
-.evidence-pagination { margin-top: 16px; justify-content: flex-end; }
+.metric-card.clickable {
+  cursor: pointer;
+}
+.metric-card.clickable:hover,
+.metric-card.clickable:focus-visible {
+  border-color: var(--pvi-blue);
+  outline: none;
+}
+.evidence-summary {
+  margin-bottom: 16px;
+}
+.evidence-summary h3 {
+  margin: 0 0 8px;
+}
+.evidence-summary p,
+.evidence-note {
+  color: var(--pvi-muted);
+  font-size: 13px;
+}
+.evidence-pagination {
+  margin-top: 16px;
+  justify-content: flex-end;
+}
 .metric-card span,
 .metric-card small {
   display: block;
@@ -618,9 +770,15 @@ onBeforeUnmount(() => {
   font-size: 11px;
   line-height: 1.45;
 }
-.leader-summary { margin-bottom: 16px; }
-.leader-summary > p { line-height: 1.8; }
-.leader-summary > small { color: var(--pvi-muted); }
+.leader-summary {
+  margin-bottom: 16px;
+}
+.leader-summary > p {
+  line-height: 1.8;
+}
+.leader-summary > small {
+  color: var(--pvi-muted);
+}
 .dashboard-grid {
   display: grid;
   gap: 16px;

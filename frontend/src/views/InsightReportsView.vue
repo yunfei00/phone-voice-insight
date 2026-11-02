@@ -3,7 +3,14 @@ import { CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { onMounted, ref } from 'vue'
 
-import { getPagePreference, savePagePreference, generateInsightReport, getInsightReport, getInsightReports, getProducts } from '@/api'
+import {
+  getPagePreference,
+  savePagePreference,
+  generateInsightReport,
+  getInsightReport,
+  getInsightReports,
+  getProducts,
+} from '@/api'
 import type { InsightReport, Product } from '@/types/api'
 import { useAuthStore } from '@/stores/auth'
 
@@ -19,7 +26,7 @@ const error = ref('')
 function reportIssueRate(): string {
   const v = selected.value?.snapshot.overview.valid_feedback ?? 0
   const n = selected.value?.snapshot.overview.explicit_issue_feedback ?? 0
-  return v > 0 ? `${(100 * n / v).toFixed(1)}%` : '暂无数据'
+  return v > 0 ? `${((100 * n) / v).toFixed(1)}%` : '暂无数据'
 }
 function executiveSummary(): string {
   const snapshot = selected.value?.snapshot
@@ -30,7 +37,10 @@ function executiveSummary(): string {
   return `本期有效反馈 ${snapshot.overview.valid_feedback} 条，明确问题反馈占比 ${reportIssueRate()}。${top ? `重点关注「${top.name}」（${top.feedback_count} 条反馈）。` : '暂无明确的高频问题。'}${watch ? `另有 ${watch} 项近期增长或新增问题值得持续跟踪。` : '目前未发现达到观察规则的增长问题。'}`
 }
 async function load(): Promise<void> {
-  void savePagePreference('insight-reports', {product_id: productId.value ?? null, report_type: reportType.value})
+  void savePagePreference('insight-reports', {
+    product_id: productId.value ?? null,
+    report_type: reportType.value,
+  })
   loading.value = true
   error.value = ''
   try {
@@ -82,9 +92,16 @@ onMounted(async () => {
   products.value = (await getProducts({ page_size: 100 })).results
   try {
     const saved = await getPagePreference('insight-reports')
-    if (typeof saved.product_id === 'number' && products.value.some(item => item.id === saved.product_id)) productId.value = saved.product_id
-    if (saved.report_type === 'DAILY' || saved.report_type === 'WEEKLY') reportType.value = saved.report_type
-  } catch { /* preferences are optional */ }
+    if (
+      typeof saved.product_id === 'number' &&
+      products.value.some((item) => item.id === saved.product_id)
+    )
+      productId.value = saved.product_id
+    if (saved.report_type === 'DAILY' || saved.report_type === 'WEEKLY')
+      reportType.value = saved.report_type
+  } catch {
+    /* preferences are optional */
+  }
   await load()
 })
 </script>
@@ -97,7 +114,9 @@ onMounted(async () => {
         <h1 class="page-title">AI 智能洞察报告</h1>
         <p class="page-description">确定性数据库聚合与模板生成，默认不额外调用付费模型</p>
       </div>
-      <el-button v-if="auth.canWrite" type="primary" :loading="generating" @click="generateNow">立即生成报告</el-button>
+      <el-button v-if="auth.canWrite" type="primary" :loading="generating" @click="generateNow"
+        >立即生成报告</el-button
+      >
       <el-button :icon="CopyDocument" :disabled="!selected" @click="copySummary"
         >复制摘要</el-button
       >
@@ -125,10 +144,7 @@ onMounted(async () => {
           ><el-tag size="small" :type="item.status === 'READY' ? 'success' : 'warning'">{{
             item.status
           }}</el-tag></button
-        ><el-empty
-          v-if="!reports.length"
-          description="当前筛选范围暂无已生成的报告"
-        />
+        ><el-empty v-if="!reports.length" description="当前筛选范围暂无已生成的报告" />
       </aside>
       <article class="tech-panel report-content">
         <template v-if="selected?.snapshot"
@@ -143,10 +159,18 @@ onMounted(async () => {
             type="warning"
             :closable="false"
           />
-          <section class="executive-summary"><h3>一、本期核心结论</h3><p>{{ executiveSummary() }}</p><small>根据报告快照的实际数据生成，不代表全部手机用户或真实故障率。</small></section>
+          <section class="executive-summary">
+            <h3>一、本期核心结论</h3>
+            <p>{{ executiveSummary() }}</p>
+            <small>根据报告快照的实际数据生成，不代表全部手机用户或真实故障率。</small>
+          </section>
           <div class="report-metrics">
-            <span>用户问题率<strong>{{ reportIssueRate() }}</strong></span>
-            <span>重点观察问题<strong>{{ selected.snapshot.watchlist.length }}</strong></span>
+            <span
+              >用户问题率<strong>{{ reportIssueRate() }}</strong></span
+            >
+            <span
+              >重点观察问题<strong>{{ selected.snapshot.watchlist.length }}</strong></span
+            >
           </div>
           <h3>二、重点问题 TOP 3</h3>
           <ol>
@@ -165,9 +189,15 @@ onMounted(async () => {
           </div>
           <p v-else class="muted">当前没有达到最小样本与增长阈值的问题。</p>
           <h3>四、建议关注事项</h3>
-          <p class="muted">建议优先核查重点问题的反馈证据，持续观察新增或增长问题；样本不足时不作产品优劣判断。</p>
+          <p class="muted">
+            建议优先核查重点问题的反馈证据，持续观察新增或增长问题；样本不足时不作产品优劣判断。
+          </p>
           <footer>
-            <p>数据说明：有效样本 {{ selected.snapshot.overview.valid_feedback }} 条 · AI 已分析 {{ selected.snapshot.overview.ai_analyzed }} 条 · 原始反馈 {{ selected.snapshot.overview.raw_feedback }} 条。</p>
+            <p>
+              数据说明：有效样本 {{ selected.snapshot.overview.valid_feedback }} 条 · AI 已分析
+              {{ selected.snapshot.overview.ai_analyzed }} 条 · 原始反馈
+              {{ selected.snapshot.overview.raw_feedback }} 条。
+            </p>
             {{ selected.snapshot.disclaimer }}<br />统计截止：{{ format(selected.data_cutoff) }}
           </footer></template
         ><el-empty v-else description="请选择一份报告" />
@@ -240,8 +270,13 @@ onMounted(async () => {
 .report-content h2 {
   font-size: 28px;
 }
-.executive-summary { margin-top: 20px; line-height: 1.8; }
-.executive-summary small { color: var(--pvi-muted); }
+.executive-summary {
+  margin-top: 20px;
+  line-height: 1.8;
+}
+.executive-summary small {
+  color: var(--pvi-muted);
+}
 .report-metrics {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

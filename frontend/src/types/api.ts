@@ -760,7 +760,13 @@ export interface DashboardOverview {
   published_time_fallback_count: number
   disclaimer: string
   watchlist: DashboardIssue[]
-  watch_diagnostics?: { total_candidates: number; eligible_count: number; excluded_count: number; excluded: Array<DashboardIssue & { excluded_reason: string }>; thresholds: { min_feedback: number; growth_percent: number } }
+  watch_diagnostics?: {
+    total_candidates: number
+    eligible_count: number
+    excluded_count: number
+    excluded: Array<DashboardIssue & { excluded_reason: string }>
+    thresholds: { min_feedback: number; growth_percent: number }
+  }
 }
 
 export interface DashboardTrend {
