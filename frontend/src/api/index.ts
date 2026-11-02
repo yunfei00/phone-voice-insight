@@ -451,6 +451,10 @@ export const getStructuredBatches = async (
 export interface StructuredCorpusProgress {
   total: number
   completed: number
+  ai_completed: number
+  manual_handled: number
+  manual_excluded: number
+  manual_pending: number
   remaining: number
   active: boolean
   batch: StructuredBatch | null
