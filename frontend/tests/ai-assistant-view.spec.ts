@@ -29,6 +29,8 @@ vi.mock('@/api', () => ({
   streamAssistantChat: vi.fn(),
   getProducts: vi.fn(),
   getSources: vi.fn(),
+  getPagePreference: vi.fn().mockResolvedValue({}),
+  savePagePreference: vi.fn().mockResolvedValue(undefined),
   createAssistantModel: vi.fn(),
   updateAssistantModel: vi.fn(),
   deleteAssistantModel: vi.fn(),
