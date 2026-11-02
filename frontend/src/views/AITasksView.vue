@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   cancelStructuredBatch,
@@ -8,6 +8,8 @@ import {
   getSources,
   getStructuredBatches,
   getStructuredBatchFailures,
+  getManualDispositions,
+  setManualDisposition,
   pauseStructuredBatch,
   resumeStructuredBatch,
   retryStructuredBatch,
@@ -17,6 +19,7 @@ import type { StructuredFailure } from '@/api'
 const failureDialog = ref(false)
 const failureLoading = ref(false)
 const failureRows = ref<StructuredFailure[]>([])
+const dispositions = ref<Record<string, {status: string; reason: string}>>({})
 const failureBatchId = ref<number | null>(null)
 const failureError = ref('')
 const loading = ref(false)
@@ -147,11 +150,28 @@ async function showFailures(id: number) {
   try {
     const result = await getStructuredBatchFailures(id)
     failureRows.value = result.results
+    dispositions.value = await getManualDispositions(result.results.map((row) => row.content))
     if (result.next) failureError.value = '失败记录超过 100 条，当前仅展示前 100 条。'
   } catch {
     failureError.value = '失败明细加载失败，请稍后重试。'
   } finally {
     failureLoading.value = false
+  }
+}
+async function handleFailedReview(contentId: number, status: 'IN_REVIEW' | 'DEFERRED' | 'EXCLUDED') {
+  try {
+    const reason = status === 'IN_REVIEW'
+      ? '连续失败，转人工诊断'
+      : (await ElMessageBox.prompt('请输入处理原因（必填）', '人工处理', {
+          confirmButtonText: '确认', cancelButtonText: '取消',
+          inputValidator: (value) => Boolean(value.trim()) || '必须填写处理原因',
+        })).value
+    await setManualDisposition({ content_id: contentId, status, reason })
+    dispositions.value[contentId] = { status, reason }
+    ElMessage.success('人工处理状态已保存，后续批次重试将跳过该帖子')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error('人工处理保存失败')
   }
 }
 async function retry(id: number) {
@@ -303,6 +323,16 @@ onUnmounted(() => {
           show-overflow-tooltip
         />
         <el-table-column prop="attempt_count" label="尝试次数" width="90" />
+        <el-table-column label="人工处理" min-width="280">
+          <template #default="{ row }">
+            <span v-if="dispositions[row.content]">已处理：{{ dispositions[row.content].status }} </span>
+            <template v-else>
+              <el-button link type="primary" @click="handleFailedReview(row.content, 'IN_REVIEW')">转人工</el-button>
+              <el-button link @click="handleFailedReview(row.content, 'DEFERRED')">暂缓</el-button>
+              <el-button link type="warning" @click="handleFailedReview(row.content, 'EXCLUDED')">排除</el-button>
+            </template>
+          </template>
+        </el-table-column>
       </el-table>
     </el-dialog>
   </section>
