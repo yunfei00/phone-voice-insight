@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CopyDocument } from '@element-plus/icons-vue'
+import { getPagePreference, savePagePreference, CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { onMounted, ref } from 'vue'
 
@@ -15,6 +15,7 @@ const loading = ref(false)
 const generating = ref(false)
 const error = ref('')
 async function load(): Promise<void> {
+  void savePagePreference('insight-reports', {product_id: productId.value ?? null, report_type: reportType.value})
   loading.value = true
   error.value = ''
   try {
@@ -64,6 +65,11 @@ function format(value: string | null): string {
 }
 onMounted(async () => {
   products.value = (await getProducts({ page_size: 100 })).results
+  try {
+    const saved = await getPagePreference('insight-reports')
+    if (typeof saved.product_id === 'number' && products.value.some(item => item.id === saved.product_id)) productId.value = saved.product_id
+    if (saved.report_type === 'DAILY' || saved.report_type === 'WEEKLY') reportType.value = saved.report_type
+  } catch { /* preferences are optional */ }
   await load()
 })
 </script>
