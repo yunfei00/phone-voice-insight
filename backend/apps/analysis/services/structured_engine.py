@@ -206,7 +206,7 @@ def _request_with_empty_retry(provider: AIProvider, request: ReviewAnalysisInput
     try:
         return provider.analyze_review(request, prompt=prompt, validation_feedback=feedback)
     except AIProviderError as exc:
-        if exc.code not in ("AI_EMPTY_RESPONSE", "AI_REQUEST_TOO_LARGE"):
+        if exc.code != "AI_EMPTY_RESPONSE":
             raise
         compact_prompt = (
             "你是手机用户声音结构化分析器。仅输出 JSON 对象，必须满足既定结构化字段与枚举要求。"
@@ -214,7 +214,7 @@ def _request_with_empty_retry(provider: AIProvider, request: ReviewAnalysisInput
         )
         compact_request = request.model_copy(update={
             "title": (request.title or "")[:160] or None,
-            "content": request.content[:1500],
+            "content": request.content,
             "context_text": "",
             "thread_content": "",
             "parent_content": "",
