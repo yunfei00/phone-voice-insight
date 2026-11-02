@@ -73,6 +73,7 @@ class StructuredBatchViewSet(ViewSet):
         return Response({"count": records.count(), "results": [
             {"content_id": item.content_id, "title": item.content.title,
              "content": item.content.content, "product": item.content.product.name,
+             "source_url": item.content.source_url,
              "status": item.status, "reason": item.reason, "annotation": item.annotation}
             for item in rows
         ]})
