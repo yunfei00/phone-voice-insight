@@ -52,6 +52,66 @@ class DashboardOverviewView(APIView):
         return _safe_response(lambda: {**overview(_params(request)), "watchlist": watchlist(_params(request))})
 
 
+class DashboardMetricEvidenceView(APIView):
+    """Auditable, paginated evidence using exactly the dashboard overview querysets."""
+
+    def get(self, request: Request, metric: str) -> Response:
+        from apps.reports.services import (
+            accepted_analyses, filtered_reviews, issue_aspects, valid_qualities, parse_range,
+        )
+
+        allowed = {"raw_feedback", "valid_feedback", "ai_analyzed", "explicit_issue_feedback", "watch_issue_count"}
+        if metric not in allowed:
+            return Response({"message": "未知指标"}, status=status.HTTP_404_NOT_FOUND)
+
+        def result() -> dict[str, Any]:
+            params = _params(request)
+            _, _, start_day, end_day = parse_range(params)
+            page = max(int(params.get("page", "1")), 1)
+            page_size = min(max(int(params.get("page_size", "20")), 1), 100)
+            offset = (page - 1) * page_size
+            if metric == "watch_issue_count":
+                rows = watchlist(params)
+                count = len(rows)
+                items = [{
+                    "id": row["id"], "title": row["name"], "product": row["product_name"],
+                    "source": "", "published_at": None, "source_url": "",
+                    "description": f'最近样本 {row["recent_count"]}；增长 {row["growth_rate"]}%',
+                } for row in rows[offset:offset + page_size]]
+            else:
+                if metric == "raw_feedback":
+                    qs = filtered_reviews(params)
+                elif metric == "valid_feedback":
+                    qs = filtered_reviews(params).filter(
+                        pk__in=valid_qualities(params).values("review_id")
+                    )
+                elif metric == "ai_analyzed":
+                    qs = filtered_reviews(params).filter(
+                        pk__in=accepted_analyses(params).values("content_id")
+                    )
+                else:
+                    qs = filtered_reviews(params).filter(
+                        pk__in=issue_aspects(params).values("analysis__content_id")
+                    )
+                count = qs.count()
+                items = [{
+                    "id": row.pk,
+                    "title": row.title or (row.content or "")[:60],
+                    "product": row.product.name if row.product else "",
+                    "source": row.source.name if row.source else "",
+                    "published_at": row.published_at or row.collected_at,
+                    "source_url": row.source_url,
+                    "description": (row.content or "")[:250],
+                } for row in qs.select_related("product", "source").order_by("-collected_at", "-pk")[offset:offset + page_size]]
+            return {
+                "metric": metric, "count": count, "page": page, "page_size": page_size,
+                "start_date": start_day, "end_date": end_day,
+                "results": items,
+            }
+
+        return _safe_response(result)
+
+
 class DashboardTrendsView(APIView):
     def get(self, request: Request) -> Response:
         return _safe_response(lambda: {"results": trends(_params(request))})
