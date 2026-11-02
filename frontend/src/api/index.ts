@@ -940,6 +940,10 @@ export const setManualDisposition = async (payload: {content_id: number; status:
   await apiClient.post('/structured-batches/manual-disposition/', payload)
 }
 
+export const cancelManualDisposition = async (contentId: number): Promise<void> => {
+  await apiClient.post('/structured-batches/cancel-manual/', {content_id: contentId})
+}
+
 export interface ManualQueueItem {
   source_url: string
   content_id: number
