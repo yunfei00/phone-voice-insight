@@ -696,7 +696,9 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
                 "successful_runs": successful,
                 "success_rate": successful / total if total else None,
                 "schema_valid_rate": schema_valid / successful if successful else None,
-                "review_required": analyses.filter(review_required=True).count(),
+                "review_required": analyses.filter(review_required=True)
+                .exclude(content__manual_structured_disposition__status__in=("APPROVED", "EXCLUDED"))
+                .count(),
                 "human_evaluation_status": "NOT_EVALUATED",
                 "accuracy_metrics": None,
                 "error_distribution": error_distribution,
