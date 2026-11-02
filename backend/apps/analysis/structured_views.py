@@ -25,6 +25,7 @@ from apps.analysis.models import (
     AnalysisBatchStatus,
     AnalysisReviewRecord,
     AnalysisRun,
+    StructuredManualDisposition,
     OpinionAspect,
     StructuredAnalysis,
     StructuredRunStatus,
@@ -61,6 +62,44 @@ class StructuredRunViewSet(ReadOnlyModelViewSet):
 
 class StructuredBatchViewSet(ViewSet):
     permission_classes = (IsAnalystOrAdministrator,)
+
+
+    @action(detail=False, methods=("get",), url_path="manual-dispositions")
+    def manual_dispositions(self, request: Request) -> Response:
+        ids = request.query_params.get("content_ids", "")
+        try:
+            content_ids = [int(value) for value in ids.split(",") if value.strip()][:100]
+        except ValueError:
+            return Response({"error_code": "INVALID_CONTENT_IDS"}, status=400)
+        rows = StructuredManualDisposition.objects.filter(content_id__in=content_ids)
+        return Response({str(row.content_id): {
+            "status": row.status, "reason": row.reason,
+            "failure_category": row.failure_category,
+        } for row in rows})
+
+    @action(detail=False, methods=("post",), url_path="manual-disposition")
+    def manual_disposition(self, request: Request) -> Response:
+        try:
+            content_id = int(request.data.get("content_id"))
+        except (ValueError, TypeError):
+            return Response({"error_code": "INVALID_CONTENT_ID"}, status=400)
+        new_status = request.data.get("status")
+        if new_status not in ("IN_REVIEW", "DEFERRED", "EXCLUDED"):
+            return Response({"error_code": "INVALID_STATUS"}, status=400)
+        if not ReviewRecord.objects.filter(pk=content_id).exists():
+            return Response({"error_code": "CONTENT_NOT_FOUND"}, status=404)
+        reason = str(request.data.get("reason", "")).strip()
+        if new_status in ("DEFERRED", "EXCLUDED") and not reason:
+            return Response({"error_code": "REASON_REQUIRED"}, status=400)
+        with transaction.atomic():
+            item, _ = StructuredManualDisposition.objects.select_for_update().get_or_create(
+                content_id=content_id, defaults={"handler": request.user}
+            )
+            item.status = new_status
+            item.reason = reason
+            item.handler = request.user
+            item.save()
+        return Response({"content_id": content_id, "status": item.status, "reason": item.reason})
 
     def list(self, request: Request) -> Response:
         queryset = AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1", dry_run=False).select_related(
@@ -240,7 +279,7 @@ class StructuredBatchViewSet(ViewSet):
                 is_current=True,
                 status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
             ).values("content_id")
-            corpus = final_corpus_reviews().filter(product_id=product_id).exclude(pk__in=completed)
+            corpus = final_corpus_reviews().filter(product_id=product_id).exclude(pk__in=completed).exclude(pk__in=StructuredManualDisposition.objects.values("content_id"))
             source_ids = list(corpus.order_by().values_list("source_id", flat=True).distinct())
             queued = 0
             batch_ids = []
@@ -338,7 +377,7 @@ class StructuredBatchViewSet(ViewSet):
         assert pk is not None
         original = AnalysisBatch.objects.get(pk=pk)
         failed_ids = list(
-            AnalysisRun.objects.filter(batch=original, status=StructuredRunStatus.FAILED).values_list(
+            AnalysisRun.objects.filter(batch=original, status=StructuredRunStatus.FAILED).exclude(content_id__in=StructuredManualDisposition.objects.values("content_id")).values_list(
                 "content_id", flat=True
             )
         )
