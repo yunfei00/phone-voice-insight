@@ -16,6 +16,13 @@ import {
 } from '@/api'
 import type { DataSource, Product, StructuredBatch } from '@/types/api'
 import type { StructuredFailure } from '@/api'
+function originalPostUrl(value: string | undefined): string {
+  if (!value) return ''
+  try {
+    const url = new URL(value)
+    return ['https:', 'http:'].includes(url.protocol) ? url.href : ''
+  } catch { return '' }
+}
 const failureDialog = ref(false)
 const failureLoading = ref(false)
 const failureRows = ref<StructuredFailure[]>([])
@@ -342,13 +349,24 @@ onUnmounted(() => {
         max-height="450"
         empty-text="暂无失败记录"
       >
-        <el-table-column prop="content" label="帖子 ID" width="100" />
+        <el-table-column label="帖子 ID" width="130">
+          <template #default="{ row }">
+            <el-link v-if="originalPostUrl(row.source_url)" :href="originalPostUrl(row.source_url)" target="_blank" rel="noopener noreferrer" type="primary">{{ row.external_id || row.content }}</el-link>
+            <span v-else>{{ row.external_id || row.content }}</span>
+          </template>
+        </el-table-column>
         <el-table-column
           prop="content_excerpt"
           label="帖子内容"
           min-width="200"
           show-overflow-tooltip
         />
+        <el-table-column label="原帖" width="110">
+          <template #default="{ row }">
+            <el-link v-if="originalPostUrl(row.source_url)" :href="originalPostUrl(row.source_url)" target="_blank" rel="noopener noreferrer" type="primary">查看原帖</el-link>
+            <span v-else>暂无链接</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="error_code" label="错误代码" width="150" />
         <el-table-column
           prop="error_message"
