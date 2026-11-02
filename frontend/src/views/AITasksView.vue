@@ -169,7 +169,7 @@ async function handleFailedReview(contentId: number, status: 'IN_REVIEW' | 'DEFE
         })).value
     await setManualDisposition({ content_id: contentId, status, reason })
     dispositions.value[contentId] = { status, reason }
-    ElMessage.success('人工处理状态已保存，后续批次重试将跳过该帖子')
+    ElMessage.success('已转入人工处理，请点击页面顶部「进入人工处理待办」继续')
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
     ElMessage.error('人工处理保存失败')
@@ -231,6 +231,7 @@ onUnmounted(() => {
     <header class="page-header">
       <div>
         <h1 class="page-title">AI 任务中心</h1>
+        <router-link to="/manual-analysis">进入人工处理待办 →</router-link>
         <p>创建分析任务、查看处理进度和失败明细。</p>
       </div>
     </header>
