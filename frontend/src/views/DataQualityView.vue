@@ -915,13 +915,19 @@ onUnmounted(() => {
         <el-table-column prop="id" label="任务 ID" width="100" />
         <el-table-column prop="status" label="状态" width="120" />
         <el-table-column label="创建时间" width="175">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{ displayTaskTime(row.created_at) }}</template>
+          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+            displayTaskTime(row.created_at)
+          }}</template>
         </el-table-column>
         <el-table-column label="开始时间" width="175">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{ displayTaskTime(row.started_at) }}</template>
+          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+            displayTaskTime(row.started_at)
+          }}</template>
         </el-table-column>
         <el-table-column label="完成时间" width="175">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{ displayTaskTime(row.finished_at) }}</template>
+          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+            displayTaskTime(row.finished_at)
+          }}</template>
         </el-table-column>
         <el-table-column label="耗时" width="105">
           <template #default="{ row }: { row: GovernanceTaskInfo }">{{
