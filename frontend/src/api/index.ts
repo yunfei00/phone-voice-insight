@@ -60,6 +60,21 @@ export const logout = async (): Promise<void> => {
   await apiClient.post('/auth/logout/')
 }
 
+export interface DashboardPreference {
+  product_id?: number | null
+  source_id?: number | null
+  preset: '7' | '30' | '90' | 'custom'
+  start_date?: string | null
+  end_date?: string | null
+}
+
+export const getDashboardPreference = async (): Promise<Partial<DashboardPreference>> =>
+  (await apiClient.get<Partial<DashboardPreference>>('/dashboard/preference/')).data
+
+export const saveDashboardPreference = async (value: DashboardPreference): Promise<void> => {
+  await apiClient.put('/dashboard/preference/', value)
+}
+
 export const getCurrentUser = async (): Promise<UserAccount> =>
   (await apiClient.get<UserAccount>('/auth/me/')).data
 
