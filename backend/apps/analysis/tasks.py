@@ -66,7 +66,8 @@ def run_structured_analysis_batch_task(
     batch.started_at = timezone.now()
     batch.save()
     try:
-        provider = get_user_ai_provider(batch.created_by)
+        from apps.accounts.ai_service import get_structured_ai_provider
+        provider = get_structured_ai_provider(batch.created_by)
     except Exception as exc:
         batch.status = AnalysisBatchStatus.FAILED
         batch.error_message = f"{type(exc).__name__}: {exc}"[:1000]
