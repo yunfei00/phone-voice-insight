@@ -94,6 +94,55 @@ class StructuredBatchViewSet(ViewSet):
             item.delete()
         return Response({"content_id": content_id, "status": "WITHDRAWN"})
 
+    @action(detail=False, methods=("post",), url_path="quick-exclude")
+    def quick_exclude(self, request: Request) -> Response:
+        """Exclude up to 100 manual-queue items without fabricating structured annotations."""
+        raw_ids = request.data.get("content_ids")
+        reasons = {
+            "INTRO": "产品介绍 / 宣传内容",
+            "OFFICIAL": "官方公告 / 活动内容",
+            "IRRELEVANT": "与目标产品无关",
+            "NO_EXPERIENCE": "无有效用户体验信息",
+            "DUPLICATE": "重复或无意义内容",
+        }
+        reason_code = request.data.get("reason_code")
+        if not isinstance(raw_ids, list) or not 1 <= len(raw_ids) <= 100:
+            return Response({"error_code": "INVALID_CONTENT_IDS"}, status=400)
+        if any(type(item) is not int or item <= 0 for item in raw_ids) or len(set(raw_ids)) != len(raw_ids):
+            return Response({"error_code": "INVALID_CONTENT_IDS"}, status=400)
+        if reason_code not in reasons:
+            return Response({"error_code": "INVALID_REASON"}, status=400)
+        with transaction.atomic():
+            items = list(StructuredManualDisposition.objects.select_for_update().filter(content_id__in=raw_ids))
+            if len(items) != len(raw_ids):
+                return Response({"error_code": "MANUAL_RECORD_NOT_FOUND"}, status=404)
+            if any(item.status == "APPROVED" for item in items):
+                return Response({"error_code": "APPROVED_CANNOT_EXCLUDE"}, status=409)
+            for item in items:
+                item.status = "EXCLUDED"
+                item.reason = reasons[reason_code]
+                item.handler = request.user
+                item.annotation = {}
+                item.save(update_fields=("status", "reason", "handler", "annotation", "updated_at"))
+        return Response({"excluded_count": len(items), "reason_code": reason_code})
+
+    @action(detail=False, methods=("post",), url_path="undo-exclude")
+    def undo_exclude(self, request: Request) -> Response:
+        raw_ids = request.data.get("content_ids")
+        if not isinstance(raw_ids, list) or not 1 <= len(raw_ids) <= 100:
+            return Response({"error_code": "INVALID_CONTENT_IDS"}, status=400)
+        if any(type(item) is not int or item <= 0 for item in raw_ids) or len(set(raw_ids)) != len(raw_ids):
+            return Response({"error_code": "INVALID_CONTENT_IDS"}, status=400)
+        with transaction.atomic():
+            items = list(StructuredManualDisposition.objects.select_for_update().filter(content_id__in=raw_ids))
+            if len(items) != len(raw_ids) or any(item.status != "EXCLUDED" for item in items):
+                return Response({"error_code": "NOT_EXCLUDED"}, status=409)
+            for item in items:
+                item.status = "IN_REVIEW"
+                item.reason = ""
+                item.save(update_fields=("status", "reason", "updated_at"))
+        return Response({"restored_count": len(items)})
+
     @action(detail=False, methods=("get",), url_path="manual-dispositions")
     def manual_dispositions(self, request: Request) -> Response:
         ids = request.query_params.get("content_ids", "")
