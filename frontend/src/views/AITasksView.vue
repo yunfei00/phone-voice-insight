@@ -210,7 +210,7 @@ async function approveManualAnnotation(contentId: number) {
 async function retry(id: number) {
   try {
     await retryStructuredBatch(id)
-    ElMessage.success('失败项目已创建重试任务')
+    ElMessage.success('已在原任务中重新执行失败帖子，任务 ID 不变')
     await load()
   } catch {
     ElMessage.warning('该任务没有可重试的失败项目')
@@ -293,7 +293,7 @@ onUnmounted(() => {
             row.requested_count
           }}</template
         ></el-table-column
-      ><el-table-column prop="success_count" label="成功" width="80" /><el-table-column
+      ><el-table-column prop="retry_count" label="重试轮次" width="95" /><el-table-column prop="success_count" label="成功" width="80" /><el-table-column
         prop="failed_count"
         label="失败"
         width="80"
