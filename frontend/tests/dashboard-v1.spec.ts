@@ -1,4 +1,6 @@
 import ElementPlus from 'element-plus'
+import { setActivePinia } from 'pinia'
+import { pinia } from '@/stores/pinia'
 import { createApp, nextTick, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -48,6 +50,10 @@ vi.mock('@/api', () => ({
   getInsightReports: vi.fn(),
   getInsightReport: vi.fn(),
   getOperationsStatus: vi.fn(),
+  getPagePreference: vi.fn().mockResolvedValue({}),
+  savePagePreference: vi.fn().mockResolvedValue(undefined),
+  getDashboardPreference: vi.fn().mockResolvedValue({}),
+  saveDashboardPreference: vi.fn().mockResolvedValue(undefined),
 }))
 
 const issue = {
@@ -103,6 +109,7 @@ function mount(component: Parameters<typeof createApp>[0]): {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const app = createApp(component)
+  app.use(pinia)
   app.use(ElementPlus)
   app.mount(container)
   return { app, container }
@@ -111,6 +118,8 @@ function mount(component: Parameters<typeof createApp>[0]): {
 describe('V1 Dashboard pages', () => {
   beforeEach(async () => {
     document.body.innerHTML = ''
+    setActivePinia(pinia)
+    window.localStorage.clear()
     push.mockReset()
     replace.mockReset()
     const api = await import('@/api')
@@ -257,7 +266,7 @@ describe('V1 Dashboard pages', () => {
     const { app, container } = mount(DashboardView)
     await flush()
     expect(container.textContent).toContain('手机用户声音智能驾驶舱')
-    expect(container.textContent).toContain('100')
+    expect(container.textContent).toContain('25.0%')
     expect(getDashboardOverview).toHaveBeenCalled()
     expect(container.textContent).toContain('全屏投屏')
     app.unmount()
@@ -306,7 +315,7 @@ describe('V1 Dashboard pages', () => {
     const { app, container } = mount(ComparisonView)
     await flush()
     expect(getDashboardComparison).toHaveBeenCalled()
-    expect(container.textContent).toContain('分母 50')
+    expect(container.textContent).toContain('用户问题率')
     expect(
       container.querySelectorAll('.compare-filters .dashboard-filters .el-select'),
     ).toHaveLength(2)
@@ -349,7 +358,7 @@ describe('V1 Dashboard pages', () => {
     await flush()
     expect(getInsightReports).toHaveBeenCalled()
     expect(getInsightReport).toHaveBeenCalledWith(1)
-    expect(container.textContent).toContain('TOP 3 问题')
+    expect(container.textContent).toContain('重点问题 TOP 3')
     app.unmount()
   })
   it('运行监控明确显示自动分析未启用且不含密钥', async () => {
