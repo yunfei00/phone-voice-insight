@@ -114,44 +114,24 @@ const lastSuccessAt = ref<Date>()
 const isFullscreen = ref(Boolean(route.query.fullscreen))
 let refreshTimer: number | undefined
 
+const issueRate = computed(() => {
+  const valid = overview.value?.valid_feedback ?? 0
+  const issues = overview.value?.explicit_issue_feedback ?? 0
+  return valid > 0 ? `${(100 * issues / valid).toFixed(1)}%` : '暂无数据'
+})
+const topIssue = computed(() => categories.value[0]?.name || '暂无数据')
 const metricCards = computed(() => [
-  {
-    key: 'raw_feedback',
-    label: '原始反馈量',
-    value: overview.value?.raw_feedback ?? 0,
-    note: '筛选范围内采集到的原始记录',
-  },
-  {
-    key: 'valid_feedback',
-    label: '有效反馈量',
-    value: overview.value?.valid_feedback ?? 0,
-    note: '通过规则治理且排除官方内容',
-  },
-  {
-    key: 'ai_analyzed',
-    label: 'AI 已分析量',
-    value: overview.value?.ai_analyzed ?? 0,
-    note: 'ACCEPTED 且结构化校验通过',
-  },
-  {
-    key: 'explicit_issue_feedback',
-    label: '明确问题反馈量',
-    value: overview.value?.explicit_issue_feedback ?? 0,
-    note: '按独立反馈去重的明确负面问题',
-  },
-  {
-    key: 'watch_issue_count',
-    label: '重点观察问题',
-    value: overview.value?.watch_issue_count ?? 0,
-    note: '所选周期高频、严重或近期增长的问题',
-  },
-  {
-    key: undefined,
-    label: '最新数据时间',
-    value: overview.value?.latest_data_at ? formatTime(overview.value.latest_data_at) : '暂无',
-    note: '最新一条数据的采集时间',
-  },
+  { key: 'explicit_issue_feedback', label: '用户问题率', value: issueRate.value, note: '明确问题反馈 / 有效反馈（非产品故障率）' },
+  { key: 'watch_issue_count', label: '重点风险问题', value: overview.value?.watch_issue_count ?? 0, note: '达到高频、严重或增长规则的问题' },
+  { key: undefined, label: '最受关注问题', value: topIssue.value, note: '当前筛选周期反馈最多的问题类别' },
+  { key: undefined, label: '有效样本', value: overview.value?.valid_feedback ?? 0, note: '仅用于说明统计样本规模' },
 ])
+const leaderSummary = computed(() => {
+  if (!overview.value?.valid_feedback) return '当前筛选范围缺少足够的有效反馈，暂不能形成可靠的用户体验结论。'
+  const issueCount = overview.value.explicit_issue_feedback
+  const watch = overview.value.watch_issue_count
+  return `本期有效反馈 ${overview.value.valid_feedback} 条，其中明确问题反馈 ${issueCount} 条，问题反馈占比 ${issueRate.value}。最受关注的类别为「${topIssue.value}」。${watch ? `有 ${watch} 项问题达到重点观察规则，建议优先核查风险变化与原帖证据。` : '目前没有达到重点观察规则的问题。'}`
+})
 
 const evidenceVisible = ref(false)
 const evidenceLoading = ref(false)
@@ -432,11 +412,12 @@ onBeforeUnmount(() => {
         </article>
       </el-tooltip>
     </section>
+    <section class="tech-panel leader-summary"><div class="panel-heading"><div><h2>本期用户声音摘要</h2><p>基于当前筛选条件的真实统计数据生成，不包含模型推测</p></div></div><p>{{ leaderSummary }}</p><small>统计仅代表已收集的用户反馈，不代表全部手机用户或真实故障率。</small></section>
     <section class="dashboard-grid two-columns">
       <article class="tech-panel chart-panel">
         <div class="panel-heading">
           <div>
-            <h2>用户反馈趋势</h2>
+            <h2>用户体验与问题趋势</h2>
             <p>有效反馈与 AI 确认明确负面问题</p>
           </div>
         </div>
@@ -450,7 +431,7 @@ onBeforeUnmount(() => {
       <article class="tech-panel chart-panel">
         <div class="panel-heading">
           <div>
-            <h2>问题类别分布</h2>
+            <h2>TOP 用户问题</h2>
             <p>按独立反馈去重，点击类别下钻</p>
           </div>
         </div>
@@ -466,7 +447,7 @@ onBeforeUnmount(() => {
       <article class="tech-panel">
         <div class="panel-heading">
           <div>
-            <h2>产品反馈概况</h2>
+            <h2>机型体验对比</h2>
             <p>动态加载当前已启用手机产品</p>
           </div>
           <el-button text @click="router.push('/comparison')">进入对比中心</el-button>
@@ -483,8 +464,8 @@ onBeforeUnmount(() => {
           >
             <strong>{{ item.product_name }}</strong>
             <div>
-              <span>有效反馈 {{ item.valid_feedback }}</span
-              ><span>AI 分析 {{ item.ai_analyzed }}</span>
+              <span>有效样本 {{ item.valid_feedback }}</span
+              ><span>问题率 {{ item.valid_feedback ? (100 * item.explicit_issue_feedback / item.valid_feedback).toFixed(1) + '%' : '暂无' }}</span>
             </div>
             <div>
               <span>明确问题 {{ item.explicit_issue_feedback }}</span
@@ -497,7 +478,7 @@ onBeforeUnmount(() => {
       <article class="tech-panel">
         <div class="panel-heading">
           <div>
-            <h2>重点观察</h2>
+            <h2>风险预警与重点观察</h2>
             <p>最小样本与环比增长同时满足才产生预警</p>
           </div>
         </div>
@@ -613,7 +594,7 @@ onBeforeUnmount(() => {
 }
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -646,6 +627,9 @@ onBeforeUnmount(() => {
   font-size: 11px;
   line-height: 1.45;
 }
+.leader-summary { margin-bottom: 16px; }
+.leader-summary > p { line-height: 1.8; }
+.leader-summary > small { color: var(--pvi-muted); }
 .dashboard-grid {
   display: grid;
   gap: 16px;
