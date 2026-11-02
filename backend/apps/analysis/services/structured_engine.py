@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ai.providers import AIProvider, AIProviderError, AIProviderResponse
 from ai.schemas.review_analysis import ReviewAnalysisInput
-from ai.schemas.structured_analysis import SCHEMA_VERSION, StructuredAnalysisPayload
+from ai.schemas.structured_analysis import SCHEMA_VERSION, OpinionAspectPayload, StructuredAnalysisPayload
 from ai.taxonomy import TAXONOMY_VERSION, load_taxonomy
 from ai.validation import StructuredValidationResult, validate_structured_payload
 from django.conf import settings
@@ -131,7 +131,7 @@ def _normalize_structured_payload(payload: dict[str, object], source_text: str) 
     aspects = payload.get("aspects")
     if not isinstance(aspects, list):
         return payload
-    allowed_aspect = set(StructuredAnalysisPayload.model_fields["aspects"].annotation.__args__[0].model_fields)
+    allowed_aspect = set(OpinionAspectPayload.model_fields)
     topic_parent_map = load_taxonomy().topic_parent_map
     for index, value in enumerate(aspects):
         if not isinstance(value, dict):
