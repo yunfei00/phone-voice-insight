@@ -3,7 +3,7 @@ import { Search } from '@element-plus/icons-vue'
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { getDashboardIssue, getDashboardIssues, getTaxonomy } from '@/api'
+import { getPagePreference, savePagePreference, getDashboardIssue, getDashboardIssues, getTaxonomy } from '@/api'
 import DashboardFilters from '@/components/DashboardFilters.vue'
 import type {
   DashboardFilters as FilterValues,
@@ -56,6 +56,7 @@ function categoryLabel(code: string): string {
 }
 
 async function load(): Promise<void> {
+  void savePagePreference('issues', {...filters.value, search: search.value, category: category.value, severity: severity.value, ordering: ordering.value})
   loading.value = true
   error.value = ''
   try {
@@ -96,6 +97,20 @@ function format(value: string | null): string {
   return value ? new Date(value).toLocaleString('zh-CN') : '暂无'
 }
 onMounted(async () => {
+  try {
+    const saved = await getPagePreference('issues')
+    const query = route.query
+    for (const key of ['product_id', 'source_id'] as const) {
+      if (query[key] === undefined && typeof saved[key] === 'number') filters.value[key] = saved[key] as number
+    }
+    for (const key of ['start_date', 'end_date'] as const) {
+      if (query[key] === undefined && typeof saved[key] === 'string') filters.value[key] = saved[key] as string
+    }
+    if (query.search === undefined && typeof saved.search === 'string') search.value = saved.search
+    if (query.category === undefined && typeof saved.category === 'string') category.value = saved.category
+    if (typeof saved.severity === 'string') severity.value = saved.severity
+    if (typeof saved.ordering === 'string') ordering.value = saved.ordering
+  } catch { /* preferences are optional */ }
   domains.value = (await getTaxonomy()).domains
   await load()
 })
