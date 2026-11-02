@@ -18,6 +18,7 @@ from collectors.base import (
 )
 from collectors.honor_club.normalizer import is_product_related
 from collectors.honor_club.parser import extract_thread_page_count, is_valid_thread_page
+from apps.reviews.services.thread_tree import parse_human_count
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
@@ -674,7 +675,7 @@ def run_collection(
     start_page = 1
     start_index = 0
     inserted = skipped = failed = scanned = duplicate_records = 0
-    new_threads = known_threads = 0
+    new_threads = known_threads = fast_skipped_threads = 0
     stopped_at_known_boundary = False
     type_counts: Counter[str] = Counter()
     samples: list[dict[str, Any]] = []
@@ -728,6 +729,45 @@ def run_collection(
                 ).exists()
                 if thread_was_known:
                     known_threads += 1
+                # Avoid downloading every page of unchanged known threads on each six-hour run.
+                # Periodic deep scans still cover edits, deleted replies and unreliable counters.
+                listed_replies = parse_human_count(listing_data.get("reply_count"))
+                deep_scan_interval = _int_config(config, "incremental_deep_scan_every", 4, 48)
+                if (
+                    thread_was_known
+                    and listed_replies is not None
+                    and task.id % deep_scan_interval != 0
+                ):
+                    stored_replies = ReviewRecord.objects.filter(
+                        source_id=source_target.source_id,
+                        record_type__in=("REPLY", "OFFICIAL_REPLY"),
+                        raw_data__thread_id=thread_id,
+                    ).count()
+                    if stored_replies == listed_replies:
+                        fast_skipped_threads += 1
+                        checkpoint = {
+                            "topic_page": topic_page,
+                            "thread_index": thread_index + 1,
+                            "last_thread_id": thread_id,
+                            "skip_reason": "UNCHANGED_REPLY_COUNT",
+                            "fast_skipped_threads": fast_skipped_threads,
+                        }
+                        _save_progress(
+                            task.id,
+                            run.id,
+                            inserted=inserted,
+                            skipped=skipped,
+                            failed=failed,
+                            checkpoint=checkpoint,
+                            progress_stats={
+                                "new_threads": new_threads,
+                                "known_threads": known_threads,
+                                "new_records": inserted,
+                                "duplicate_records": duplicate_records,
+                                "stopped_at_known_boundary": False,
+                            },
+                        )
+                        continue
                 thread_url = str(listing_data["thread_url"])
                 thread_target = _build_collector_target(source_target, target_url=thread_url)
                 thread_request = CollectionRequest(
