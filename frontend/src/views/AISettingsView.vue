@@ -12,6 +12,7 @@ import {
   updateAssistantModel,
   testAssistantModel,
   selectAssistantModel,
+  selectStructuredModel,
   getOllamaModels,
   savePersonalAIConfiguration,
   testPersonalAIConfiguration,
@@ -23,6 +24,7 @@ const auth = useAuthStore()
 const assistantModels = ref<AssistantModelList>()
 const selectedProfileId = ref<number | null>(null)
 const assistantSelection = ref<number | null>(null)
+const structuredSelection = ref<number | null>(null)
 const assigning = ref(false)
 const loading = ref(false)
 const saving = ref(false)
@@ -173,6 +175,20 @@ async function assignAssistantModel(): Promise<void> {
   }
 }
 
+async function assignStructuredModel(): Promise<void> {
+  if (structuredSelection.value === null) return
+  assigning.value = true
+  try {
+    await selectStructuredModel(structuredSelection.value)
+    await loadAssistantModels()
+    ElMessage.success('结构化分析任务将使用此模型')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '分配模型失败')
+  } finally {
+    assigning.value = false
+  }
+}
+
 async function saveConfiguration(): Promise<boolean> {
   if (!(await formRef.value?.validate().catch(() => false))) return false
   saving.value = true
@@ -265,6 +281,7 @@ async function loadAssistantModels(): Promise<void> {
   if (auth.isAdmin) {
     assistantModels.value = await getAssistantModels()
     assistantSelection.value = assistantModels.value.assistant_model_id
+    structuredSelection.value = assistantModels.value.structured_model_id
   }
 }
 
@@ -280,7 +297,7 @@ onMounted(() => {
       <div>
         <h1 class="page-title">AI 配置 · 模型管理</h1>
         <p class="page-description">
-          统一管理模型连接参数；个人默认模型供分析任务使用，智能助手模型由管理员在下方指定。
+          统一管理模型连接参数；管理员分别指定智能助手与结构化分析模型；未指定结构化模型时沿用任务创建者的个人默认模型。
         </p>
       </div>
       <el-tag :type="configured ? 'success' : 'warning'">
@@ -316,6 +333,14 @@ onMounted(() => {
           <el-button type="success" plain @click="newProfile">+ 新增模型</el-button>
         </div>
         <el-divider />
+        <h3>AI 结构化分析 / AI 任务中心使用模型</h3>
+        <div class="model-actions">
+          <el-select v-model="structuredSelection" placeholder="选择分析模型" style="width: 300px">
+            <el-option v-for="item in assistantModels?.results.filter((profile) => profile.is_active)"
+              :key="item.id" :label="`${item.name}（${item.model}）`" :value="item.id" />
+          </el-select>
+          <el-button type="primary" :loading="assigning" @click="assignStructuredModel">设为结构化分析模型</el-button>
+        </div>
         <h3>智能助手使用模型</h3>
         <div class="model-actions">
           <el-select
