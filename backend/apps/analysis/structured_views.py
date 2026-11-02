@@ -431,35 +431,36 @@ class StructuredBatchViewSet(ViewSet):
     @action(detail=True, methods=("post",), url_path="retry-failed")
     def retry_failed(self, request: Request, pk: str | None = None) -> Response:
         assert pk is not None
-        original = AnalysisBatch.objects.get(pk=pk)
-        failed_ids = list(
-            AnalysisRun.objects.filter(batch=original, status=StructuredRunStatus.FAILED).exclude(content_id__in=StructuredManualDisposition.objects.values("content_id")).values_list(
-                "content_id", flat=True
+        with transaction.atomic():
+            original = AnalysisBatch.objects.select_for_update().get(pk=pk)
+            if original.status in (AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING, AnalysisBatchStatus.PAUSED):
+                return Response({"error_code": "BATCH_BUSY"}, status=status.HTTP_409_CONFLICT)
+            manual_ids = StructuredManualDisposition.objects.values("content_id")
+            failed_ids = list(
+                AnalysisRun.objects.filter(batch=original, is_current=True, status=StructuredRunStatus.FAILED)
+                .exclude(content_id__in=manual_ids)
+                .order_by("content_id").values_list("content_id", flat=True).distinct()
             )
-        )
-        if not failed_ids:
-            return Response({"error_code": "NO_FAILED_ITEMS"}, status=status.HTTP_409_CONFLICT)
-        retry = AnalysisBatch.objects.create(
-            created_by=cast(User, request.user),
-            product=original.product,
-            source=original.source,
-            corpus_version=original.corpus_version,
-            provider=original.provider,
-            model_name=original.model_name,
-            prompt_version=original.prompt_version,
-            requested_count=len(failed_ids),
-            dry_run=False,
-            max_concurrency=original.max_concurrency,
-            requests_per_minute=original.requests_per_minute,
-            token_limit=original.token_limit,
-            cost_budget=original.cost_budget,
-            input_cost_per_million=original.input_cost_per_million,
-            output_cost_per_million=original.output_cost_per_million,
-        )
-        result = run_structured_analysis_batch_task.delay(retry.id, failed_ids)
+            if not failed_ids:
+                return Response({"error_code": "NO_FAILED_ITEMS"}, status=status.HTTP_409_CONFLICT)
+            original.retry_count += 1
+            original.status = AnalysisBatchStatus.PENDING
+            original.finished_at = None
+            original.error_message = ""
+            original.save(update_fields=("retry_count", "status", "finished_at", "error_message", "updated_at"))
+            batch_id = original.id
+        try:
+            result = run_structured_analysis_batch_task.delay(batch_id, failed_ids, retry_failed=True)
+        except Exception as exc:
+            AnalysisBatch.objects.filter(pk=batch_id, status=AnalysisBatchStatus.PENDING).update(
+                status=AnalysisBatchStatus.FAILED, error_message=f"TASK_DISPATCH_FAILED: {type(exc).__name__}"[:1000],
+                finished_at=timezone.now(),
+            )
+            return Response({"error_code": "TASK_DISPATCH_FAILED"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        original.refresh_from_db()
         return Response(
-            {"batch": StructuredBatchSerializer(retry).data, "celery_task_id": result.id},
-            status=status.HTTP_201_CREATED,
+            {"batch": StructuredBatchSerializer(original).data, "celery_task_id": result.id},
+            status=status.HTTP_202_ACCEPTED,
         )
 
 
