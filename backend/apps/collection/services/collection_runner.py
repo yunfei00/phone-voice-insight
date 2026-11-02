@@ -18,7 +18,6 @@ from collectors.base import (
 )
 from collectors.honor_club.normalizer import is_product_related
 from collectors.honor_club.parser import extract_thread_page_count, is_valid_thread_page
-from apps.reviews.services.thread_tree import parse_human_count
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
@@ -45,6 +44,7 @@ from apps.collection.services.orchestration import (
 from apps.collection.services.review_persistence import persist_review
 from apps.products.models import ProductAlias
 from apps.reviews.models import ReviewRecord
+from apps.reviews.services.thread_tree import parse_human_count
 from apps.sources.models import SourceTarget
 
 logger = logging.getLogger(__name__)
