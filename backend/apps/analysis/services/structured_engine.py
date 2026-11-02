@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """V1 结构化分析执行服务；不在导入或启动时发起任何模型调用。"""
 
 from __future__ import annotations
@@ -252,7 +253,7 @@ def _analyze_long_text(review: ReviewRecord, provider: AIProvider) -> tuple[Stru
     base_input = _provider_input(review)
     for offset, segment in _text_segments(review.content):
         feedback = ""
-        for attempt in range(2):
+        for _attempt in range(2):
             response = _request_with_empty_retry(
                 provider,
                 base_input.model_copy(update={"content": segment}),
