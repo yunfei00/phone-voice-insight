@@ -121,24 +121,36 @@ def _decode(content: str) -> dict[str, object]:
 
 
 def _normalize_structured_payload(payload: dict[str, object], source_text: str) -> dict[str, object]:
-    """Repair redundant taxonomy fields and exact evidence offsets deterministically."""
+    """Apply only schema-safe, evidence-preserving repairs to model output."""
+    allowed_top = set(StructuredAnalysisPayload.model_fields)
+    payload = {key: value for key, value in payload.items() if key in allowed_top}
+    payload.setdefault("schema_version", SCHEMA_VERSION)
+    payload.setdefault("taxonomy_version", TAXONOMY_VERSION)
+    payload.setdefault("model_mentions", [])
+    payload.setdefault("aspects", [])
     aspects = payload.get("aspects")
     if not isinstance(aspects, list):
         return payload
+    allowed_aspect = set(StructuredAnalysisPayload.model_fields["aspects"].annotation.__args__[0].model_fields)
     topic_parent_map = load_taxonomy().topic_parent_map
-    for value in aspects:
+    for index, value in enumerate(aspects):
         if not isinstance(value, dict):
             continue
+        value = {key: item for key, item in value.items() if key in allowed_aspect}
+        aspects[index] = value
+        value.setdefault("compared_products", [])
+        value.setdefault("review_required", False)
         topic_code = value.get("topic_code")
         if isinstance(topic_code, str) and topic_code in topic_parent_map:
             value["aspect_code"] = topic_parent_map[topic_code]
         aspect_code = value.get("aspect_code")
-        business_domains = value.get("business_domains")
-        if isinstance(aspect_code, str) and aspect_code and isinstance(business_domains, list):
-            normalized_domains = [item for item in business_domains if isinstance(item, str) and item]
-            if aspect_code not in normalized_domains:
-                normalized_domains.append(aspect_code)
-            value["business_domains"] = normalized_domains
+        if isinstance(aspect_code, str) and aspect_code:
+            domains = value.get("business_domains")
+            if not isinstance(domains, list):
+                domains = []
+            value["business_domains"] = list(dict.fromkeys(
+                [item for item in domains if isinstance(item, str) and item] + [aspect_code]
+            ))
         evidence = value.get("evidence_text")
         if not isinstance(evidence, str) or not evidence:
             continue
@@ -146,10 +158,10 @@ def _normalize_structured_payload(payload: dict[str, object], source_text: str) 
         end = value.get("evidence_end")
         if isinstance(start, int) and isinstance(end, int) and 0 <= start < end and source_text[start:end] == evidence:
             continue
-        exact_start = source_text.find(evidence)
-        if exact_start >= 0:
-            value["evidence_start"] = exact_start
-            value["evidence_end"] = exact_start + len(evidence)
+        matches = [match.start() for match in re.finditer(re.escape(evidence), source_text)]
+        if len(matches) == 1:
+            value["evidence_start"] = matches[0]
+            value["evidence_end"] = matches[0] + len(evidence)
     return payload
 
 
