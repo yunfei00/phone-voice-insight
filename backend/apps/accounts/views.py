@@ -233,7 +233,9 @@ class DashboardPreferenceView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request) -> Response:
-        preference = UserPagePreference.objects.filter(user=cast(DjangoUser, request.user), page_key="dashboard").first()
+        preference = UserPagePreference.objects.filter(
+            user=cast(DjangoUser, request.user), page_key="dashboard"
+        ).first()
         return Response(preference.settings if preference else {})
 
     def put(self, request: Request) -> Response:
