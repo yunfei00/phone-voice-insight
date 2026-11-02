@@ -971,3 +971,10 @@ export interface ManualQueueItem {
 }
 export const getManualQueue = async (status?: string): Promise<{count: number; results: ManualQueueItem[]}> =>
   (await apiClient.get('/structured-batches/manual-queue/', {params: status ? {status} : {}})).data
+
+export type PersistedPage = 'ai-assistant' | 'issues' | 'insight-reports'
+export const getPagePreference = async (page: PersistedPage): Promise<Record<string, unknown>> =>
+  (await apiClient.get<Record<string, unknown>>(`/page-preferences/${page}/`)).data
+export const savePagePreference = async (page: PersistedPage, data: Record<string, unknown>): Promise<void> => {
+  await apiClient.put(`/page-preferences/${page}/`, data)
+}
