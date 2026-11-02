@@ -689,7 +689,9 @@ def run_collection(
     if not isinstance(previous_counts, dict):
         previous_counts = {}
     reply_count_snapshot: dict[str, int] = {str(k): int(v) for k, v in previous_counts.items() if str(v).isdigit()}
-    checkpoint: dict[str, Any] = {"reply_count_snapshot": reply_count_snapshot}
+    checkpoint: dict[str, Any] = (
+        {"reply_count_snapshot": reply_count_snapshot} if reply_count_snapshot else {}
+    )
     start_page = 1
     start_index = 0
     inserted = skipped = failed = scanned = duplicate_records = 0
@@ -902,6 +904,7 @@ def run_collection(
 
                     if listed_replies is not None:
                         reply_count_snapshot[thread_id] = listed_replies
+                        checkpoint["reply_count_snapshot"] = reply_count_snapshot
                     checkpoint = {
                         **checkpoint,
                         "topic_page": topic_page,
