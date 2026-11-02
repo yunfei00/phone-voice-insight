@@ -154,15 +154,6 @@ def analyze_content(
     batch_id: int | None = None,
 ) -> AnalysisRun:
     review = ReviewRecord.objects.select_related("product", "source").get(pk=content_id)
-    # Approved human corrections are authoritative until explicitly reopened.
-    from apps.analysis.models import StructuredManualDisposition
-    if not force and StructuredManualDisposition.objects.filter(
-        content_id=content_id, status__in=("IN_REVIEW", "DEFERRED", "EXCLUDED", "SUBMITTED", "APPROVED")
-    ).exists():
-        existing = AnalysisRun.objects.filter(content_id=content_id).order_by("-created_at").first()
-        if existing is not None:
-            return existing
-        raise ValueError("MANUAL_DISPOSITION_ACTIVE")
     run, should_execute = _create_run(review, provider, force=force, batch_id=batch_id)
     if not should_execute:
         return run
