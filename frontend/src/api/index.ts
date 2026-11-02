@@ -60,6 +60,30 @@ export const logout = async (): Promise<void> => {
   await apiClient.post('/auth/logout/')
 }
 
+export type DashboardMetricKey = 'raw_feedback' | 'valid_feedback' | 'ai_analyzed' | 'explicit_issue_feedback' | 'watch_issue_count'
+export interface DashboardMetricEvidence {
+  metric: DashboardMetricKey
+  count: number
+  page: number
+  page_size: number
+  start_date: string
+  end_date: string
+  results: Array<{
+    id: number | string
+    title: string
+    product: string
+    source: string
+    published_at: string | null
+    source_url: string
+    description: string
+  }>
+}
+export const getDashboardMetricEvidence = async (
+  metric: DashboardMetricKey,
+  params: DashboardFilters & { page?: number; page_size?: number },
+): Promise<DashboardMetricEvidence> =>
+  (await apiClient.get<DashboardMetricEvidence>(`/dashboard/metrics/${metric}/evidence/`, { params })).data
+
 export interface DashboardPreference {
   product_id?: number | null
   source_id?: number | null
