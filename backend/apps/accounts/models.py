@@ -99,3 +99,13 @@ class UserAIConfiguration(models.Model):
         from apps.accounts.crypto import decrypt_credential
 
         return decrypt_credential(self.api_key_ciphertext)
+
+
+class UserPagePreference(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="page_preferences")
+    page_key = models.CharField(max_length=64)
+    settings = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "page_key"], name="unique_user_page_preference")]
