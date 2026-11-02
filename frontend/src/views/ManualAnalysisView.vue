@@ -120,7 +120,7 @@ async function submit() {
       ElMessage.warning('请选择问题分类和具体问题')
       return
     }
-    const evidence = aspect.evidence_text.trim()
+    const evidence = aspect.evidence_text
     const start = evidenceOffset(item.content, evidence)
     if (!evidence || start < 0) {
       ElMessage.warning('证据原文必须是帖子中连续出现的一段文字，请直接复制原文')
@@ -235,7 +235,7 @@ onMounted(load)
           </el-row>
           <el-form-item label="原文证据（必填：从上方帖子复制一段原话）">
             <el-input v-model="aspect.evidence_text" type="textarea" :rows="2" placeholder="例如：拍照十分钟后手机背面特别烫" />
-            <span v-if="aspect.evidence_text && !selected.content.includes(aspect.evidence_text.trim())" class="error">证据未在原文中找到，请复制原文，不要改写</span>
+            <span v-if="aspect.evidence_text && !selected.content.includes(aspect.evidence_text)" class="error">证据未在原文中找到，请复制原文，不要改写</span>
           </el-form-item>
         </el-card>
         <el-button type="primary" plain @click="aspects.push(newAspect())">+ 添加另一个问题</el-button>
