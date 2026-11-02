@@ -143,7 +143,7 @@ const metricCards = computed(() => [
     key: 'watch_issue_count',
     label: '重点观察问题',
     value: overview.value?.watch_issue_count ?? 0,
-    note: '满足样本量和增长阈值的问题',
+    note: '所选周期高频、严重或近期增长的问题',
   },
   {
     key: undefined,
@@ -165,7 +165,7 @@ const metricDescriptions: Record<DashboardMetricKey, string> = {
   valid_feedback: '原始记录中治理判定可用于 AI 且排除官方内容的去重记录数。',
   ai_analyzed: '当前有效的结构化分析中，通过校验、不需要人工复核的独立原始记录数。',
   explicit_issue_feedback: '结构化分析中有明确负面问题证据的独立原始记录数，同一记录多个问题只计算一次。',
-  watch_issue_count: '同时满足最近样本量和增长阈值的重点问题数，最多展示五项。',
+  watch_issue_count: '按所选时间范围统计高频、严重、持续或近期增长的问题，最多展示五项；不是全部负面反馈。',
 }
 async function loadEvidence(): Promise<void> {
   evidenceLoading.value = true
@@ -514,7 +514,7 @@ onBeforeUnmount(() => {
             ><em>{{ item.is_new ? '新出现' : `${item.growth_rate}%` }}</em>
           </button>
         </div>
-        <el-empty v-else description="当前没有满足阈值的重点观察问题" />
+        <el-empty v-else description="当前周期没有达到关注规则的问题，可点击上方指标查看规则" />
       </article>
     </section>
     <el-dialog v-model="evidenceVisible" title="驾驶舱指标核对明细" width="min(920px, 96vw)" destroy-on-close>
@@ -524,6 +524,8 @@ onBeforeUnmount(() => {
         <p>产品 ID：{{ evidenceSnapshot.product_id || '全部' }} · 来源 ID：{{ evidenceSnapshot.source_id || '全部' }}</p>
         <p>实际统计日期：{{ evidence?.start_date || evidenceSnapshot.start_date || '默认最近30天' }} 至 {{ evidence?.end_date || evidenceSnapshot.end_date || '今天' }}</p>
         <strong>核对总数：{{ evidence?.count ?? '加载中' }}</strong>
+        <p v-if="evidenceMetric === 'watch_issue_count' && overview?.watch_diagnostics">识别问题类别 {{ overview.watch_diagnostics.total_candidates }} · 符合关注规则 {{ overview.watch_diagnostics.eligible_count }} · 未入选 {{ overview.watch_diagnostics.excluded_count }} · 高频门槛 {{ overview.watch_diagnostics.thresholds.min_feedback }} 条</p>
+        <div v-if="evidenceMetric === 'watch_issue_count' && overview?.watch_diagnostics?.excluded?.length"><strong>未入选示例及原因</strong><p v-for="item in overview.watch_diagnostics.excluded.slice(0, 10)" :key="item.id">{{ item.name }}：{{ item.excluded_reason }}</p></div>
       </div>
       <el-alert v-if="evidenceError" type="error" :title="evidenceError" :closable="false" show-icon />
       <el-table :data="evidence?.results || []" v-loading="evidenceLoading" height="390" stripe>
