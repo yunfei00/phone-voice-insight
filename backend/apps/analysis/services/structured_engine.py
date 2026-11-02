@@ -184,6 +184,70 @@ def _create_run(
     return run, True
 
 
+def _text_segments(text: str, limit: int = 3000) -> list[tuple[int, str]]:
+    """Split on paragraph boundaries where possible, retaining exact source offsets."""
+    if len(text) <= limit:
+        return [(0, text)]
+    segments: list[tuple[int, str]] = []
+    start = 0
+    while start < len(text):
+        end = min(start + limit, len(text))
+        if end < len(text):
+            boundary = text.rfind("\n", start + limit // 2, end)
+            if boundary > start:
+                end = boundary + 1
+        segments.append((start, text[start:end]))
+        start = end
+    return segments
+
+
+def _analyze_long_text(review: ReviewRecord, provider: AIProvider) -> tuple[StructuredAnalysisPayload, int, int, int]:
+    """Analyze bounded text segments and restore evidence positions to the full post."""
+    payloads: list[StructuredAnalysisPayload] = []
+    latency = prompt_tokens = completion_tokens = 0
+    base_input = _provider_input(review)
+    for offset, segment in _text_segments(review.content):
+        feedback = ""
+        for attempt in range(2):
+            response = provider.analyze_review(
+                base_input.model_copy(update={"content": segment}),
+                prompt=_prompt(),
+                validation_feedback=feedback,
+            )
+            try:
+                decoded = _normalize_structured_payload(_decode(response.content), segment)
+                validated = validate_structured_payload(decoded, segment)
+            except (ValueError, json.JSONDecodeError) as exc:
+                feedback = f"INVALID_JSON:{exc}"
+                continue
+            if not validated.valid or validated.payload is None:
+                feedback = "; ".join(validated.errors)
+                continue
+            data = validated.payload.model_dump()
+            for aspect in data["aspects"]:
+                aspect["evidence_start"] += offset
+                aspect["evidence_end"] += offset
+            payloads.append(StructuredAnalysisPayload.model_validate(data))
+            latency += response.latency_ms
+            prompt_tokens += response.prompt_tokens or 0
+            completion_tokens += response.completion_tokens or 0
+            break
+        else:
+            raise ValueError(f"LONG_POST_SEGMENT_FAILED at offset {offset}: {feedback[:200]}")
+    first = payloads[0]
+    merged = first.model_dump()
+    merged["aspects"] = [aspect.model_dump() for item in payloads for aspect in item.aspects]
+    merged["model_mentions"] = list(dict.fromkeys(name for item in payloads for name in item.model_mentions))
+    sentiments = {item.overall_sentiment for item in payloads}
+    merged["overall_sentiment"] = first.overall_sentiment if len(sentiments) == 1 else "MIXED"
+    merged["summary"] = "；".join(item.summary for item in payloads if item.summary)[:500]
+    merged["relevance"] = "RELEVANT" if any(item.relevance == "RELEVANT" for item in payloads) else first.relevance
+    result = validate_structured_payload(merged, review.content)
+    if not result.valid or result.payload is None:
+        raise ValueError("LONG_POST_MERGE_FAILED: " + "; ".join(result.errors))
+    return result.payload, latency, prompt_tokens, completion_tokens
+
+
 def analyze_content(
     content_id: int,
     provider: AIProvider,
@@ -199,6 +263,11 @@ def analyze_content(
     feedback = ""
     last_response: AIProviderResponse | None = None
     try:
+        if len(review.content) > 3000:
+            payload, latency, prompt_tokens, completion_tokens = _analyze_long_text(review, provider)
+            run.attempt_count = 1
+            _persist_success(run, payload, latency, prompt_tokens, completion_tokens)
+            return run
         for attempt in range(max_retries + 1):
             run.attempt_count = attempt + 1
             response = provider.analyze_review(_provider_input(review), prompt=_prompt() + _approved_example_prompt(review), validation_feedback=feedback)
