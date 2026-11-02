@@ -347,7 +347,21 @@ class StructuredBatchViewSet(ViewSet):
             is_current=True,
             status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
         ).values("content_id")
-        remaining = corpus.exclude(id__in=completed).count()
+        manual = StructuredManualDisposition.objects.filter(
+            content_id__in=corpus.values("id"),
+            status__in=("EXCLUDED", "APPROVED", "DEFERRED", "SUBMITTED", "IN_REVIEW"),
+        ).values("content_id")
+        pending = corpus.exclude(id__in=completed).exclude(id__in=manual)
+        remaining = pending.count()
+        ai_completed = corpus.filter(id__in=completed).count()
+        manual_handled = corpus.exclude(id__in=completed).filter(
+            id__in=StructuredManualDisposition.objects.filter(
+                status__in=("EXCLUDED", "APPROVED", "DEFERRED", "SUBMITTED", "IN_REVIEW"),
+            ).values("content_id")
+        ).count()
+        manual_excluded = corpus.exclude(id__in=completed).filter(
+            id__in=StructuredManualDisposition.objects.filter(status="EXCLUDED").values("content_id")
+        ).count()
         active = (
             AnalysisBatch.objects.filter(
                 created_by=cast(User, request.user),
@@ -368,7 +382,10 @@ class StructuredBatchViewSet(ViewSet):
         return Response(
             {
                 "total": corpus.count(),
-                "completed": corpus.filter(id__in=completed).count(),
+                "completed": ai_completed + manual_handled,
+                "ai_completed": ai_completed,
+                "manual_handled": manual_handled,
+                "manual_excluded": manual_excluded,
                 "remaining": remaining,
                 "active": active is not None,
                 "batch": StructuredBatchSerializer(active or latest).data if (active or latest) else None,
