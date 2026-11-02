@@ -72,7 +72,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'threads',
         name: 'threads',
         component: () => import('@/views/ThreadsView.vue'),
-        meta: { title: '帖子视图' },
+        meta: { title: '帖子视图', writeOnly: true },
       },
       {
         path: 'reviews',
