@@ -233,7 +233,7 @@ class DashboardPreferenceView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request: Request) -> Response:
-        preference = UserPagePreference.objects.filter(user_id=request.user.pk, page_key="dashboard").first()
+        preference = UserPagePreference.objects.filter(user=cast(DjangoUser, request.user), page_key="dashboard").first()
         return Response(preference.settings if preference else {})
 
     def put(self, request: Request) -> Response:
@@ -265,7 +265,7 @@ class DashboardPreferenceView(APIView):
         if data.get("source_id") and not DataSource.objects.filter(pk=data["source_id"], is_active=True).exists():
             return Response({"source_id": ["来源不存在或已停用"]}, status=400)
         preference, _ = UserPagePreference.objects.update_or_create(
-            user=request.user, page_key="dashboard", defaults={"settings": data}
+            user=cast(DjangoUser, request.user), page_key="dashboard", defaults={"settings": data}
         )
         return Response(preference.settings)
 
