@@ -139,7 +139,9 @@ def run_collection_task(_self: Task, task_id: int, dispatch_token: str | None = 
     if summary.continuation_required:
         enqueue_collection_task(task_id, countdown=5, force=True)
     else:
-        if summary.completed and max(summary.new_records, summary.inserted_records) > 0:
+        # Process successfully persisted records even when some threads failed.
+        # The reconciliation task will safely retry unfinished governance later.
+        if max(summary.new_records, summary.inserted_records) > 0:
             try:
                 from apps.reviews.tasks import run_automatic_voice_pipeline
 
