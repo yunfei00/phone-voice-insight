@@ -178,7 +178,7 @@ class StructuredBatchViewSet(ViewSet):
     @action(detail=False, methods=("post",), url_path="manual-disposition")
     def manual_disposition(self, request: Request) -> Response:
         try:
-            content_id = int(request.data.get("content_id"))
+            content_id = int(str(request.data.get("content_id")))
         except (ValueError, TypeError):
             return Response({"error_code": "INVALID_CONTENT_ID"}, status=400)
         new_status = request.data.get("status")
@@ -245,7 +245,7 @@ class StructuredBatchViewSet(ViewSet):
                 item.reviewer_id = request.user.pk
                 item.reviewed_at = timezone.now()
             if new_status != "APPROVED":
-                item.handler = request.user
+                item.handler_id = request.user.pk
             item.save()
         return Response({"content_id": content_id, "status": item.status, "reason": item.reason})
 
