@@ -78,6 +78,22 @@ class StructuredBatchViewSet(ViewSet):
             for item in rows
         ]})
 
+    @action(detail=False, methods=("post",), url_path="cancel-manual")
+    def cancel_manual(self, request: Request) -> Response:
+        """Withdraw an unfinished manual assignment without altering the original failed run."""
+        try:
+            content_id = int(request.data.get("content_id"))
+        except (TypeError, ValueError):
+            return Response({"error_code": "INVALID_CONTENT_ID"}, status=400)
+        with transaction.atomic():
+            item = StructuredManualDisposition.objects.select_for_update().filter(content_id=content_id).first()
+            if item is None:
+                return Response({"error_code": "MANUAL_RECORD_NOT_FOUND"}, status=404)
+            if item.status == "APPROVED":
+                return Response({"error_code": "APPROVED_CANNOT_WITHDRAW"}, status=409)
+            item.delete()
+        return Response({"content_id": content_id, "status": "WITHDRAWN"})
+
     @action(detail=False, methods=("get",), url_path="manual-dispositions")
     def manual_dispositions(self, request: Request) -> Response:
         ids = request.query_params.get("content_ids", "")
