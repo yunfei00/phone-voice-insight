@@ -200,7 +200,7 @@ class AssistantOrchestrator:
             return "get_issue_evidence", arguments
         if any(marker in question for marker in ("趋势", "变化", "新增", "最近七天", "近7天")):
             return "get_issue_trends", arguments
-        if any(marker in question for marker in ("搜索", "查找", "提到", "反馈原文", "帖子", "评价")):
+        if any(marker in question for marker in ("原始", "原帖", "原文", "用户原话", "真实反馈", "评论", "搜索", "查找", "提到", "反馈原文", "帖子", "评价")):
             arguments["query"] = _keyword(question)
             return "query_posts", arguments
         if any(marker in question for marker in ("问题", "关注", "不满", "投诉", "严重")):
@@ -279,12 +279,25 @@ def _mentioned_product_ids(question: str) -> list[int]:
 
 
 def _keyword(question: str) -> str:
-    stripped = question.strip("？?。！! ")
-    for prefix in ("搜索", "查找", "帮我找", "有哪些反馈提到"):
-        if stripped.startswith(prefix):
-            stripped = stripped[len(prefix) :].strip("：:，, ")
-    return stripped[:120] or "用户反馈"
+    """Strip conversational instructions; an empty query lists recent raw posts."""
+    import re
 
+    quoted = re.search(r"[“\u300c\"](.{2,80}?)[”\u300d\"]", question)
+    if quoted:
+        return quoted.group(1).strip()
+    subject = question.strip("？?。！! ")
+    for phrase in (
+        "荣耀 Power 2", "荣耀Power 2", "荣耀 Power", "荣耀Power",
+        "原始帖子", "原始数据", "真实用户反馈", "用户反馈", "用户原话",
+        "原帖", "帖子", "评论", "评价", "原文", "帮我", "请",
+        "搜索", "查找", "检索", "找出", "找到", "给我", "看看",
+        "查看", "列出", "展示", "提供", "关于", "有关", "涉及",
+        "提到", "最近一个月", "最近30天", "最近七天", "最近7天",
+        "五条", "5条", "十条", "10条", "几条", "所有",
+        "的", "一下", "有哪些", "是什么", "具体内容", "附原始链接", "附链接",
+    ):
+        subject = subject.replace(phrase, " ")
+    return re.sub(r"\s+", " ", subject).strip(" ：:，,。？? ")[:120]
 
 def _extract_evidence(result: dict[str, Any]) -> list[dict[str, Any]]:
     rows = result.get("posts") or result.get("feedback") or (result.get("issue") or {}).get("evidence") or []
