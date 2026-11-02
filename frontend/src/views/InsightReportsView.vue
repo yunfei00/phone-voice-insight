@@ -5,7 +5,9 @@ import { onMounted, ref } from 'vue'
 
 import { getPagePreference, savePagePreference, generateInsightReport, getInsightReport, getInsightReports, getProducts } from '@/api'
 import type { InsightReport, Product } from '@/types/api'
+import { useAuthStore } from '@/stores/auth'
 
+const auth = useAuthStore()
 const products = ref<Product[]>([])
 const reportType = ref<'DAILY' | 'WEEKLY'>('DAILY')
 const productId = ref<number>()
@@ -34,7 +36,7 @@ async function load(): Promise<void> {
   }
 }
 async function generateNow(): Promise<void> {
-  if (generating.value) return
+  if (!auth.canWrite || generating.value) return
   generating.value = true
   try {
     await generateInsightReport(reportType.value)
@@ -82,7 +84,7 @@ onMounted(async () => {
         <h1 class="page-title">AI 智能洞察报告</h1>
         <p class="page-description">确定性数据库聚合与模板生成，默认不额外调用付费模型</p>
       </div>
-      <el-button type="primary" :loading="generating" @click="generateNow">立即生成报告</el-button>
+      <el-button v-if="auth.canWrite" type="primary" :loading="generating" @click="generateNow">立即生成报告</el-button>
       <el-button :icon="CopyDocument" :disabled="!selected" @click="copySummary"
         >复制摘要</el-button
       >
