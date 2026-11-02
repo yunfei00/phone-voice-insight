@@ -201,6 +201,21 @@ def _text_segments(text: str, limit: int = 3000) -> list[tuple[int, str]]:
     return segments
 
 
+def _request_with_empty_retry(provider: AIProvider, request: ReviewAnalysisInput, prompt: str, feedback: str = "") -> AIProviderResponse:
+    """Retry an empty model answer once with reduced prompt overhead."""
+    try:
+        return provider.analyze_review(request, prompt=prompt, validation_feedback=feedback)
+    except AIProviderError as exc:
+        if exc.code != "AI_EMPTY_RESPONSE":
+            raise
+        return provider.analyze_review(
+            request,
+            prompt=prompt.split("## 本次必须遵循的完整 JSON Schema")[0]
+            + "\n请只输出符合结构化分析字段要求的 JSON 对象，不要输出思考过程或说明。",
+            validation_feedback="上次响应没有 JSON 正文，请直接给出最终 JSON。",
+        )
+
+
 def _analyze_long_text(review: ReviewRecord, provider: AIProvider) -> tuple[StructuredAnalysisPayload, int, int, int]:
     """Analyze bounded text segments and restore evidence positions to the full post."""
     payloads: list[StructuredAnalysisPayload] = []
@@ -209,10 +224,8 @@ def _analyze_long_text(review: ReviewRecord, provider: AIProvider) -> tuple[Stru
     for offset, segment in _text_segments(review.content):
         feedback = ""
         for attempt in range(2):
-            response = provider.analyze_review(
-                base_input.model_copy(update={"content": segment}),
-                prompt=_prompt(),
-                validation_feedback=feedback,
+            response = _request_with_empty_retry(
+                provider, base_input.model_copy(update={"content": segment}), _prompt(), feedback,
             )
             try:
                 decoded = _normalize_structured_payload(_decode(response.content), segment)
@@ -270,7 +283,7 @@ def analyze_content(
             return run
         for attempt in range(max_retries + 1):
             run.attempt_count = attempt + 1
-            response = provider.analyze_review(_provider_input(review), prompt=_prompt() + _approved_example_prompt(review), validation_feedback=feedback)
+            response = _request_with_empty_retry(provider, _provider_input(review), _prompt() + _approved_example_prompt(review), feedback)
             last_response = response
             result: StructuredValidationResult | None
             try:
