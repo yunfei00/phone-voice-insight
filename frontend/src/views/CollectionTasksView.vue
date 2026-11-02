@@ -692,7 +692,17 @@ onUnmounted(stopPolling)
           新增 {{ selectedTask.new_records }}，重复 {{ selectedTask.duplicate_records }}，失败
           {{ selectedTask.failure_count }}
         </el-descriptions-item>
-        <el-descriptions-item label="无权限帖子（不计为采集失败）">
+        <el-descriptions-item label="失败帖子及原因">
+          <template v-if="Array.isArray(selectedTask.verification_report?.unresolved_thread_details) && selectedTask.verification_report.unresolved_thread_details.length">
+            <div v-for="thread in selectedTask.verification_report.unresolved_thread_details" :key="String(thread.thread_id)" class="thread-detail">
+              <a v-if="thread.thread_url" :href="String(thread.thread_url)" target="_blank" rel="noopener noreferrer">帖子 {{ thread.thread_id }}</a>
+              <span v-else>帖子 {{ thread.thread_id }}</span>
+              · 已尝试 {{ thread.attempts }} 次 · {{ thread.last_error || '原因未记录' }}
+            </div>
+          </template>
+          <span v-else>无未解决的帖子级失败；请查看下方任务错误及完整性报告。</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="访问受限跳过（不计为采集失败）">
           <template
             v-if="
               Array.isArray(selectedTask.verification_report?.access_blocked_thread_details) &&
@@ -706,7 +716,7 @@ onUnmounted(stopPolling)
               <a :href="String(thread.thread_url)" target="_blank" rel="noopener noreferrer"
                 >帖子 {{ thread.thread_id }}</a
               >
-              · {{ thread.last_error || '访问受限' }}
+              · 已尝试 {{ thread.attempts }} 次 · {{ thread.last_error || '访问受限' }}
             </div>
           </template>
           <span v-else>无</span>
@@ -726,6 +736,7 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
+.thread-detail { padding: 6px 0; overflow-wrap: anywhere; }
 .live-progress {
   margin-top: 16px;
   padding: 14px;
