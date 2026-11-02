@@ -158,6 +158,7 @@ class OpenAICompatibleProvider(AIProvider):
             }
             if self.thinking_mode:
                 request_payload["thinking"] = {"type": self.thinking_mode}
+            request_bytes = len(json.dumps(request_payload, ensure_ascii=False).encode("utf-8"))
             response = httpx.post(
                 f"{self.base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
@@ -200,7 +201,12 @@ class OpenAICompatibleProvider(AIProvider):
                 request_id=request_id,
             )
         if response.status_code == 413:
-            raise AIProviderError("AI_REQUEST_TOO_LARGE", "AI request exceeds provider size limit (HTTP 413)", http_status=413, request_id=request_id)
+            raise AIProviderError(
+                "AI_REQUEST_TOO_LARGE",
+                f"HTTP 413: request_bytes={request_bytes}, prompt_chars={sum(len(m.get('content', '')) for m in messages)}, "
+                f"server={response.headers.get('server', 'unknown')[:60]}, content_type={response.headers.get('content-type', 'unknown')[:60]}",
+                http_status=413, request_id=request_id,
+            )
         if response.status_code >= 400:
             raise AIProviderError(
                 "AI_PROVIDER_ERROR",
