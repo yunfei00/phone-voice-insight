@@ -48,7 +48,7 @@ def run_analysis_batch_task(
 
 @shared_task(name="run_structured_analysis_batch_task", autoretry_for=(), max_retries=0)
 def run_structured_analysis_batch_task(
-    batch_id: int, content_ids: list[int], *, max_retries: int = 1
+    batch_id: int, content_ids: list[int], *, max_retries: int = 1, retry_failed: bool = False
 ) -> dict[str, Any]:
     batch = AnalysisBatch.objects.select_related("created_by").get(pk=batch_id)
     if batch.created_by is None:
@@ -56,6 +56,12 @@ def run_structured_analysis_batch_task(
         batch.error_message = "BATCH_OWNER_MISSING"
         batch.save()
         return {"batch_id": batch_id, "status": batch.status}
+    if retry_failed:
+        previous = AnalysisRun.objects.filter(
+            batch_id=batch_id, content_id__in=content_ids,
+            is_current=True, status=StructuredRunStatus.FAILED,
+        ).values("content_id").distinct().count()
+        batch.failed_count = max(0, batch.failed_count - previous)
     batch.status = AnalysisBatchStatus.RUNNING
     batch.started_at = timezone.now()
     batch.save()
