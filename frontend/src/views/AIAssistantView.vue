@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ChatDotRound, Clock } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import {
@@ -9,6 +9,8 @@ import {
   createAssistantConversation,
   deleteAssistantConversation,
   getAssistantConversations,
+  getPagePreference,
+  savePagePreference,
   getAssistantMessages,
   getProducts,
   getSources,
@@ -65,11 +67,15 @@ async function loadBase() {
     conversations.value = conversationData
     products.value = productData.results
     sources.value = sourceData.results
-    productId.value = queryString('product_id') ? Number(queryString('product_id')) : undefined
-    sourceId.value = queryString('source_id') ? Number(queryString('source_id')) : undefined
-    const start = queryString('start_date')
-    const end = queryString('end_date')
-    if (start && end) dateRange.value = [start, end]
+    let saved: Record<string, unknown> = {}
+    try { saved = await getPagePreference('ai-assistant') } catch { /* optional */ }
+    const chosenProduct = queryString('product_id') ?? saved.product_id
+    const chosenSource = queryString('source_id') ?? saved.source_id
+    productId.value = chosenProduct && products.value.some(p => p.id === Number(chosenProduct)) ? Number(chosenProduct) : undefined
+    sourceId.value = chosenSource && sources.value.some(p => p.id === Number(chosenSource)) ? Number(chosenSource) : undefined
+    const start = queryString('start_date') ?? saved.start_date
+    const end = queryString('end_date') ?? saved.end_date
+    if (typeof start === 'string' && typeof end === 'string' && start && end) dateRange.value = [start, end]
     if (queryString('question')) draft.value = queryString('question') || ''
     if (conversationData.length) await selectConversation(conversationData[0].id)
     else await newConversation()
@@ -247,6 +253,14 @@ function useQuestion(question: string) {
   draft.value = question
 }
 
+watch([productId, sourceId, dateRange], () => {
+  void savePagePreference('ai-assistant', {
+    product_id: productId.value ?? null,
+    source_id: sourceId.value ?? null,
+    start_date: dateRange.value?.[0] ?? '',
+    end_date: dateRange.value?.[1] ?? '',
+  }).catch(() => undefined)
+})
 onMounted(loadBase)
 </script>
 
