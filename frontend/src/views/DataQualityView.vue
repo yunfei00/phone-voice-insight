@@ -727,11 +727,7 @@ onUnmounted(() => {
               >开启</span
             >
             <el-button
-              @click="
-                loadAutomationSetting()
-                loadGovernanceTasks()
-                loadAIReviews()
-              "
+              @click="loadAutomationSetting(); loadGovernanceTasks(); loadAIReviews()"
               >刷新状态</el-button
             >
           </div>
