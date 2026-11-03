@@ -381,6 +381,7 @@ export interface ReviewQuality {
   author_role: string
   original_title: string
   original_content: string
+  source_url: string
   normalized_text: string
   context_text: string
   published_at: string | null
