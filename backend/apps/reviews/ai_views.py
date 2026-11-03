@@ -1,5 +1,6 @@
 """AI-assisted governance endpoints."""
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
@@ -11,7 +12,7 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import IsAdministrator
 from apps.products.models import Product
-from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, ReviewQuality
+from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, ReviewQuality, VoiceAutomationSetting
 from apps.reviews.services.governance_pipeline import apply_manual_override
 from apps.reviews.tasks import process_governance_ai_batch
 
@@ -25,6 +26,27 @@ class GovernancePagination(PageNumberPagination):
 class GovernanceAIViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAdministrator]
     queryset = GovernanceAIBatch.objects.all()
+
+    @action(detail=False, methods=["get", "patch"], url_path="automation-setting")
+    def automation_setting(self, request: Request) -> Response:
+        from apps.reviews.services.automatic_pipeline import automation_is_enabled
+
+        if request.method == "PATCH":
+            class Parameters(serializers.Serializer):
+                enabled = serializers.BooleanField()
+
+            params = Parameters(data=request.data)
+            params.is_valid(raise_exception=True)
+            requested = params.validated_data["enabled"]
+            if requested and not settings.AI_AUTOMATION_ENABLED:
+                return Response({"detail": "服务器环境已禁用自动化，请设置 AI_AUTOMATION_ENABLED=true 后重启服务"}, status=409)
+            VoiceAutomationSetting.objects.update_or_create(pk=1, defaults={"enabled": requested})
+        stored = VoiceAutomationSetting.objects.filter(pk=1).first()
+        return Response({
+            "enabled": automation_is_enabled(),
+            "configured_enabled": stored.enabled if stored else True,
+            "environment_enabled": bool(settings.AI_AUTOMATION_ENABLED),
+        })
 
     @action(detail=False, methods=["get"], url_path="corpus-summary")
     def corpus_summary(self, request: Request) -> Response:
