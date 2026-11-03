@@ -102,6 +102,7 @@ const auth = useAuthStore()
 const activeQualityTab = ref<'ai' | 'manual'>('ai')
 const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
+const productStorageKey = 'phone-voice-insight:data-quality:selected-product'
 const selectedProduct = ref<number | undefined>(undefined)
 const selectedSource = ref<number | undefined>(undefined)
 const governanceLimit = ref(20)
@@ -548,7 +549,9 @@ onMounted(async () => {
     ])
     products.value = productPage.results
     sources.value = sourcePage.results
-    selectedProduct.value = products.value[0]?.id
+    const storedProduct = window.localStorage.getItem(productStorageKey)
+    const rememberedId = storedProduct === null ? NaN : Number(storedProduct)
+    selectedProduct.value = products.value.find((product) => product.id === rememberedId)?.id ?? products.value[0]?.id
   } catch {
     ElMessage.warning('产品或来源列表加载失败')
   }
@@ -569,6 +572,9 @@ onMounted(async () => {
 })
 
 async function changeScope(): Promise<void> {
+  if (selectedProduct.value !== undefined) {
+    window.localStorage.setItem(productStorageKey, String(selectedProduct.value))
+  }
   page.value = 1
   governanceTaskPage.value = 1
   aiBatchPage.value = 1
