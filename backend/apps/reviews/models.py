@@ -421,3 +421,14 @@ class GovernanceAIBatch(TimeStampedModel):
 
     class Meta:
         ordering = ("-created_at", "-id")
+
+
+class VoiceAutomationSetting(models.Model):
+    """Singleton, database-persisted administrator control for automatic processing."""
+
+    enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "自动处理设置"
+        verbose_name_plural = "自动处理设置"
