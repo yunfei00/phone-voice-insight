@@ -43,6 +43,33 @@ const progressDialog = ref(false)
 const cleanupDialog = ref(false)
 const targetId = ref<number | null>(null)
 const editingId = ref<number | null>(null)
+const inlineEditingId = ref<number | null>(null)
+const inlineName = ref('')
+const inlineSaving = ref(false)
+function beginInlineEdit(product: Product): void {
+  if (!auth.canWrite || inlineSaving.value) return
+  inlineEditingId.value = product.id
+  inlineName.value = product.name
+}
+function cancelInlineEdit(): void {
+  inlineEditingId.value = null
+  inlineName.value = ''
+}
+async function saveInlineName(product: Product): Promise<void> {
+  if (inlineEditingId.value !== product.id || inlineSaving.value) return
+  const name = inlineName.value.trim()
+  if (!name) { ElMessage.warning('手机名称不能为空'); return }
+  if (name === product.name) { cancelInlineEdit(); return }
+  inlineSaving.value = true
+  try {
+    await updateProduct(product.id, { name })
+    cancelInlineEdit()
+    ElMessage.success('手机名称已更新')
+    await load()
+  } catch { ElMessage.error('修改失败，请重试') }
+  finally { inlineSaving.value = false }
+}
+
 const operatingTargetId = ref<number | null>(null)
 const progressState = ref<CollectionTargetState | null>(null)
 const cleanupPreview = ref<SourceTargetCleanupPreview | null>(null)
@@ -293,9 +320,13 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
       <el-table v-loading="loading" :data="products" empty-text="暂无手机产品">
         <el-table-column label="手机产品" min-width="150"
           ><template #default="{ row }"
-            ><strong>{{ row.name }}</strong
-            ><el-button v-if="auth.canWrite" link @click="openProduct(row)"
-              >编辑</el-button
+            ><div v-if="inlineEditingId === row.id" class="inline-name-editor">
+              <el-input v-model="inlineName" size="small" maxlength="100" :disabled="inlineSaving" aria-label="修改手机名称" @keyup.enter="saveInlineName(row)" @keyup.esc="cancelInlineEdit" />
+              <el-button size="small" type="primary" :loading="inlineSaving" @click="saveInlineName(row)">保存</el-button>
+              <el-button size="small" :disabled="inlineSaving" @click="cancelInlineEdit">取消</el-button>
+            </div>
+            <strong v-else-if="auth.canWrite" class="editable-product-name" role="button" tabindex="0" title="点击修改手机名称" @click="beginInlineEdit(row)" @keydown.enter.prevent="beginInlineEdit(row)" @keydown.space.prevent="beginInlineEdit(row)">{{ row.name }}</strong>
+            <strong v-else>{{ row.name }}</strong>
             ></template
           ></el-table-column
         >
@@ -529,6 +560,11 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
 </template>
 
 <style scoped>
+.editable-product-name { cursor: pointer; border-bottom: 1px dashed transparent; }
+.editable-product-name:hover, .editable-product-name:focus-visible { color: #35b9f0; border-bottom-color: currentColor; outline-offset: 3px; }
+.inline-name-editor { display: flex; align-items: center; gap: 6px; min-width: 240px; }
+.inline-name-editor :deep(.el-input) { min-width: 110px; }
+
 .product-panel {
   overflow: hidden;
 }
