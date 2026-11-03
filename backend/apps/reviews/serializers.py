@@ -64,6 +64,7 @@ class ReviewQualitySerializer(serializers.ModelSerializer):
     author_role = serializers.CharField(source="review.author_role", read_only=True)
     original_title = serializers.CharField(source="review.title", read_only=True)
     original_content = serializers.CharField(source="review.content", read_only=True)
+    source_url = serializers.URLField(source="review.source_url", read_only=True)
     published_at = serializers.DateTimeField(source="review.published_at", read_only=True)
     context_text = serializers.CharField(source="corpus_item.context_text", read_only=True, default="")
 
@@ -80,6 +81,7 @@ class ReviewQualitySerializer(serializers.ModelSerializer):
             "author_role",
             "original_title",
             "original_content",
+            "source_url",
             "normalized_text",
             "context_text",
             "published_at",
