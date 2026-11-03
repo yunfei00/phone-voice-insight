@@ -34,7 +34,8 @@ def create_eligible_quality(product: Any, source: Any, source_target: Any) -> Re
 
 
 @pytest.mark.django_db
-def test_automatic_pipeline_is_disabled_by_default(product: Any) -> None:
+def test_automatic_pipeline_is_disabled_by_environment(product: Any, settings: Any) -> None:
+    settings.AI_AUTOMATION_ENABLED = False
     result = run_automatic_pipeline(product.id)
     assert result.status == "DISABLED"
 
