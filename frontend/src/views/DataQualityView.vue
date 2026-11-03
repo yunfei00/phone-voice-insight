@@ -379,7 +379,7 @@ async function retryAIReview(batchId: number): Promise<void> {
   aiBusy.value = true
   try {
     await retryGovernanceAIBatch(batchId)
-    ElMessage.success('失败数据已重新提交')
+    ElMessage.success('已在当前任务中重试失败记录，任务编号保持不变')
     await loadAIReviews()
     startAIPolling()
   } catch {
