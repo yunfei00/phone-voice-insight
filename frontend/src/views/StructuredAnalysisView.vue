@@ -59,6 +59,7 @@ const count = ref(0)
 const taxonomy = ref<TaxonomyDefinition>()
 const products = ref<Product[]>([])
 const selectedProduct = ref<number>()
+const productStorageKey = 'phone-voice-insight:structured-analysis:selected-product'
 const quality = ref<StructuredQuality>()
 const aggregates = ref<StructuredAggregates>()
 const batches = ref<StructuredBatch[]>([])
@@ -414,6 +415,9 @@ async function startSample() {
 }
 
 async function changeProduct() {
+  if (selectedProduct.value !== undefined) {
+    window.localStorage.setItem(productStorageKey, String(selectedProduct.value))
+  }
   page.value = 1
   batchPage.value = 1
   lastProgressActive = false
@@ -442,7 +446,11 @@ defineExpose({ changeProduct, selectedProduct })
 onMounted(async () => {
   try {
     products.value = (await getProducts({ page_size: 100 })).results
-    selectedProduct.value = products.value[0]?.id
+    const saved = Number(window.localStorage.getItem(productStorageKey))
+    selectedProduct.value =
+      Number.isInteger(saved) && saved > 0 && products.value.some((product) => product.id === saved)
+        ? saved
+        : products.value[0]?.id
   } catch {
     ElMessage.warning('产品列表加载失败')
   }
@@ -569,7 +577,7 @@ onUnmounted(() => {
         }}</strong></el-card
       >
       <el-card shadow="never"
-        ><span>待人工复核</span><strong>{{ quality?.review_required ?? 0 }}</strong></el-card
+        ><span>待人工处理</span><strong>{{ quality?.review_required ?? 0 }}</strong><router-link to="/manual-analysis">查看人工处理列表</router-link></el-card
       >
       <el-card shadow="never"
         ><span>明确问题/观点</span><strong>{{ aggregates?.opinion_count || 0 }}</strong></el-card
