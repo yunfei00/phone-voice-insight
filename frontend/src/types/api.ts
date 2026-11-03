@@ -659,6 +659,7 @@ export interface StructuredAnalysisV1 {
   run: number
   original_title: string
   original_content: string
+  source_url: string
   product_name: string
   source_name: string
   run_status: string
