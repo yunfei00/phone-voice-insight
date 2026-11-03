@@ -577,7 +577,8 @@ onUnmounted(() => {
         }}</strong></el-card
       >
       <el-card shadow="never"
-        ><span>待人工处理</span><strong>{{ quality?.review_required ?? 0 }}</strong><router-link  :to="{ name: 'manual-analysis' }">查看人工处理列表</router-link></el-card
+        ><span>待人工处理</span><strong>{{ quality?.review_required ?? 0 }}</strong
+        ><router-link :to="{ name: 'manual-analysis' }">查看人工处理列表</router-link></el-card
       >
       <el-card shadow="never"
         ><span>明确问题/观点</span><strong>{{ aggregates?.opinion_count || 0 }}</strong></el-card
@@ -643,8 +644,18 @@ onUnmounted(() => {
       <el-card v-for="item in items" :key="item.id" class="analysis-card" shadow="hover">
         <template #header>
           <div class="card-title">
-            <a v-if="item.source_url" class="original-post-link" :href="item.source_url" target="_blank" rel="noopener noreferrer" :title="`打开原始帖子：${item.original_title || item.content}`">{{ item.original_title || `反馈 #${item.content}` }} ↗</a>
-            <strong v-else :title="'未采集到原帖链接'">{{ item.original_title || `反馈 #${item.content}` }}</strong>
+            <a
+              v-if="item.source_url"
+              class="original-post-link"
+              :href="item.source_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              :title="`打开原始帖子：${item.original_title || item.content}`"
+              >{{ item.original_title || `反馈 #${item.content}` }} ↗</a
+            >
+            <strong v-else :title="'未采集到原帖链接'">{{
+              item.original_title || `反馈 #${item.content}`
+            }}</strong>
             ><span> {{ item.product_name }} · {{ item.source_name }}</span>
           </div>
         </template>
@@ -760,8 +771,14 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.original-post-link { color: #35b9f0; font-weight: 700; text-decoration: none; }
-.original-post-link:hover { text-decoration: underline; }
+.original-post-link {
+  color: #35b9f0;
+  font-weight: 700;
+  text-decoration: none;
+}
+.original-post-link:hover {
+  text-decoration: underline;
+}
 
 .page-stack {
   display: grid;

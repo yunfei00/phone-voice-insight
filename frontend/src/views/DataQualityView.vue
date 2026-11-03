@@ -435,7 +435,8 @@ async function startFullAIReview(): Promise<void> {
       source_id: selectedSource.value ?? null,
     })
     if (!result.id || result.total === 0) {
-      fullAIStartNotice.value = '当前产品及来源范围内没有新增待 AI 判断的数据，已处理记录不会重复判断。'
+      fullAIStartNotice.value =
+        '当前产品及来源范围内没有新增待 AI 判断的数据，已处理记录不会重复判断。'
       ElMessage.info(fullAIStartNotice.value)
       await loadAIReviews()
       return
@@ -564,7 +565,8 @@ onMounted(async () => {
     sources.value = sourcePage.results
     const storedProduct = window.localStorage.getItem(productStorageKey)
     const rememberedId = storedProduct === null ? NaN : Number(storedProduct)
-    selectedProduct.value = products.value.find((product) => product.id === rememberedId)?.id ?? products.value[0]?.id
+    selectedProduct.value =
+      products.value.find((product) => product.id === rememberedId)?.id ?? products.value[0]?.id
   } catch {
     ElMessage.warning('产品或来源列表加载失败')
   }
@@ -600,7 +602,11 @@ async function changeAutomationSetting(enabled: boolean): Promise<void> {
   try {
     const setting = await updateAutomationSetting(enabled)
     automationEnabled.value = setting.enabled
-    ElMessage.success(enabled ? '自动处理已启用，后续由定时任务检查新数据' : '已关闭自动处理，正在执行的任务不会被强制终止')
+    ElMessage.success(
+      enabled
+        ? '自动处理已启用，后续由定时任务检查新数据'
+        : '已关闭自动处理，正在执行的任务不会被强制终止',
+    )
   } catch {
     automationEnabled.value = !enabled
     ElMessage.error('自动处理开关保存失败，请检查服务器配置')
@@ -706,7 +712,9 @@ onUnmounted(() => {
             </el-tag>
           </div>
           <div class="automation-actions">
-            <span class="automation-option" :class="{ 'is-selected': !automationEnabled }">关闭</span>
+            <span class="automation-option" :class="{ 'is-selected': !automationEnabled }"
+              >关闭</span
+            >
             <el-switch
               v-model="automationEnabled"
               :loading="automationLoading"
@@ -715,8 +723,17 @@ onUnmounted(() => {
               aria-label="自动处理开关"
               @change="changeAutomationSetting"
             />
-            <span class="automation-option" :class="{ 'is-selected': automationEnabled }">开启</span>
-            <el-button @click="loadAutomationSetting(); loadGovernanceTasks(); loadAIReviews()">刷新状态</el-button>
+            <span class="automation-option" :class="{ 'is-selected': automationEnabled }"
+              >开启</span
+            >
+            <el-button
+              @click="
+                loadAutomationSetting()
+                loadGovernanceTasks()
+                loadAIReviews()
+              "
+              >刷新状态</el-button
+            >
           </div>
         </div>
       </div>
@@ -730,7 +747,9 @@ onUnmounted(() => {
       <div class="pipeline-steps">
         <div class="pipeline-step">
           <span>01 · 规则治理</span>
-          <strong>{{ governanceTasks[0] ? aiBatchStatusLabel(governanceTasks[0].status) : '暂无任务' }}</strong>
+          <strong>{{
+            governanceTasks[0] ? aiBatchStatusLabel(governanceTasks[0].status) : '暂无任务'
+          }}</strong>
           <small>最近开始：{{ displayTaskTime(governanceTasks[0]?.started_at) }}</small>
         </div>
         <div class="pipeline-step">
@@ -752,565 +771,662 @@ onUnmounted(() => {
         :aria-selected="activeQualityTab === 'ai'"
         role="tab"
         @click="activeQualityTab = 'ai'"
-      >AI 自动治理</el-button>
+        >AI 自动治理</el-button
+      >
       <el-button
         :type="activeQualityTab === 'manual' ? 'primary' : 'default'"
         :aria-selected="activeQualityTab === 'manual'"
         role="tab"
         @click="activeQualityTab = 'manual'"
-      >手动数据治理与结果明细</el-button>
+        >手动数据治理与结果明细</el-button
+      >
     </div>
 
     <div v-show="!auth.isAdmin || activeQualityTab === 'ai'">
-    <section v-if="auth.isAdmin" class="panel governance-actions">
-      <h3>AI 自动判断与自动决策</h3>
-      <div v-if="corpusSummary" class="panel" style="margin-bottom: 16px">
-        <h4>最终有效语料统计（当前产品及来源）</h4>
-        <el-row :gutter="12">
-          <el-col
-            v-for="metric in [
-              { label: '已治理总量', value: corpusSummary.total },
-              { label: '规则可用', value: corpusSummary.rule_eligible },
-              { label: '规则排除', value: corpusSummary.rule_excluded },
-              { label: 'AI 确认有效', value: corpusSummary.ai_accepted },
-              { label: 'AI 排除', value: corpusSummary.ai_rejected },
-              { label: 'AI 无法判断（已跳过）', value: corpusSummary.ai_uncertain },
-              { label: 'AI 技术失败', value: corpusSummary.ai_failed },
-              { label: '尚未 AI 判断', value: corpusSummary.ai_unprocessed },
-              { label: '最终可分析', value: corpusSummary.final_eligible },
-            ]"
-            :key="metric.label"
-            :xs="12"
-            :sm="8"
-            :md="6"
+      <section v-if="auth.isAdmin" class="panel governance-actions">
+        <h3>AI 自动判断与自动决策</h3>
+        <div v-if="corpusSummary" class="panel" style="margin-bottom: 16px">
+          <h4>最终有效语料统计（当前产品及来源）</h4>
+          <el-row :gutter="12">
+            <el-col
+              v-for="metric in [
+                { label: '已治理总量', value: corpusSummary.total },
+                { label: '规则可用', value: corpusSummary.rule_eligible },
+                { label: '规则排除', value: corpusSummary.rule_excluded },
+                { label: 'AI 确认有效', value: corpusSummary.ai_accepted },
+                { label: 'AI 排除', value: corpusSummary.ai_rejected },
+                { label: 'AI 无法判断（已跳过）', value: corpusSummary.ai_uncertain },
+                { label: 'AI 技术失败', value: corpusSummary.ai_failed },
+                { label: '尚未 AI 判断', value: corpusSummary.ai_unprocessed },
+                { label: '最终可分析', value: corpusSummary.final_eligible },
+              ]"
+              :key="metric.label"
+              :xs="12"
+              :sm="8"
+              :md="6"
+            >
+              <el-statistic :title="metric.label" :value="metric.value" style="padding: 12px 0" />
+            </el-col>
+          </el-row>
+          <el-button
+            type="primary"
+            :disabled="!corpusSummary.final_eligible"
+            @click="$router.push('/structured-analysis')"
           >
-            <el-statistic :title="metric.label" :value="metric.value" style="padding: 12px 0" />
-          </el-col>
-        </el-row>
-        <el-button
-          type="primary"
-          :disabled="!corpusSummary.final_eligible"
-          @click="$router.push('/structured-analysis')"
-        >
-          下一步：进入 AI 结构化分析（{{ corpusSummary.final_eligible }} 条可分析）
-        </el-button>
-        <p>
-          统计按语料去重，取每条语料最新 AI 判断；最终可分析仅包括规则可用且最新 AI
-          结论为自动接受的数据。无法判断及技术失败的数据自动跳过，不进入分析；原始记录仍保留。
-        </p>
-      </div>
+            下一步：进入 AI 结构化分析（{{ corpusSummary.final_eligible }} 条可分析）
+          </el-button>
+          <p>
+            统计按语料去重，取每条语料最新 AI 判断；最终可分析仅包括规则可用且最新 AI
+            结论为自动接受的数据。无法判断及技术失败的数据自动跳过，不进入分析；原始记录仍保留。
+          </p>
+        </div>
 
-      <p>
-        系统自动接受明确有效反馈、排除无效内容；证据不足标记为不确定且不进入分析，技术错误仅有限重试。
-      </p>
-      <div class="filters">
-        <el-button
-          type="primary"
-          :loading="aiBusy"
-          :disabled="!selectedProduct"
-          @click="startAIReview"
-          >立即运行自动判断</el-button
-        >
-        <el-button
-          type="success"
-          :loading="aiBusy"
-          :disabled="!selectedProduct"
-          @click="startFullAIReview"
-          >一键 AI 判断全部</el-button
-        >
-        <el-button
-          type="danger"
-          :disabled="!fullAIId || !fullAIProgress?.can_stop || stoppingFullAI"
-          :loading="stoppingFullAI"
-          @click="stopFullAIReview"
-          >停止全量任务</el-button
-        >
-        <el-button @click="loadAIReviews">查看 AI 判断结果</el-button>
-        <span v-if="aiBatches.some((b) => b.status === 'RUNNING' || b.status === 'PENDING')"
-          >每 3 秒自动更新</span
-        >
-      </div>
-      <el-alert
-        v-if="fullAIStartNotice"
-        :title="fullAIStartNotice"
-        :type="fullAIStartNotice.startsWith('已启动') ? 'success' : 'info'"
-        :closable="true"
-        show-icon
-        class="notice"
-        @close="fullAIStartNotice = ''"
-      />
-      <div v-if="fullAIProgress" class="panel" style="margin-bottom: 12px">
-        <strong>全量进度：{{ fullAIProgress.processed }} / {{ fullAIProgress.total }}</strong>
-        <el-progress
-          :percentage="
-            fullAIProgress.total
-              ? Math.min(100, Math.round((fullAIProgress.processed / fullAIProgress.total) * 100))
-              : 100
-          "
+        <p>
+          系统自动接受明确有效反馈、排除无效内容；证据不足标记为不确定且不进入分析，技术错误仅有限重试。
+        </p>
+        <div class="filters">
+          <el-button
+            type="primary"
+            :loading="aiBusy"
+            :disabled="!selectedProduct"
+            @click="startAIReview"
+            >立即运行自动判断</el-button
+          >
+          <el-button
+            type="success"
+            :loading="aiBusy"
+            :disabled="!selectedProduct"
+            @click="startFullAIReview"
+            >一键 AI 判断全部</el-button
+          >
+          <el-button
+            type="danger"
+            :disabled="!fullAIId || !fullAIProgress?.can_stop || stoppingFullAI"
+            :loading="stoppingFullAI"
+            @click="stopFullAIReview"
+            >停止全量任务</el-button
+          >
+          <el-button @click="loadAIReviews">查看 AI 判断结果</el-button>
+          <span v-if="aiBatches.some((b) => b.status === 'RUNNING' || b.status === 'PENDING')"
+            >每 3 秒自动更新</span
+          >
+        </div>
+        <el-alert
+          v-if="fullAIStartNotice"
+          :title="fullAIStartNotice"
+          :type="fullAIStartNotice.startsWith('已启动') ? 'success' : 'info'"
+          :closable="true"
+          show-icon
+          class="notice"
+          @close="fullAIStartNotice = ''"
         />
-        <p>
-          状态：{{ fullAIProgress.status }} · 剩余：{{ fullAIProgress.remaining }} · 自动接受：{{
-            fullAIProgress.accepted
-          }}
-          · 自动排除：{{ fullAIProgress.rejected }} · 自动跳过：{{ fullAIProgress.uncertain }} ·
-          失败：{{ fullAIProgress.failed }}
-        </p>
-        <p>
-          Token 消耗（单位：tokens）：输入 {{ formatTokenCount(fullAIProgress.prompt_tokens) }} ·
-          输出 {{ formatTokenCount(fullAIProgress.completion_tokens) }} · 累计
-          {{ formatTokenCount(fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) }}
-        </p>
-        <p v-if="fullAIProgress.processed > 0">
-          预计总消耗：{{
-            formatTokenCount(
-              Math.round(
-                ((fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) /
-                  fullAIProgress.processed) *
-                  fullAIProgress.total,
-              ),
-            )
-          }}
-          · 预计剩余：{{
-            formatTokenCount(
-              Math.max(
-                0,
+        <div v-if="fullAIProgress" class="panel" style="margin-bottom: 12px">
+          <strong>全量进度：{{ fullAIProgress.processed }} / {{ fullAIProgress.total }}</strong>
+          <el-progress
+            :percentage="
+              fullAIProgress.total
+                ? Math.min(100, Math.round((fullAIProgress.processed / fullAIProgress.total) * 100))
+                : 100
+            "
+          />
+          <p>
+            状态：{{ fullAIProgress.status }} · 剩余：{{ fullAIProgress.remaining }} · 自动接受：{{
+              fullAIProgress.accepted
+            }}
+            · 自动排除：{{ fullAIProgress.rejected }} · 自动跳过：{{ fullAIProgress.uncertain }} ·
+            失败：{{ fullAIProgress.failed }}
+          </p>
+          <p>
+            Token 消耗（单位：tokens）：输入 {{ formatTokenCount(fullAIProgress.prompt_tokens) }} ·
+            输出 {{ formatTokenCount(fullAIProgress.completion_tokens) }} · 累计
+            {{ formatTokenCount(fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) }}
+          </p>
+          <p v-if="fullAIProgress.processed > 0">
+            预计总消耗：{{
+              formatTokenCount(
                 Math.round(
                   ((fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) /
                     fullAIProgress.processed) *
-                    fullAIProgress.remaining,
+                    fullAIProgress.total,
                 ),
-              ),
-            )
-          }}
-          <span v-if="fullAIProgress.processed < 20">（样本较少，仅供参考）</span>
-        </p>
-        <p v-else>预计 Token 消耗：等待首批处理数据后估算</p>
-      </div>
-      <el-table :data="aiBatches" size="small" style="margin-bottom: 12px">
-        <el-table-column prop="id" label="任务编号" width="95" />
-        <el-table-column label="状态" width="120">
-          <template #default="{ row }">{{ aiBatchStatusLabel(row.status) }}</template>
-        </el-table-column>
-        <el-table-column label="进度">
-          <template #default="{ row }">{{ row.processed }} / {{ row.total }}</template>
-        </el-table-column>
-        <el-table-column prop="accepted" label="自动接受" />
-        <el-table-column prop="rejected" label="自动排除" />
-        <el-table-column prop="uncertain" label="自动跳过" />
-        <el-table-column prop="failed" label="技术错误" />
-        <el-table-column
-          prop="error_code"
-          label="任务错误代码"
-          min-width="160"
-          show-overflow-tooltip
+              )
+            }}
+            · 预计剩余：{{
+              formatTokenCount(
+                Math.max(
+                  0,
+                  Math.round(
+                    ((fullAIProgress.prompt_tokens + fullAIProgress.completion_tokens) /
+                      fullAIProgress.processed) *
+                      fullAIProgress.remaining,
+                  ),
+                ),
+              )
+            }}
+            <span v-if="fullAIProgress.processed < 20">（样本较少，仅供参考）</span>
+          </p>
+          <p v-else>预计 Token 消耗：等待首批处理数据后估算</p>
+        </div>
+        <el-table :data="aiBatches" size="small" style="margin-bottom: 12px">
+          <el-table-column prop="id" label="任务编号" width="95" />
+          <el-table-column label="状态" width="120">
+            <template #default="{ row }">{{ aiBatchStatusLabel(row.status) }}</template>
+          </el-table-column>
+          <el-table-column label="进度">
+            <template #default="{ row }">{{ row.processed }} / {{ row.total }}</template>
+          </el-table-column>
+          <el-table-column prop="accepted" label="自动接受" />
+          <el-table-column prop="rejected" label="自动排除" />
+          <el-table-column prop="uncertain" label="自动跳过" />
+          <el-table-column prop="failed" label="技术错误" />
+          <el-table-column
+            prop="error_code"
+            label="任务错误代码"
+            min-width="160"
+            show-overflow-tooltip
+          />
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.failed > 0 || row.status === 'FAILED'"
+                size="small"
+                :disabled="aiBusy"
+                @click="retryAIReview(row.id)"
+                >重试失败</el-button
+              >
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-pagination
+          v-model:current-page="aiBatchPage"
+          :page-size="10"
+          :total="aiBatchTotal"
+          layout="prev, pager, next, total"
+          @current-change="loadAIReviews"
         />
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }">
-            <el-button
-              v-if="row.failed > 0 || row.status === 'FAILED'"
-              size="small"
-              :disabled="aiBusy"
-              @click="retryAIReview(row.id)"
-              >重试失败</el-button
-            >
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-pagination
-        v-model:current-page="aiBatchPage"
-        :page-size="10"
-        :total="aiBatchTotal"
-        layout="prev, pager, next, total"
-        @current-change="loadAIReviews"
-      />
-      <el-table :data="aiResults" size="small">
-        <el-table-column prop="review_id" label="记录 ID" width="95" />
-        <el-table-column label="规则结论" width="105">
-          <template #default="{ row }">{{ row.rule_eligible ? '保留' : '排除' }}</template>
-        </el-table-column>
-        <el-table-column label="AI 结论" width="105">
-          <template #default="{ row }">{{
-            row.ai_eligible === null ? '未知' : row.ai_eligible ? '保留' : '排除'
-          }}</template>
-        </el-table-column>
-        <el-table-column label="自动决策" width="160">
-          <template #default="{ row }">{{
-            row.status === 'ACCEPTED'
-              ? '自动接受'
-              : row.status === 'REJECTED'
-                ? '自动排除'
-                : row.status === 'UNCERTAIN'
-                  ? '无法判断，已自动跳过'
-                  : row.status === 'ERROR'
-                    ? '技术错误，自动重试后跳过'
-                    : row.status === 'SUCCEEDED'
-                      ? '历史：已通过'
-                      : row.status === 'REVIEW_REQUIRED'
-                        ? '历史：无法判断'
-                        : row.status === 'FAILED'
-                          ? '历史：失败'
-                          : '等待执行'
-          }}</template>
-        </el-table-column>
-        <el-table-column label="置信度" width="100">
-          <template #default="{ row }">{{
-            row.confidence === null ? '—' : (row.confidence * 100).toFixed(0) + '%'
-          }}</template>
-        </el-table-column>
-        <el-table-column prop="reason" label="AI 判断理由" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="evidence" label="引用证据" min-width="180" show-overflow-tooltip />
-        <el-table-column
-          prop="error_code"
-          label="失败原因代码"
-          min-width="160"
-          show-overflow-tooltip
+        <el-table :data="aiResults" size="small">
+          <el-table-column prop="review_id" label="记录 ID" width="95" />
+          <el-table-column label="规则结论" width="105">
+            <template #default="{ row }">{{ row.rule_eligible ? '保留' : '排除' }}</template>
+          </el-table-column>
+          <el-table-column label="AI 结论" width="105">
+            <template #default="{ row }">{{
+              row.ai_eligible === null ? '未知' : row.ai_eligible ? '保留' : '排除'
+            }}</template>
+          </el-table-column>
+          <el-table-column label="自动决策" width="160">
+            <template #default="{ row }">{{
+              row.status === 'ACCEPTED'
+                ? '自动接受'
+                : row.status === 'REJECTED'
+                  ? '自动排除'
+                  : row.status === 'UNCERTAIN'
+                    ? '无法判断，已自动跳过'
+                    : row.status === 'ERROR'
+                      ? '技术错误，自动重试后跳过'
+                      : row.status === 'SUCCEEDED'
+                        ? '历史：已通过'
+                        : row.status === 'REVIEW_REQUIRED'
+                          ? '历史：无法判断'
+                          : row.status === 'FAILED'
+                            ? '历史：失败'
+                            : '等待执行'
+            }}</template>
+          </el-table-column>
+          <el-table-column label="置信度" width="100">
+            <template #default="{ row }">{{
+              row.confidence === null ? '—' : (row.confidence * 100).toFixed(0) + '%'
+            }}</template>
+          </el-table-column>
+          <el-table-column
+            prop="reason"
+            label="AI 判断理由"
+            min-width="220"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="evidence" label="引用证据" min-width="180" show-overflow-tooltip />
+          <el-table-column
+            prop="error_code"
+            label="失败原因代码"
+            min-width="160"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="attempt_count" label="尝试次数" width="95" />
+        </el-table>
+        <el-pagination
+          v-model:current-page="aiResultPage"
+          :page-size="10"
+          :total="aiResultTotal"
+          layout="prev, pager, next, total"
+          @current-change="loadAIReviews"
         />
-        <el-table-column prop="attempt_count" label="尝试次数" width="95" />
-      </el-table>
-      <el-pagination
-        v-model:current-page="aiResultPage"
-        :page-size="10"
-        :total="aiResultTotal"
-        layout="prev, pager, next, total"
-        @current-change="loadAIReviews"
-      />
-    </section>
-
+      </section>
     </div>
     <div v-show="!auth.isAdmin || activeQualityTab === 'manual'">
-    <section v-if="auth.isAdmin" class="panel governance-actions">
-      <h3>手动数据治理</h3>
-      <div class="filters">
-        <span>本批最大处理条数</span>
-        <el-input-number v-model="governanceLimit" :min="1" :max="100" />
-      </div>
-      <p>
-        填写的是本批最大处理条数，不是必须处理的数量。系统自动跳过已治理或正在处理的记录；点击「开始治理」后在后台运行并自动刷新进度。
-      </p>
-      <div class="filters">
-        <el-button
-          :disabled="!selectedProduct"
-          :loading="governanceBusy"
-          @click="runGovernance(true)"
-          >预览治理</el-button
-        >
+      <section v-if="auth.isAdmin" class="panel governance-actions">
+        <h3>手动数据治理</h3>
+        <div class="filters">
+          <span>本批最大处理条数</span>
+          <el-input-number v-model="governanceLimit" :min="1" :max="100" />
+        </div>
+        <p>
+          填写的是本批最大处理条数，不是必须处理的数量。系统自动跳过已治理或正在处理的记录；点击「开始治理」后在后台运行并自动刷新进度。
+        </p>
+        <div class="filters">
+          <el-button
+            :disabled="!selectedProduct"
+            :loading="governanceBusy"
+            @click="runGovernance(true)"
+            >预览治理</el-button
+          >
+          <el-popconfirm
+            title="确认将下一批未治理数据提交后台处理？原始记录不会修改。"
+            @confirm="startBackgroundGovernance"
+          >
+            <template #reference>
+              <el-button
+                type="primary"
+                :disabled="!selectedProduct || governanceBusy"
+                :loading="governanceBusy"
+                >开始治理</el-button
+              >
+            </template>
+          </el-popconfirm>
+        </div>
         <el-popconfirm
-          title="确认将下一批未治理数据提交后台处理？原始记录不会修改。"
-          @confirm="startBackgroundGovernance"
+          title="一键治理当前产品全部未处理数据？任务将在后台运行，不调用 AI，也不会修改原始记录。"
+          @confirm="startAllGovernance"
         >
           <template #reference>
             <el-button
               type="primary"
+              plain
               :disabled="!selectedProduct || governanceBusy"
               :loading="governanceBusy"
-              >开始治理</el-button
+              >一键治理全部待处理数据</el-button
             >
           </template>
         </el-popconfirm>
-      </div>
-      <el-popconfirm
-        title="一键治理当前产品全部未处理数据？任务将在后台运行，不调用 AI，也不会修改原始记录。"
-        @confirm="startAllGovernance"
-      >
-        <template #reference>
-          <el-button
-            type="primary"
-            plain
-            :disabled="!selectedProduct || governanceBusy"
-            :loading="governanceBusy"
-            >一键治理全部待处理数据</el-button
+        <p v-if="preview">
+          本次请求上限 {{ governanceLimit }} 条，实际选中
+          {{ preview.total }} 条（其余已治理、正在处理或不符合筛选条件）；预计可用
+          {{ preview.eligible }} 条，排除 {{ preview.excluded }} 条。预览不写入结果。
+        </p>
+      </section>
+
+      <section v-if="auth.isAdmin" class="panel table-panel">
+        <div class="page-header">
+          <h3>后台治理任务</h3>
+          <span
+            v-if="
+              governanceTasks.some((task) => task.status === 'RUNNING' || task.status === 'PENDING')
+            "
+            >每 3 秒自动刷新</span
           >
-        </template>
-      </el-popconfirm>
-      <p v-if="preview">
-        本次请求上限 {{ governanceLimit }} 条，实际选中
-        {{ preview.total }} 条（其余已治理、正在处理或不符合筛选条件）；预计可用
-        {{ preview.eligible }} 条，排除 {{ preview.excluded }} 条。预览不写入结果。
-      </p>
-    </section>
+          <el-button :loading="taskLoading" @click="loadGovernanceTasks">立即刷新</el-button>
+        </div>
+        <p>
+          仅展示当前（最近）任务；已完成的任务自动收起。需要检查历史失败或重试时，可展开历史记录。
+        </p>
+        <el-table :data="governanceTasks.slice(0, 1)" empty-text="暂无后台治理任务">
+          <el-table-column prop="id" label="任务 ID" width="100" />
+          <el-table-column prop="status" label="状态" width="120" />
+          <el-table-column label="创建时间" width="175">
+            <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+              displayTaskTime(row.created_at)
+            }}</template>
+          </el-table-column>
+          <el-table-column label="开始时间" width="175">
+            <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+              displayTaskTime(row.started_at)
+            }}</template>
+          </el-table-column>
+          <el-table-column label="完成时间" width="175">
+            <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+              displayTaskTime(row.finished_at)
+            }}</template>
+          </el-table-column>
+          <el-table-column label="耗时" width="105">
+            <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+              displayTaskDuration(row.started_at, row.finished_at)
+            }}</template>
+          </el-table-column>
+          <el-table-column label="进度" min-width="200">
+            <template #default="{ row }: { row: GovernanceTaskInfo }">
+              <el-progress
+                :percentage="row.total ? Math.round((row.processed / row.total) * 100) : 100"
+              />
+              <small>{{ row.processed }} / {{ row.total }}</small>
+            </template>
+          </el-table-column>
+          <el-table-column prop="eligible" label="有效" width="85" />
+          <el-table-column prop="failed" label="失败" width="85" />
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }: { row: GovernanceTaskInfo }">
+              <el-button
+                v-if="row.status === 'FAILED' || row.status === 'PARTIAL'"
+                link
+                type="primary"
+                @click="retryBackgroundGovernance(row.id)"
+                >重试</el-button
+              >
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-pagination
+          v-model:current-page="governanceTaskPage"
+          :page-size="10"
+          :total="governanceTaskTotal"
+          layout="prev, pager, next, total"
+          @current-change="loadGovernanceTasks"
+        />
 
-    <section v-if="auth.isAdmin" class="panel table-panel">
+        <el-button link type="primary" @click="showGovernanceHistory = !showGovernanceHistory">
+          {{ showGovernanceHistory ? '收起历史治理任务' : '展开历史治理任务' }}（共
+          {{ Math.max(0, governanceTaskTotal - 1) }} 条）
+        </el-button>
+        <div v-if="showGovernanceHistory">
+          <el-table :data="governanceTasks.slice(1)" empty-text="暂无后台治理任务">
+            <el-table-column prop="id" label="任务 ID" width="100" />
+            <el-table-column prop="status" label="状态" width="120" />
+            <el-table-column label="创建时间" width="175">
+              <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+                displayTaskTime(row.created_at)
+              }}</template>
+            </el-table-column>
+            <el-table-column label="开始时间" width="175">
+              <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+                displayTaskTime(row.started_at)
+              }}</template>
+            </el-table-column>
+            <el-table-column label="完成时间" width="175">
+              <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+                displayTaskTime(row.finished_at)
+              }}</template>
+            </el-table-column>
+            <el-table-column label="耗时" width="105">
+              <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+                displayTaskDuration(row.started_at, row.finished_at)
+              }}</template>
+            </el-table-column>
+            <el-table-column label="进度" min-width="200">
+              <template #default="{ row }: { row: GovernanceTaskInfo }">
+                <el-progress
+                  :percentage="row.total ? Math.round((row.processed / row.total) * 100) : 100"
+                />
+                <small>{{ row.processed }} / {{ row.total }}</small>
+              </template>
+            </el-table-column>
+            <el-table-column prop="eligible" label="有效" width="85" />
+            <el-table-column prop="failed" label="失败" width="85" />
+            <el-table-column label="操作" width="100">
+              <template #default="{ row }: { row: GovernanceTaskInfo }">
+                <el-button
+                  v-if="row.status === 'FAILED' || row.status === 'PARTIAL'"
+                  link
+                  type="primary"
+                  @click="retryBackgroundGovernance(row.id)"
+                  >重试</el-button
+                >
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-pagination
+            v-model:current-page="governanceTaskPage"
+            :page-size="10"
+            :total="governanceTaskTotal"
+            layout="prev, pager, next, total"
+            @current-change="loadGovernanceTasks"
+          />
+        </div>
+      </section>
+
+      <section class="panel breakdown">
+        <div v-for="item in breakdown" :key="item[0]">
+          <span>{{ item[0] }}</span
+          ><strong>{{ item[1] }}</strong
+          ><small>{{ ratio(item[1]) }}</small>
+        </div>
+      </section>
+
       <div class="page-header">
-        <h3>后台治理任务</h3>
-        <span
-          v-if="
-            governanceTasks.some((task) => task.status === 'RUNNING' || task.status === 'PENDING')
+        <h3>治理结果明细 · 帖子与回复</h3>
+        <span>点击任意记录，核查完整原文、父帖上下文与规则标记</span>
+      </div>
+      <section class="panel filters">
+        <el-select v-model="filters.eligible" placeholder="AI 可用" clearable>
+          <el-option label="可用" value="true" />
+          <el-option label="排除" value="false" />
+        </el-select>
+        <el-select v-model="filters.exclusion_reason" placeholder="排除原因" clearable>
+          <el-option
+            v-for="(label, value) in reasonLabels"
+            :key="value"
+            :label="label"
+            :value="value"
+          />
+        </el-select>
+        <el-select v-model="filters.record_type" placeholder="记录类型" clearable>
+          <el-option label="帖子" value="THREAD" />
+          <el-option label="评价" value="REVIEW" />
+          <el-option label="追评" value="APPEND_REVIEW" />
+          <el-option label="回复" value="REPLY" />
+          <el-option label="官方回复" value="OFFICIAL_REPLY" />
+        </el-select>
+        <el-select v-model="filters.author_role" placeholder="作者角色" clearable>
+          <el-option label="用户" value="USER" />
+          <el-option label="官方" value="OFFICIAL" />
+          <el-option label="版主" value="MODERATOR" />
+          <el-option label="达人" value="EXPERT" />
+        </el-select>
+        <el-input-number
+          v-model="filters.quality_score_min"
+          :min="0"
+          :max="1"
+          :step="0.1"
+          placeholder="最低分"
+        />
+        <el-input-number
+          v-model="filters.quality_score_max"
+          :min="0"
+          :max="1"
+          :step="0.1"
+          placeholder="最高分"
+        />
+        <el-button type="primary" @click="applyFilters">筛选</el-button>
+        <el-button
+          @click="
+            filters.eligible = 'false'
+            applyFilters()
           "
-          >每 3 秒自动刷新</span
+          >只看排除记录</el-button
         >
-        <el-button :loading="taskLoading" @click="loadGovernanceTasks">立即刷新</el-button>
-      </div>
-      <p>仅展示当前（最近）任务；已完成的任务自动收起。需要检查历史失败或重试时，可展开历史记录。</p>
-      <el-table :data="governanceTasks.slice(0, 1)" empty-text="暂无后台治理任务">
-        <el-table-column prop="id" label="任务 ID" width="100" />
-        <el-table-column prop="status" label="状态" width="120" />
-        <el-table-column label="创建时间" width="175">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
-            displayTaskTime(row.created_at)
-          }}</template>
-        </el-table-column>
-        <el-table-column label="开始时间" width="175">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
-            displayTaskTime(row.started_at)
-          }}</template>
-        </el-table-column>
-        <el-table-column label="完成时间" width="175">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
-            displayTaskTime(row.finished_at)
-          }}</template>
-        </el-table-column>
-        <el-table-column label="耗时" width="105">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
-            displayTaskDuration(row.started_at, row.finished_at)
-          }}</template>
-        </el-table-column>
-        <el-table-column label="进度" min-width="200">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">
-            <el-progress
-              :percentage="row.total ? Math.round((row.processed / row.total) * 100) : 100"
-            />
-            <small>{{ row.processed }} / {{ row.total }}</small>
-          </template>
-        </el-table-column>
-        <el-table-column prop="eligible" label="有效" width="85" />
-        <el-table-column prop="failed" label="失败" width="85" />
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">
-            <el-button
-              v-if="row.status === 'FAILED' || row.status === 'PARTIAL'"
-              link
-              type="primary"
-              @click="retryBackgroundGovernance(row.id)"
-              >重试</el-button
-            >
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-pagination
-        v-model:current-page="governanceTaskPage"
-        :page-size="10"
-        :total="governanceTaskTotal"
-        layout="prev, pager, next, total"
-        @current-change="loadGovernanceTasks"
-      />
+      </section>
 
-      <el-button link type="primary" @click="showGovernanceHistory = !showGovernanceHistory">
-        {{ showGovernanceHistory ? '收起历史治理任务' : '展开历史治理任务' }}（共 {{ Math.max(0, governanceTaskTotal - 1) }} 条）
-      </el-button>
-      <div v-if="showGovernanceHistory">
-      <el-table :data="governanceTasks.slice(1)" empty-text="暂无后台治理任务">
-        <el-table-column prop="id" label="任务 ID" width="100" />
-        <el-table-column prop="status" label="状态" width="120" />
-        <el-table-column label="创建时间" width="175">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
-            displayTaskTime(row.created_at)
-          }}</template>
-        </el-table-column>
-        <el-table-column label="开始时间" width="175">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
-            displayTaskTime(row.started_at)
-          }}</template>
-        </el-table-column>
-        <el-table-column label="完成时间" width="175">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
-            displayTaskTime(row.finished_at)
-          }}</template>
-        </el-table-column>
-        <el-table-column label="耗时" width="105">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
-            displayTaskDuration(row.started_at, row.finished_at)
-          }}</template>
-        </el-table-column>
-        <el-table-column label="进度" min-width="200">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">
-            <el-progress
-              :percentage="row.total ? Math.round((row.processed / row.total) * 100) : 100"
-            />
-            <small>{{ row.processed }} / {{ row.total }}</small>
-          </template>
-        </el-table-column>
-        <el-table-column prop="eligible" label="有效" width="85" />
-        <el-table-column prop="failed" label="失败" width="85" />
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }: { row: GovernanceTaskInfo }">
-            <el-button
-              v-if="row.status === 'FAILED' || row.status === 'PARTIAL'"
-              link
-              type="primary"
-              @click="retryBackgroundGovernance(row.id)"
-              >重试</el-button
-            >
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-pagination
-        v-model:current-page="governanceTaskPage"
-        :page-size="10"
-        :total="governanceTaskTotal"
-        layout="prev, pager, next, total"
-        @current-change="loadGovernanceTasks"
-      />
-
-      </div>    </section>
-
-    <section class="panel breakdown">
-      <div v-for="item in breakdown" :key="item[0]">
-        <span>{{ item[0] }}</span
-        ><strong>{{ item[1] }}</strong
-        ><small>{{ ratio(item[1]) }}</small>
-      </div>
-    </section>
-
-    <div class="page-header"><h3>治理结果明细 · 帖子与回复</h3><span>点击任意记录，核查完整原文、父帖上下文与规则标记</span></div>
-    <section class="panel filters">
-      <el-select v-model="filters.eligible" placeholder="AI 可用" clearable>
-        <el-option label="可用" value="true" />
-        <el-option label="排除" value="false" />
-      </el-select>
-      <el-select v-model="filters.exclusion_reason" placeholder="排除原因" clearable>
-        <el-option
-          v-for="(label, value) in reasonLabels"
-          :key="value"
-          :label="label"
-          :value="value"
+      <section class="panel table-panel">
+        <el-table
+          v-loading="loading"
+          :data="rows"
+          empty-text="暂无治理结果"
+          @row-click="selected = $event"
+        >
+          <el-table-column prop="review_id" label="ID" width="80" />
+          <el-table-column label="类型" width="120">
+            <template #default="{ row }: { row: ReviewQuality }">{{
+              recordTypeLabels[row.record_type] || '未知类型'
+            }}</template>
+          </el-table-column>
+          <el-table-column
+            prop="normalized_text"
+            label="正文摘要"
+            min-width="300"
+            show-overflow-tooltip
+          />
+          <el-table-column label="角色" width="110">
+            <template #default="{ row }: { row: ReviewQuality }">{{
+              authorRoleLabels[row.author_role] || '未知'
+            }}</template>
+          </el-table-column>
+          <el-table-column label="规则结论" width="100">
+            <template #default="{ row }: { row: ReviewQuality }">
+              <el-tag :type="row.eligible_for_ai ? 'success' : 'info'">{{
+                row.eligible_for_ai ? '保留' : '排除'
+              }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="排除原因" min-width="160">
+            <template #default="{ row }: { row: ReviewQuality }">{{
+              reasonLabels[row.exclusion_reason]
+            }}</template>
+          </el-table-column>
+          <el-table-column prop="quality_score" label="质量分" width="90" />
+          <el-table-column label="核查" width="90"
+            ><template #default="{ row }: { row: ReviewQuality }"
+              ><el-button link type="primary" @click.stop="selected = row"
+                >查看原文</el-button
+              ></template
+            ></el-table-column
+          >
+          <el-table-column label="发布时间" min-width="180">
+            <template #default="{ row }: { row: ReviewQuality }">{{
+              formatPublishedAt(row.published_at)
+            }}</template>
+          </el-table-column>
+        </el-table>
+        <el-pagination
+          v-model:current-page="page"
+          :page-size="10"
+          :total="total"
+          layout="prev, pager, next, total"
+          @current-change="loadData"
         />
-      </el-select>
-      <el-select v-model="filters.record_type" placeholder="记录类型" clearable>
-        <el-option label="帖子" value="THREAD" />
-        <el-option label="评价" value="REVIEW" />
-        <el-option label="追评" value="APPEND_REVIEW" />
-        <el-option label="回复" value="REPLY" />
-        <el-option label="官方回复" value="OFFICIAL_REPLY" />
-      </el-select>
-      <el-select v-model="filters.author_role" placeholder="作者角色" clearable>
-        <el-option label="用户" value="USER" />
-        <el-option label="官方" value="OFFICIAL" />
-        <el-option label="版主" value="MODERATOR" />
-        <el-option label="达人" value="EXPERT" />
-      </el-select>
-      <el-input-number
-        v-model="filters.quality_score_min"
-        :min="0"
-        :max="1"
-        :step="0.1"
-        placeholder="最低分"
-      />
-      <el-input-number
-        v-model="filters.quality_score_max"
-        :min="0"
-        :max="1"
-        :step="0.1"
-        placeholder="最高分"
-      />
-      <el-button type="primary" @click="applyFilters">筛选</el-button>
-      <el-button @click="filters.eligible = 'false'; applyFilters()">只看排除记录</el-button>
-    </section>
+      </section>
 
-    <section class="panel table-panel">
-      <el-table
-        v-loading="loading"
-        :data="rows"
-        empty-text="暂无治理结果"
-        @row-click="selected = $event"
+      <el-drawer
+        :model-value="Boolean(selected)"
+        title="治理结果详情"
+        size="min(760px, 94vw)"
+        @close="selected = null"
       >
-        <el-table-column prop="review_id" label="ID" width="80" />
-        <el-table-column label="类型" width="120">
-          <template #default="{ row }: { row: ReviewQuality }">{{
-            recordTypeLabels[row.record_type] || '未知类型'
-          }}</template>
-        </el-table-column>
-        <el-table-column
-          prop="normalized_text"
-          label="正文摘要"
-          min-width="300"
-          show-overflow-tooltip
-        />
-        <el-table-column label="角色" width="110">
-          <template #default="{ row }: { row: ReviewQuality }">{{
-            authorRoleLabels[row.author_role] || '未知'
-          }}</template>
-        </el-table-column>
-        <el-table-column label="规则结论" width="100">
-          <template #default="{ row }: { row: ReviewQuality }">
-            <el-tag :type="row.eligible_for_ai ? 'success' : 'info'">{{
-              row.eligible_for_ai ? '保留' : '排除'
-            }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="排除原因" min-width="160">
-          <template #default="{ row }: { row: ReviewQuality }">{{
-            reasonLabels[row.exclusion_reason]
-          }}</template>
-        </el-table-column>
-        <el-table-column prop="quality_score" label="质量分" width="90" />
-        <el-table-column label="核查" width="90"><template #default="{ row }: { row: ReviewQuality }"><el-button link type="primary" @click.stop="selected = row">查看原文</el-button></template></el-table-column>
-        <el-table-column label="发布时间" min-width="180">
-          <template #default="{ row }: { row: ReviewQuality }">{{
-            formatPublishedAt(row.published_at)
-          }}</template>
-        </el-table-column>
-      </el-table>
-      <el-pagination
-        v-model:current-page="page"
-        :page-size="10"
-        :total="total"
-        layout="prev, pager, next, total"
-        @current-change="loadData"
-      />
-    </section>
-
-    <el-drawer
-      :model-value="Boolean(selected)"
-      title="治理结果详情"
-      size="min(760px, 94vw)"
-      @close="selected = null"
-    >
-      <el-descriptions v-if="selected" :column="1" border>
-        <el-descriptions-item label="原帖链接">
-          <a v-if="selected.source_url" :href="selected.source_url" target="_blank" rel="noopener noreferrer">打开原帖</a>
-          <span v-else>未采集到原帖链接</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="原始内容">
-          <pre>{{ selected.original_content }}</pre>
-        </el-descriptions-item>
-        <el-descriptions-item label="标准化文本">
-          <pre>{{ selected.normalized_text }}</pre>
-        </el-descriptions-item>
-        <el-descriptions-item label="上下文">
-          <pre>{{ selected.context_text }}</pre>
-        </el-descriptions-item>
-        <el-descriptions-item label="规则标记">
-          <pre>{{ JSON.stringify(selected.flags_json, null, 2) }}</pre>
-        </el-descriptions-item>
-        <el-descriptions-item label="人工覆盖">{{
-          selected.manual_override ? selected.manual_reason : '无'
-        }}</el-descriptions-item>
-      </el-descriptions>
-    </el-drawer>
-  </div>
+        <el-descriptions v-if="selected" :column="1" border>
+          <el-descriptions-item label="原帖链接">
+            <a
+              v-if="selected.source_url"
+              :href="selected.source_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              >打开原帖</a
+            >
+            <span v-else>未采集到原帖链接</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="原始内容">
+            <pre>{{ selected.original_content }}</pre>
+          </el-descriptions-item>
+          <el-descriptions-item label="标准化文本">
+            <pre>{{ selected.normalized_text }}</pre>
+          </el-descriptions-item>
+          <el-descriptions-item label="上下文">
+            <pre>{{ selected.context_text }}</pre>
+          </el-descriptions-item>
+          <el-descriptions-item label="规则标记">
+            <pre>{{ JSON.stringify(selected.flags_json, null, 2) }}</pre>
+          </el-descriptions-item>
+          <el-descriptions-item label="人工覆盖">{{
+            selected.manual_override ? selected.manual_reason : '无'
+          }}</el-descriptions-item>
+        </el-descriptions>
+      </el-drawer>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.quality-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
-.quality-tabs .el-button + .el-button { margin-left: 0; }
-.quality-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
-.quality-section-heading > div:first-child { flex: 1 1 320px; }
-.automation-controls { display: flex; align-items: center; justify-content: flex-end; gap: 20px; flex-wrap: wrap; }
-.automation-status, .automation-actions { display: flex; align-items: center; gap: 10px; min-height: 40px; }
-.automation-label { color: #edf5ff; font-weight: 600; white-space: nowrap; }
-.automation-option { color: #96adc6; font-size: 13px; white-space: nowrap; }
-.automation-option.is-selected { color: #edf5ff; font-weight: 700; }
-.automation-actions .el-button { margin-left: 8px; }
-@media (max-width: 800px) {
-  .automation-controls { width: 100%; justify-content: space-between; }
-  .automation-actions { flex-wrap: wrap; }
+.quality-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0;
 }
-.pipeline-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
-.pipeline-step { background: #0a192a; border: 1px solid #29435c; border-radius: 10px; padding: 16px; }
-.pipeline-step span, .pipeline-step small { display: block; color: #96adc6; }
-.pipeline-step strong { display: block; color: #edf5ff; margin: 8px 0; }
-@media (max-width: 800px) { .pipeline-steps { grid-template-columns: 1fr; } }
+.quality-tabs .el-button + .el-button {
+  margin-left: 0;
+}
+.quality-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.quality-section-heading > div:first-child {
+  flex: 1 1 320px;
+}
+.automation-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.automation-status,
+.automation-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+.automation-label {
+  color: #edf5ff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.automation-option {
+  color: #96adc6;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.automation-option.is-selected {
+  color: #edf5ff;
+  font-weight: 700;
+}
+.automation-actions .el-button {
+  margin-left: 8px;
+}
+@media (max-width: 800px) {
+  .automation-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .automation-actions {
+    flex-wrap: wrap;
+  }
+}
+.pipeline-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.pipeline-step {
+  background: #0a192a;
+  border: 1px solid #29435c;
+  border-radius: 10px;
+  padding: 16px;
+}
+.pipeline-step span,
+.pipeline-step small {
+  display: block;
+  color: #96adc6;
+}
+.pipeline-step strong {
+  display: block;
+  color: #edf5ff;
+  margin: 8px 0;
+}
+@media (max-width: 800px) {
+  .pipeline-steps {
+    grid-template-columns: 1fr;
+  }
+}
 
 .notice,
 .governance-actions,

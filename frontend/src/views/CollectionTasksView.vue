@@ -60,7 +60,8 @@ const expandedProducts = ref<number[]>([])
 const manuallyCollapsed = ref<number[]>([])
 function isExpanded(target: CollectionTargetState): boolean {
   if (target.active_task) return !manuallyCollapsed.value.includes(target.product_id)
-  if (target.status === 'DEGRADED' && !manuallyCollapsed.value.includes(target.product_id)) return true
+  if (target.status === 'DEGRADED' && !manuallyCollapsed.value.includes(target.product_id))
+    return true
   return expandedProducts.value.includes(target.product_id)
 }
 function toggleExpanded(target: CollectionTargetState): void {
@@ -443,7 +444,14 @@ onUnmounted(stopPolling)
         class="target-card"
         shadow="hover"
       >
-        <div class="card-heading" role="button" tabindex="0" @click="toggleExpanded(target)" @keydown.enter.prevent="toggleExpanded(target)" @keydown.space.prevent="toggleExpanded(target)">
+        <div
+          class="card-heading"
+          role="button"
+          tabindex="0"
+          @click="toggleExpanded(target)"
+          @keydown.enter.prevent="toggleExpanded(target)"
+          @keydown.space.prevent="toggleExpanded(target)"
+        >
           <div>
             <h2>{{ target.product_name }}</h2>
             <p>{{ target.source_name }} · {{ target.target_name }}</p>
@@ -458,104 +466,104 @@ onUnmounted(stopPolling)
         </div>
 
         <template v-if="isExpanded(target)">
-        <div v-if="target.active_task" class="live-progress">
-          <strong>实时采集状态</strong>
-          <p v-if="activeTask(target)">
-            <strong>{{ collectionPhase(activeTask(target)!) }}</strong> ·
-            {{ discoveryProgress(activeTask(target)!) }}
-          </p>
-          <p>{{ taskProgress(target) }}</p>
-          <p>
-            状态：{{ activeTask(target)?.status || target.active_task_status }} · 最近心跳：{{
-              formatTime(activeTask(target)?.updated_at || null)
-            }}
-          </p>
-          <el-alert
-            v-if="staleTask(target)"
-            type="warning"
-            :closable="false"
-            title="任务超过 10 分钟未更新，可能卡住或 Worker 已停止；请检查任务详情与 Worker 日志，暂勿重复创建任务。"
-          /><el-button size="small" @click="openHistory(target)">查看任务详情</el-button
-          ><el-button
-            v-if="
-              auth.canWrite &&
-              ['PENDING', 'RUNNING', 'PAUSED'].includes(
-                activeTask(target)?.status || target.active_task_status || '',
-              )
-            "
-            size="small"
-            type="danger"
-            plain
-            @click="stopActive(target)"
-            >停止采集</el-button
-          ><el-button
-            v-if="staleTask(target) && auth.canWrite"
-            size="small"
-            type="warning"
-            @click="recoverStale(target)"
-            >安全恢复</el-button
-          >
-        </div>
-        <div class="state-block" :class="{ verified: target.full_verified }">
-          <span class="state-label">数据基线</span>
-          <strong>{{ baselineText(target) }}</strong>
-          <small v-if="target.full_verified_at"
-            >验证于 {{ formatTime(target.full_verified_at) }}</small
-          >
-        </div>
-
-        <div class="facts">
-          <div>
-            <span>自动增量</span>
-            <strong v-if="target.schedule_enabled"
-              >每 {{ target.schedule_interval_hours }} 小时</strong
+          <div v-if="target.active_task" class="live-progress">
+            <strong>实时采集状态</strong>
+            <p v-if="activeTask(target)">
+              <strong>{{ collectionPhase(activeTask(target)!) }}</strong> ·
+              {{ discoveryProgress(activeTask(target)!) }}
+            </p>
+            <p>{{ taskProgress(target) }}</p>
+            <p>
+              状态：{{ activeTask(target)?.status || target.active_task_status }} · 最近心跳：{{
+                formatTime(activeTask(target)?.updated_at || null)
+              }}
+            </p>
+            <el-alert
+              v-if="staleTask(target)"
+              type="warning"
+              :closable="false"
+              title="任务超过 10 分钟未更新，可能卡住或 Worker 已停止；请检查任务详情与 Worker 日志，暂勿重复创建任务。"
+            /><el-button size="small" @click="openHistory(target)">查看任务详情</el-button
+            ><el-button
+              v-if="
+                auth.canWrite &&
+                ['PENDING', 'RUNNING', 'PAUSED'].includes(
+                  activeTask(target)?.status || target.active_task_status || '',
+                )
+              "
+              size="small"
+              type="danger"
+              plain
+              @click="stopActive(target)"
+              >停止采集</el-button
+            ><el-button
+              v-if="staleTask(target) && auth.canWrite"
+              size="small"
+              type="warning"
+              @click="recoverStale(target)"
+              >安全恢复</el-button
             >
-            <strong v-else>未启用</strong>
           </div>
-          <div>
-            <span>最近成功</span>
-            <strong>{{ formatTime(target.last_success_at) }}</strong>
+          <div class="state-block" :class="{ verified: target.full_verified }">
+            <span class="state-label">数据基线</span>
+            <strong>{{ baselineText(target) }}</strong>
+            <small v-if="target.full_verified_at"
+              >验证于 {{ formatTime(target.full_verified_at) }}</small
+            >
           </div>
-          <div>
-            <span>最近验证帖子</span>
-            <strong>{{ target.last_verified_thread_count || '—' }}</strong>
-          </div>
-        </div>
 
-        <el-alert
-          v-if="target.last_error"
-          :title="target.last_error"
-          type="error"
-          :closable="false"
-          class="target-error"
-        />
+          <div class="facts">
+            <div>
+              <span>自动增量</span>
+              <strong v-if="target.schedule_enabled"
+                >每 {{ target.schedule_interval_hours }} 小时</strong
+              >
+              <strong v-else>未启用</strong>
+            </div>
+            <div>
+              <span>最近成功</span>
+              <strong>{{ formatTime(target.last_success_at) }}</strong>
+            </div>
+            <div>
+              <span>最近验证帖子</span>
+              <strong>{{ target.last_verified_thread_count || '—' }}</strong>
+            </div>
+          </div>
 
-        <div class="card-actions">
-          <el-radio-group
-            v-model="modeByProduct[target.product_id]"
-            :disabled="productBusy(target)"
-          >
-            <el-radio-button value="FULL">全量</el-radio-button>
-            <el-radio-button value="INCREMENTAL">增量</el-radio-button>
-            <el-radio-button value="PAGES">测试采集（指定页数）</el-radio-button>
-          </el-radio-group>
-          <el-input-number
-            v-if="(modeByProduct[target.product_id] || 'PAGES') === 'PAGES'"
-            v-model="pagesByProduct[target.product_id]"
-            :min="1"
-            :max="10"
-            :disabled="productBusy(target)"
+          <el-alert
+            v-if="target.last_error"
+            :title="target.last_error"
+            type="error"
+            :closable="false"
+            class="target-error"
           />
-          <el-button
-            type="primary"
-            :disabled="!auth.canWrite || productBusy(target)"
-            :loading="startingIds.has(target.id)"
-            @click="startProductCollection(target)"
-            >开始采集</el-button
-          >
-          <el-button :disabled="!auth.canWrite" @click="openSchedule(target)">定时设置</el-button>
-          <el-button @click="openHistory(target)">运行历史</el-button>
-        </div>
+
+          <div class="card-actions">
+            <el-radio-group
+              v-model="modeByProduct[target.product_id]"
+              :disabled="productBusy(target)"
+            >
+              <el-radio-button value="FULL">全量</el-radio-button>
+              <el-radio-button value="INCREMENTAL">增量</el-radio-button>
+              <el-radio-button value="PAGES">测试采集（指定页数）</el-radio-button>
+            </el-radio-group>
+            <el-input-number
+              v-if="(modeByProduct[target.product_id] || 'PAGES') === 'PAGES'"
+              v-model="pagesByProduct[target.product_id]"
+              :min="1"
+              :max="10"
+              :disabled="productBusy(target)"
+            />
+            <el-button
+              type="primary"
+              :disabled="!auth.canWrite || productBusy(target)"
+              :loading="startingIds.has(target.id)"
+              @click="startProductCollection(target)"
+              >开始采集</el-button
+            >
+            <el-button :disabled="!auth.canWrite" @click="openSchedule(target)">定时设置</el-button>
+            <el-button @click="openHistory(target)">运行历史</el-button>
+          </div>
         </template>
       </el-card>
       <el-empty v-if="!loading && !targets.length" description="暂无可用采集入口" />

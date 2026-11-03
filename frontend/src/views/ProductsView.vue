@@ -63,15 +63,24 @@ function cancelInlineEdit(): void {
 async function saveInlineName(product: Product): Promise<void> {
   if (inlineCancelPending || inlineEditingId.value !== product.id || inlineSaving.value) return
   const name = inlineName.value.trim()
-  if (!name) { cancelInlineEdit(); return }
-  if (name === product.name) { cancelInlineEdit(); return }
+  if (!name) {
+    cancelInlineEdit()
+    return
+  }
+  if (name === product.name) {
+    cancelInlineEdit()
+    return
+  }
   inlineSaving.value = true
   try {
     await updateProduct(product.id, { name })
     cancelInlineEdit()
     await load()
-  } catch { ElMessage.error('修改失败，请重试') }
-  finally { inlineSaving.value = false }
+  } catch {
+    ElMessage.error('修改失败，请重试')
+  } finally {
+    inlineSaving.value = false
+  }
 }
 
 const operatingTargetId = ref<number | null>(null)
@@ -190,8 +199,14 @@ function openTarget(product: Product): void {
 }
 
 function validationErrorMessage(error: unknown): string {
-  const response = (error as { response?: { data?: { detail?: string; code?: string; message?: string } } })?.response?.data
-  return response?.detail || response?.message || (error instanceof Error ? error.message : '验证失败，请检查采集网址和网络连接')
+  const response = (
+    error as { response?: { data?: { detail?: string; code?: string; message?: string } } }
+  )?.response?.data
+  return (
+    response?.detail ||
+    response?.message ||
+    (error instanceof Error ? error.message : '验证失败，请检查采集网址和网络连接')
+  )
 }
 
 async function saveTarget(): Promise<void> {
@@ -320,12 +335,30 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
         <el-table-column label="手机产品" min-width="150"
           ><template #default="{ row }"
             ><div v-if="inlineEditingId === row.id" class="inline-name-editor">
-              <el-input ref="inlineInput" v-model="inlineName" size="small" maxlength="100" :disabled="inlineSaving" aria-label="修改手机名称" @keyup.enter="($event.target as HTMLInputElement).blur()" @keyup.esc.stop.prevent="cancelInlineEdit" @blur="saveInlineName(row)" />
+              <el-input
+                ref="inlineInput"
+                v-model="inlineName"
+                size="small"
+                maxlength="100"
+                :disabled="inlineSaving"
+                aria-label="修改手机名称"
+                @keyup.enter="($event.target as HTMLInputElement).blur()"
+                @keyup.esc.stop.prevent="cancelInlineEdit"
+                @blur="saveInlineName(row)"
+              />
             </div>
-            <strong v-else-if="auth.canWrite" class="editable-product-name" role="button" tabindex="0" @click="beginInlineEdit(row)" @keydown.enter.prevent="beginInlineEdit(row)" @keydown.space.prevent="beginInlineEdit(row)">{{ row.name }}</strong>
+            <strong
+              v-else-if="auth.canWrite"
+              class="editable-product-name"
+              role="button"
+              tabindex="0"
+              @click="beginInlineEdit(row)"
+              @keydown.enter.prevent="beginInlineEdit(row)"
+              @keydown.space.prevent="beginInlineEdit(row)"
+              >{{ row.name }}</strong
+            >
             <strong v-else>{{ row.name }}</strong>
-            </template
-          ></el-table-column
+          </template></el-table-column
         >
         <el-table-column label="采集入口" min-width="210">
           <template #default="{ row }">
@@ -337,7 +370,8 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
                 type="primary"
                 :underline="false"
                 :title="`打开采集入口：${targetFor(row)?.name}`"
-              >{{ targetFor(row)?.name }}</el-link>
+                >{{ targetFor(row)?.name }}</el-link
+              >
               <span v-else>{{ targetFor(row)?.name }}</span>
             </template>
             <span v-else class="muted">未配置</span>
@@ -398,7 +432,9 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
 
     <section v-if="auth.isAdmin" class="panel" style="margin-top: 18px">
       <h2>采集任务管理</h2>
-      <p class="page-description">各产品默认折叠，运行中或异常时自动展开；点击产品名称查看采集计划、任务进度及历史。</p>
+      <p class="page-description">
+        各产品默认折叠，运行中或异常时自动展开；点击产品名称查看采集计划、任务进度及历史。
+      </p>
       <CollectionTasksView embedded />
     </section>
 
@@ -467,7 +503,14 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
           :closable="false"
         />
       </el-form>
-      <el-alert v-if="targetValidationError" :title="targetValidationError" type="error" :closable="false" show-icon style="margin-top: 12px" />
+      <el-alert
+        v-if="targetValidationError"
+        :title="targetValidationError"
+        type="error"
+        :closable="false"
+        show-icon
+        style="margin-top: 12px"
+      />
       <template #footer
         ><el-button @click="targetDialog = false">取消</el-button
         ><el-button type="primary" :loading="saving" @click="saveTarget"
@@ -523,10 +566,21 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
 </template>
 
 <style scoped>
-.editable-product-name { cursor: text; }
-.editable-product-name:focus-visible { outline-offset: 3px; }
-.inline-name-editor { display: flex; align-items: center; gap: 6px; min-width: 240px; }
-.inline-name-editor :deep(.el-input) { min-width: 110px; }
+.editable-product-name {
+  cursor: text;
+}
+.editable-product-name:focus-visible {
+  outline-offset: 3px;
+}
+.inline-name-editor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 240px;
+}
+.inline-name-editor :deep(.el-input) {
+  min-width: 110px;
+}
 
 .product-panel {
   overflow: hidden;
