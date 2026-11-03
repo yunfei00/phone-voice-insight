@@ -41,7 +41,7 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
             requested = params.validated_data["enabled"]
             if requested and not settings.AI_AUTOMATION_ENABLED:
                 return Response(
-                    {"detail": "服务器环境已禁用自动化，请设置 AI_AUTOMATION_ENABLED=true 后重启服务"},
+                    {"detail": "服务器环境已禁用自动化。请设置 AI_AUTOMATION_ENABLED=true 后重启服务"},
                     status=409,
                 )
             VoiceAutomationSetting.objects.update_or_create(pk=1, defaults={"enabled": requested})
