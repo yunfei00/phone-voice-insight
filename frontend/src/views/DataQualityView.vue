@@ -597,6 +597,12 @@ async function loadAutomationSetting(): Promise<void> {
   }
 }
 
+function refreshAutomationOverview(): void {
+  void loadAutomationSetting()
+  void loadGovernanceTasks()
+  void loadAIReviews()
+}
+
 async function changeAutomationSetting(enabled: boolean): Promise<void> {
   automationLoading.value = true
   try {
@@ -727,11 +733,7 @@ onUnmounted(() => {
               >开启</span
             >
             <el-button
-              @click="
-                loadAutomationSetting()
-                loadGovernanceTasks()
-                loadAIReviews()
-              "
+              @click="refreshAutomationOverview"
               >刷新状态</el-button
             >
           </div>
