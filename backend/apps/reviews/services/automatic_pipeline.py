@@ -13,7 +13,7 @@ from apps.accounts.models import UserAIConfiguration, UserRole
 from apps.analysis.models import AnalysisBatch, AnalysisRun
 from apps.analysis.tasks import run_structured_analysis_batch_task
 from apps.products.models import Product
-from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewQuality
+from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewQuality, VoiceAutomationSetting
 from apps.reviews.services.governance_selection import governance_selection
 from apps.reviews.tasks import process_governance_ai_batch, process_governance_batch
 from apps.sources.models import DataSource
@@ -118,8 +118,12 @@ def _ai_candidates(product_id: int, source_id: int | None) -> list[int]:
     return list(queryset.order_by("review_id").values_list("id", flat=True)[: settings.AI_AUTOMATION_BATCH_SIZE])
 
 
+def automation_is_enabled() -> bool:
+    return bool(settings.AI_AUTOMATION_ENABLED) and VoiceAutomationSetting.objects.filter(pk=1, enabled=True).exists() or (bool(settings.AI_AUTOMATION_ENABLED) and not VoiceAutomationSetting.objects.filter(pk=1).exists())
+
+
 def run_automatic_pipeline(product_id: int, source_id: int | None = None) -> AutomaticPipelineResult:
-    if not settings.AI_AUTOMATION_ENABLED:
+    if not automation_is_enabled():
         return AutomaticPipelineResult(status="DISABLED", product_id=product_id)
     configuration = _automation_configuration()
     product = Product.objects.get(pk=product_id)
