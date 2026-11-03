@@ -597,6 +597,11 @@ async function loadAutomationSetting(): Promise<void> {
   }
 }
 
+function showExcludedRecords(): void {
+  filters.eligible = 'false'
+  applyFilters()
+}
+
 function refreshAutomationOverview(): void {
   void loadAutomationSetting()
   void loadGovernanceTasks()
@@ -1233,13 +1238,7 @@ onUnmounted(() => {
           placeholder="最高分"
         />
         <el-button type="primary" @click="applyFilters">筛选</el-button>
-        <el-button
-          @click="
-            filters.eligible = 'false'
-            applyFilters()
-          "
-          >只看排除记录</el-button
-        >
+        <el-button @click="showExcludedRecords">只看排除记录</el-button>
       </section>
 
       <section class="panel table-panel">
