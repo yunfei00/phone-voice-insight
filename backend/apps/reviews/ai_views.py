@@ -39,14 +39,19 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
             params.is_valid(raise_exception=True)
             requested = params.validated_data["enabled"]
             if requested and not settings.AI_AUTOMATION_ENABLED:
-                return Response({"detail": "服务器环境已禁用自动化，请设置 AI_AUTOMATION_ENABLED=true 后重启服务"}, status=409)
+                return Response(
+                    {"detail": "服务器环境已禁用自动化，请设置 AI_AUTOMATION_ENABLED=true 后重启服务"},
+                    status=409,
+                )
             VoiceAutomationSetting.objects.update_or_create(pk=1, defaults={"enabled": requested})
         stored = VoiceAutomationSetting.objects.filter(pk=1).first()
-        return Response({
-            "enabled": automation_is_enabled(),
-            "configured_enabled": stored.enabled if stored else True,
-            "environment_enabled": bool(settings.AI_AUTOMATION_ENABLED),
-        })
+        return Response(
+            {
+                "enabled": automation_is_enabled(),
+                "configured_enabled": stored.enabled if stored else True,
+                "environment_enabled": bool(settings.AI_AUTOMATION_ENABLED),
+            }
+        )
 
     @action(detail=False, methods=["get"], url_path="corpus-summary")
     def corpus_summary(self, request: Request) -> Response:
