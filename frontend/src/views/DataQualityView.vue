@@ -130,6 +130,7 @@ const rows = ref<ReviewQuality[]>([])
 const summary = ref<DataQualitySummary>(emptySummary())
 const loading = ref(false)
 const error = ref('')
+const fullAIStartNotice = ref('')
 const total = ref(0)
 const page = ref(1)
 const selected = ref<ReviewQuality | null>(null)
@@ -421,15 +422,21 @@ async function startFullAIReview(): Promise<void> {
     return
   }
   aiBusy.value = true
+  fullAIStartNotice.value = ''
   try {
     const result = await startFullGovernanceAIReview({
       product_id: selectedProduct.value,
       source_id: selectedSource.value ?? null,
     })
-    if (result.id) fullAIId.value = result.id
-    ElMessage.success(
-      result.total ? `全量 AI 判断已启动，共 ${result.total} 条` : '没有待 AI 判断的数据',
-    )
+    if (!result.id || result.total === 0) {
+      fullAIStartNotice.value = '当前产品及来源范围内没有新增待 AI 判断的数据，已处理记录不会重复判断。'
+      ElMessage.info(fullAIStartNotice.value)
+      await loadAIReviews()
+      return
+    }
+    fullAIId.value = result.id
+    fullAIStartNotice.value = `已启动全量 AI 判断，本次待处理 ${result.total} 条，任务 #${result.id}。`
+    ElMessage.success(fullAIStartNotice.value)
     await loadAIReviews()
     startAIPolling()
   } catch {
@@ -572,6 +579,7 @@ onMounted(async () => {
 })
 
 async function changeScope(): Promise<void> {
+  fullAIStartNotice.value = ''
   if (selectedProduct.value !== undefined) {
     window.localStorage.setItem(productStorageKey, String(selectedProduct.value))
   }
@@ -764,6 +772,15 @@ onUnmounted(() => {
           >每 3 秒自动更新</span
         >
       </div>
+      <el-alert
+        v-if="fullAIStartNotice"
+        :title="fullAIStartNotice"
+        :type="fullAIStartNotice.startsWith('已启动') ? 'success' : 'info'"
+        :closable="true"
+        show-icon
+        class="notice"
+        @close="fullAIStartNotice = ''"
+      />
       <div v-if="fullAIProgress" class="panel" style="margin-bottom: 12px">
         <strong>全量进度：{{ fullAIProgress.processed }} / {{ fullAIProgress.total }}</strong>
         <el-progress
