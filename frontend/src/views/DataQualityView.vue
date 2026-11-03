@@ -113,6 +113,7 @@ const selectedSource = ref<number | undefined>(undefined)
 const governanceLimit = ref(20)
 const governanceBusy = ref(false)
 const governanceTasks = ref<GovernanceTaskInfo[]>([])
+const showGovernanceHistory = ref(false)
 const taskLoading = ref(false)
 const aiBusy = ref(false)
 const fullAIProgress = ref<FullGovernanceAIProgress | null>(null)
@@ -1030,7 +1031,8 @@ onUnmounted(() => {
         >
         <el-button :loading="taskLoading" @click="loadGovernanceTasks">立即刷新</el-button>
       </div>
-      <el-table :data="governanceTasks" empty-text="暂无后台治理任务">
+      <p>仅展示当前（最近）任务；已完成的任务自动收起。需要检查历史失败或重试时，可展开历史记录。</p>
+      <el-table :data="governanceTasks.slice(0, 1)" empty-text="暂无后台治理任务">
         <el-table-column prop="id" label="任务 ID" width="100" />
         <el-table-column prop="status" label="状态" width="120" />
         <el-table-column label="创建时间" width="175">
@@ -1082,7 +1084,65 @@ onUnmounted(() => {
         layout="prev, pager, next, total"
         @current-change="loadGovernanceTasks"
       />
-    </section>
+
+      <el-button link type="primary" @click="showGovernanceHistory = !showGovernanceHistory">
+        {{ showGovernanceHistory ? '收起历史治理任务' : '展开历史治理任务' }}（共 {{ Math.max(0, governanceTaskTotal - 1) }} 条）
+      </el-button>
+      <div v-if="showGovernanceHistory">
+      <el-table :data="governanceTasks.slice(1)" empty-text="暂无后台治理任务">
+        <el-table-column prop="id" label="任务 ID" width="100" />
+        <el-table-column prop="status" label="状态" width="120" />
+        <el-table-column label="创建时间" width="175">
+          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+            displayTaskTime(row.created_at)
+          }}</template>
+        </el-table-column>
+        <el-table-column label="开始时间" width="175">
+          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+            displayTaskTime(row.started_at)
+          }}</template>
+        </el-table-column>
+        <el-table-column label="完成时间" width="175">
+          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+            displayTaskTime(row.finished_at)
+          }}</template>
+        </el-table-column>
+        <el-table-column label="耗时" width="105">
+          <template #default="{ row }: { row: GovernanceTaskInfo }">{{
+            displayTaskDuration(row.started_at, row.finished_at)
+          }}</template>
+        </el-table-column>
+        <el-table-column label="进度" min-width="200">
+          <template #default="{ row }: { row: GovernanceTaskInfo }">
+            <el-progress
+              :percentage="row.total ? Math.round((row.processed / row.total) * 100) : 100"
+            />
+            <small>{{ row.processed }} / {{ row.total }}</small>
+          </template>
+        </el-table-column>
+        <el-table-column prop="eligible" label="有效" width="85" />
+        <el-table-column prop="failed" label="失败" width="85" />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }: { row: GovernanceTaskInfo }">
+            <el-button
+              v-if="row.status === 'FAILED' || row.status === 'PARTIAL'"
+              link
+              type="primary"
+              @click="retryBackgroundGovernance(row.id)"
+              >重试</el-button
+            >
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-pagination
+        v-model:current-page="governanceTaskPage"
+        :page-size="10"
+        :total="governanceTaskTotal"
+        layout="prev, pager, next, total"
+        @current-change="loadGovernanceTasks"
+      />
+
+      </div>    </section>
 
     <section class="panel breakdown">
       <div v-for="item in breakdown" :key="item[0]">
@@ -1092,6 +1152,7 @@ onUnmounted(() => {
       </div>
     </section>
 
+    <div class="page-header"><h3>治理结果明细 · 帖子与回复</h3><span>点击任意记录，核查完整原文、父帖上下文与规则标记</span></div>
     <section class="panel filters">
       <el-select v-model="filters.eligible" placeholder="AI 可用" clearable>
         <el-option label="可用" value="true" />
@@ -1107,6 +1168,8 @@ onUnmounted(() => {
       </el-select>
       <el-select v-model="filters.record_type" placeholder="记录类型" clearable>
         <el-option label="帖子" value="THREAD" />
+        <el-option label="评价" value="REVIEW" />
+        <el-option label="追评" value="APPEND_REVIEW" />
         <el-option label="回复" value="REPLY" />
         <el-option label="官方回复" value="OFFICIAL_REPLY" />
       </el-select>
@@ -1131,6 +1194,7 @@ onUnmounted(() => {
         placeholder="最高分"
       />
       <el-button type="primary" @click="applyFilters">筛选</el-button>
+      <el-button @click="filters.eligible = 'false'; applyFilters()">只看排除记录</el-button>
     </section>
 
     <section class="panel table-panel">
@@ -1157,19 +1221,20 @@ onUnmounted(() => {
             authorRoleLabels[row.author_role] || '未知'
           }}</template>
         </el-table-column>
-        <el-table-column label="AI 可用" width="100">
+        <el-table-column label="规则结论" width="100">
           <template #default="{ row }: { row: ReviewQuality }">
             <el-tag :type="row.eligible_for_ai ? 'success' : 'info'">{{
-              row.eligible_for_ai ? '是' : '否'
+              row.eligible_for_ai ? '保留' : '排除'
             }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="排除原因" width="140">
+        <el-table-column label="排除原因" min-width="160">
           <template #default="{ row }: { row: ReviewQuality }">{{
             reasonLabels[row.exclusion_reason]
           }}</template>
         </el-table-column>
         <el-table-column prop="quality_score" label="质量分" width="90" />
+        <el-table-column label="核查" width="90"><template #default="{ row }: { row: ReviewQuality }"><el-button link type="primary" @click.stop="selected = row">查看原文</el-button></template></el-table-column>
         <el-table-column label="发布时间" min-width="180">
           <template #default="{ row }: { row: ReviewQuality }">{{
             formatPublishedAt(row.published_at)
