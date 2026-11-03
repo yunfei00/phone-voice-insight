@@ -732,10 +732,7 @@ onUnmounted(() => {
             <span class="automation-option" :class="{ 'is-selected': automationEnabled }"
               >开启</span
             >
-            <el-button
-              @click="refreshAutomationOverview"
-              >刷新状态</el-button
-            >
+            <el-button @click="refreshAutomationOverview">刷新状态</el-button>
           </div>
         </div>
       </div>
