@@ -1257,6 +1257,10 @@ onUnmounted(() => {
       @close="selected = null"
     >
       <el-descriptions v-if="selected" :column="1" border>
+        <el-descriptions-item label="原帖链接">
+          <a v-if="selected.source_url" :href="selected.source_url" target="_blank" rel="noopener noreferrer">打开原帖</a>
+          <span v-else>未采集到原帖链接</span>
+        </el-descriptions-item>
         <el-descriptions-item label="原始内容">
           <pre>{{ selected.original_content }}</pre>
         </el-descriptions-item>
