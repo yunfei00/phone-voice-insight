@@ -119,7 +119,9 @@ def _ai_candidates(product_id: int, source_id: int | None) -> list[int]:
 
 
 def automation_is_enabled() -> bool:
-    return bool(settings.AI_AUTOMATION_ENABLED) and VoiceAutomationSetting.objects.filter(pk=1, enabled=True).exists() or (bool(settings.AI_AUTOMATION_ENABLED) and not VoiceAutomationSetting.objects.filter(pk=1).exists())
+    if not settings.AI_AUTOMATION_ENABLED:
+        return False
+    return VoiceAutomationSetting.objects.filter(pk=1).values_list("enabled", flat=True).first() is not False
 
 
 def run_automatic_pipeline(product_id: int, source_id: int | None = None) -> AutomaticPipelineResult:
