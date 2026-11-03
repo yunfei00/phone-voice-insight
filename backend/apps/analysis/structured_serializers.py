@@ -25,6 +25,7 @@ class StructuredAnalysisSerializer(serializers.ModelSerializer):
     review_history = AnalysisReviewRecordSerializer(many=True, read_only=True)
     original_title = serializers.CharField(source="content.title", read_only=True)
     original_content = serializers.CharField(source="content.content", read_only=True)
+    source_url = serializers.URLField(source="content.source_url", read_only=True)
     product_name = serializers.CharField(source="content.product.name", read_only=True)
     source_name = serializers.CharField(source="content.source.name", read_only=True)
     run_status = serializers.CharField(source="run.status", read_only=True)
