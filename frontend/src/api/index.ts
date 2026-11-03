@@ -637,6 +637,18 @@ export const startGovernanceAIReview = async (payload: {
 }): Promise<{ id: number; total: number }> =>
   (await apiClient.post('/governance-ai/start/', payload)).data
 
+export interface AutomationSetting {
+  enabled: boolean
+  configured_enabled: boolean
+  environment_enabled: boolean
+}
+
+export const getAutomationSetting = async (): Promise<AutomationSetting> =>
+  (await apiClient.get<AutomationSetting>('/governance-ai/automation-setting/')).data
+
+export const updateAutomationSetting = async (enabled: boolean): Promise<AutomationSetting> =>
+  (await apiClient.patch<AutomationSetting>('/governance-ai/automation-setting/', { enabled })).data
+
 export const startFullGovernanceAIReview = async (payload: {
   product_id: number
   source_id?: number | null

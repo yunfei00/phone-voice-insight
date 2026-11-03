@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import CollectionTasksView from './CollectionTasksView.vue'
 
 import {
   cleanupSourceTarget,
@@ -38,12 +39,51 @@ const saving = ref(false)
 const productDialog = ref(false)
 const brandDialog = ref(false)
 const targetDialog = ref(false)
-const progressDialog = ref(false)
+const targetValidationError = ref('')
 const cleanupDialog = ref(false)
 const targetId = ref<number | null>(null)
 const editingId = ref<number | null>(null)
+const inlineEditingId = ref<number | null>(null)
+const inlineName = ref('')
+const inlineSaving = ref(false)
+const inlineInput = ref<{ focus: () => void } | null>(null)
+let inlineCancelPending = false
+function beginInlineEdit(product: Product): void {
+  if (!auth.canWrite || inlineSaving.value) return
+  inlineCancelPending = false
+  inlineEditingId.value = product.id
+  inlineName.value = product.name
+  void nextTick(() => inlineInput.value?.focus())
+}
+function cancelInlineEdit(): void {
+  inlineCancelPending = true
+  inlineEditingId.value = null
+  inlineName.value = ''
+}
+async function saveInlineName(product: Product): Promise<void> {
+  if (inlineCancelPending || inlineEditingId.value !== product.id || inlineSaving.value) return
+  const name = inlineName.value.trim()
+  if (!name) {
+    cancelInlineEdit()
+    return
+  }
+  if (name === product.name) {
+    cancelInlineEdit()
+    return
+  }
+  inlineSaving.value = true
+  try {
+    await updateProduct(product.id, { name })
+    cancelInlineEdit()
+    await load()
+  } catch {
+    ElMessage.error('修改失败，请重试')
+  } finally {
+    inlineSaving.value = false
+  }
+}
+
 const operatingTargetId = ref<number | null>(null)
-const progressState = ref<CollectionTargetState | null>(null)
 const cleanupPreview = ref<SourceTargetCleanupPreview | null>(null)
 const cleanupConfirmation = ref('')
 const form = reactive({ brand_id: undefined as number | undefined, name: '', is_active: true })
@@ -100,10 +140,6 @@ async function load(showLoading = true): Promise<void> {
     brands.value = brandResult.results
     sources.value = sourceResult.results
     states.value = stateResult.results
-    if (progressState.value) {
-      progressState.value =
-        states.value.find((state) => state.id === progressState.value?.id) ?? null
-    }
   } finally {
     loading.value = false
   }
@@ -148,6 +184,7 @@ async function saveBrand(): Promise<void> {
 }
 
 function openTarget(product: Product): void {
+  targetValidationError.value = ''
   const source = honorSource.value ?? sources.value[0]
   const existing = source?.targets?.find((target) => target.product === product.id)
   targetId.value = existing?.id ?? null
@@ -161,47 +198,57 @@ function openTarget(product: Product): void {
   targetDialog.value = true
 }
 
+function validationErrorMessage(error: unknown): string {
+  const response = (
+    error as { response?: { data?: { detail?: string; code?: string; message?: string } } }
+  )?.response?.data
+  return (
+    response?.detail ||
+    response?.message ||
+    (error instanceof Error ? error.message : '验证失败，请检查采集网址和网络连接')
+  )
+}
+
 async function saveTarget(): Promise<void> {
   if (!targetForm.product || !targetForm.source || !targetForm.target_url.trim()) {
-    ElMessage.warning('请填写来源及入口网址')
+    targetValidationError.value = '请填写来源及入口网址'
     return
   }
   saving.value = true
+  targetValidationError.value = ''
   try {
-    if (targetId.value) {
-      await updateSourceTarget(targetId.value, {
-        target_url: targetForm.target_url,
+    let id = targetId.value
+    if (id) {
+      await updateSourceTarget(id, {
+        target_url: targetForm.target_url.trim(),
         external_id: targetForm.external_id,
       })
     } else {
-      await createSourceTarget({
+      const created = await createSourceTarget({
         source: targetForm.source,
         product: targetForm.product,
         name: targetForm.name,
         target_type: 'COMMUNITY',
-        target_url: targetForm.target_url,
+        target_url: targetForm.target_url.trim(),
         external_id: targetForm.external_id,
         is_active: true,
       })
+      id = created.id
+      targetId.value = id
+    }
+    if (!id) throw new Error('采集入口保存成功，但未返回入口编号')
+    const validation = await validateSourceTarget(id)
+    if (validation.valid !== true) {
+      targetValidationError.value = validation.detail || '入口验证未通过'
+      return
     }
     targetDialog.value = false
-    ElMessage.success('入口已保存; 请先验证入口')
     await load()
+  } catch (error) {
+    targetValidationError.value = validationErrorMessage(error)
+    await load().catch(() => undefined)
   } finally {
     saving.value = false
-  }
-}
-
-async function validateTarget(product: Product): Promise<void> {
-  const target = targetFor(product)
-  if (!target) return
-  operatingTargetId.value = target.id
-  try {
-    await validateSourceTarget(target.id)
-    ElMessage.success('入口验证通过')
-  } finally {
-    operatingTargetId.value = null
-    await load()
   }
 }
 
@@ -224,11 +271,6 @@ async function smartStart(product: Product): Promise<void> {
   } finally {
     operatingTargetId.value = null
   }
-}
-
-function showProgress(product: Product): void {
-  progressState.value = stateFor(product) ?? null
-  progressDialog.value = true
 }
 
 async function showCleanup(product: Product): Promise<void> {
@@ -292,19 +334,45 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
       <el-table v-loading="loading" :data="products" empty-text="暂无手机产品">
         <el-table-column label="手机产品" min-width="150"
           ><template #default="{ row }"
-            ><strong>{{ row.name }}</strong
-            ><el-button v-if="auth.canWrite" link @click="openProduct(row)"
-              >编辑</el-button
-            ></template
-          ></el-table-column
+            ><div v-if="inlineEditingId === row.id" class="inline-name-editor">
+              <el-input
+                ref="inlineInput"
+                v-model="inlineName"
+                size="small"
+                maxlength="100"
+                :disabled="inlineSaving"
+                aria-label="修改手机名称"
+                @keyup.enter="($event.target as HTMLInputElement).blur()"
+                @keyup.esc.stop.prevent="cancelInlineEdit"
+                @blur="saveInlineName(row)"
+              />
+            </div>
+            <strong
+              v-else-if="auth.canWrite"
+              class="editable-product-name"
+              role="button"
+              tabindex="0"
+              @click="beginInlineEdit(row)"
+              @keydown.enter.prevent="beginInlineEdit(row)"
+              @keydown.space.prevent="beginInlineEdit(row)"
+              >{{ row.name }}</strong
+            >
+            <strong v-else>{{ row.name }}</strong>
+          </template></el-table-column
         >
         <el-table-column label="采集入口" min-width="210">
           <template #default="{ row }">
             <template v-if="targetFor(row)">
-              <div>{{ targetFor(row)?.name }}</div>
-              <el-link :href="targetFor(row)?.target_url" target="_blank" type="primary"
-                >打开原始网页</el-link
+              <el-link
+                v-if="targetFor(row)?.target_url"
+                :href="targetFor(row)?.target_url"
+                target="_blank"
+                type="primary"
+                :underline="false"
+                :title="`打开采集入口：${targetFor(row)?.name}`"
+                >{{ targetFor(row)?.name }}</el-link
               >
+              <span v-else>{{ targetFor(row)?.name }}</span>
             </template>
             <span v-else class="muted">未配置</span>
           </template>
@@ -340,14 +408,6 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
           <template #default="{ row }">
             <el-button link type="primary" @click="openTarget(row)">配置入口</el-button>
             <el-button
-              v-if="targetFor(row)"
-              link
-              type="primary"
-              :loading="operatingTargetId === targetFor(row)?.id"
-              @click="validateTarget(row)"
-              >验证入口</el-button
-            >
-            <el-button
               link
               type="success"
               :disabled="
@@ -357,7 +417,6 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
               @click="smartStart(row)"
               >智能采集</el-button
             >
-            <el-button v-if="stateFor(row)" link @click="showProgress(row)">查看进度</el-button>
             <el-button link @click="openRawData(row)">查看原始数据</el-button>
             <el-button
               v-if="auth.isAdmin && targetFor(row)"
@@ -370,6 +429,14 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
         </el-table-column>
       </el-table>
     </div>
+
+    <section v-if="auth.isAdmin" class="panel" style="margin-top: 18px">
+      <h2>采集任务管理</h2>
+      <p class="page-description">
+        各产品默认折叠，运行中或异常时自动展开；点击产品名称查看采集计划、任务进度及历史。
+      </p>
+      <CollectionTasksView embedded />
+    </section>
 
     <el-dialog
       v-model="productDialog"
@@ -436,43 +503,20 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
           :closable="false"
         />
       </el-form>
+      <el-alert
+        v-if="targetValidationError"
+        :title="targetValidationError"
+        type="error"
+        :closable="false"
+        show-icon
+        style="margin-top: 12px"
+      />
       <template #footer
         ><el-button @click="targetDialog = false">取消</el-button
         ><el-button type="primary" :loading="saving" @click="saveTarget"
-          >保存入口</el-button
+          >保存并验证</el-button
         ></template
       >
-    </el-dialog>
-
-    <el-dialog v-model="progressDialog" title="采集进度" width="min(620px, 94vw)">
-      <el-descriptions v-if="progressState" :column="2" border>
-        <el-descriptions-item label="当前状态">{{ progressState.status }}</el-descriptions-item>
-        <el-descriptions-item label="任务阶段">{{
-          progressState.progress_stage || '空闲'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="最近任务"
-          >{{ progressState.last_task_type || '—' }} /
-          {{ progressState.last_task_status || '—' }}</el-descriptions-item
-        >
-        <el-descriptions-item label="失败数量">{{
-          progressState.last_failure_count
-        }}</el-descriptions-item>
-        <el-descriptions-item label="新增帖子">{{
-          progressState.last_new_threads
-        }}</el-descriptions-item>
-        <el-descriptions-item label="新增回复">{{
-          progressState.last_new_replies
-        }}</el-descriptions-item>
-        <el-descriptions-item label="最近错误" :span="2">{{
-          progressState.last_error || '无'
-        }}</el-descriptions-item>
-      </el-descriptions>
-      <el-alert
-        title="仅展示后台可确认的阶段和数量，不提供推测性百分比。"
-        type="info"
-        :closable="false"
-        style="margin-top: 16px"
-      />
     </el-dialog>
 
     <el-dialog v-model="cleanupDialog" title="清理该入口数据" width="min(660px, 94vw)">
@@ -522,6 +566,22 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
 </template>
 
 <style scoped>
+.editable-product-name {
+  cursor: text;
+}
+.editable-product-name:focus-visible {
+  outline-offset: 3px;
+}
+.inline-name-editor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 240px;
+}
+.inline-name-editor :deep(.el-input) {
+  min-width: 110px;
+}
+
 .product-panel {
   overflow: hidden;
 }

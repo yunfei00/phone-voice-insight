@@ -63,25 +63,15 @@ const baseNavigationItems = [
   { path: '/system', label: '运行监控', icon: Cpu, advanced: true },
 ]
 const navigationItems = computed(() => [
-  ...baseNavigationItems
-    .filter((item) =>
-      item.path === '/ai-settings'
-        ? auth.isAdmin
-        : auth.canWrite ||
-          (!item.advanced &&
-            ![
-              '/products',
-              '/threads',
-              '/reviews',
-              '/data-quality',
-              '/structured-analysis',
-            ].includes(item.path)),
-    )
-    .flatMap((item) =>
-      item.path === '/products' && auth.isAdmin
-        ? [item, { path: '/collection-tasks', label: '采集任务', icon: List }]
-        : [item],
-    ),
+  ...baseNavigationItems.filter((item) =>
+    item.path === '/ai-settings'
+      ? auth.isAdmin
+      : auth.canWrite ||
+        (!item.advanced &&
+          !['/products', '/threads', '/reviews', '/data-quality', '/structured-analysis'].includes(
+            item.path,
+          )),
+  ),
   ...(auth.isAdmin ? [{ path: '/users', label: '用户管理', icon: UserFilled }] : []),
 ])
 const activePath = computed(

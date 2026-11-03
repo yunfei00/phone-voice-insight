@@ -146,6 +146,12 @@ describe('CollectionTasksView', () => {
     await flush()
     await flush()
 
+    expect(container.textContent).not.toContain('全量完整性验证通过')
+    const heading = Array.from(container.querySelectorAll('h2')).find((node) =>
+      node.textContent?.includes('荣耀 Power2'),
+    )
+    heading?.closest('.card-heading')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flush()
     expect(container.textContent).toContain('全量完整性验证通过')
     const buttons = Array.from(container.querySelectorAll('button'))
     buttons.find((button) => button.textContent?.includes('开始采集'))?.click()

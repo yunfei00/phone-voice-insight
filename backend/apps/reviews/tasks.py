@@ -296,7 +296,9 @@ def run_automatic_voice_pipeline(product_id: int, source_id: int | None = None) 
 
 @shared_task(name="reconcile_automatic_voice_pipeline", time_limit=120, autoretry_for=(), max_retries=0)
 def reconcile_automatic_voice_pipeline() -> dict[str, int | str]:
-    if not settings.AI_AUTOMATION_ENABLED:
+    from apps.reviews.services.automatic_pipeline import automation_is_enabled
+
+    if not automation_is_enabled():
         return {"status": "disabled", "queued": 0}
     # Reconcile unfinished governance and AI failures with a bounded retry
     # budget. Do not requeue terminal AI decisions or exhausted failures.

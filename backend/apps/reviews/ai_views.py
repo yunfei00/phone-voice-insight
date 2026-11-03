@@ -1,5 +1,6 @@
 """AI-assisted governance endpoints."""
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
@@ -11,7 +12,7 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import IsAdministrator
 from apps.products.models import Product
-from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, ReviewQuality
+from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, ReviewQuality, VoiceAutomationSetting
 from apps.reviews.services.governance_pipeline import apply_manual_override
 from apps.reviews.tasks import process_governance_ai_batch
 
@@ -25,6 +26,33 @@ class GovernancePagination(PageNumberPagination):
 class GovernanceAIViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAdministrator]
     queryset = GovernanceAIBatch.objects.all()
+
+    @action(detail=False, methods=["get", "patch"], url_path="automation-setting")
+    def automation_setting(self, request: Request) -> Response:
+        from apps.reviews.services.automatic_pipeline import automation_is_enabled
+
+        if request.method == "PATCH":
+
+            class Parameters(serializers.Serializer):
+                enabled = serializers.BooleanField()
+
+            params = Parameters(data=request.data)
+            params.is_valid(raise_exception=True)
+            requested = params.validated_data["enabled"]
+            if requested and not settings.AI_AUTOMATION_ENABLED:
+                return Response(
+                    {"detail": "服务器环境已禁用自动化。请设置 AI_AUTOMATION_ENABLED=true 后重启服务"},
+                    status=409,
+                )
+            VoiceAutomationSetting.objects.update_or_create(pk=1, defaults={"enabled": requested})
+        stored = VoiceAutomationSetting.objects.filter(pk=1).first()
+        return Response(
+            {
+                "enabled": automation_is_enabled(),
+                "configured_enabled": stored.enabled if stored else True,
+                "environment_enabled": bool(settings.AI_AUTOMATION_ENABLED),
+            }
+        )
 
     @action(detail=False, methods=["get"], url_path="corpus-summary")
     def corpus_summary(self, request: Request) -> Response:
@@ -292,19 +320,44 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
             ids = list(dict.fromkeys(old.failure_ids or (old.quality_ids if old.processed == 0 else [])))
             if not ids:
                 return Response({"detail": "没有可重试的数据"}, status=409)
-            new = GovernanceAIBatch.objects.create(
-                product=old.product, requested_by_id=user_id, quality_ids=ids, total=len(ids)
+            # Keep the original batch ID and successful decisions. Move failed/unprocessed
+            # records to the unprocessed tail so the worker resumes only those records.
+            retry_ids = set(ids)
+            old.quality_ids = [item for item in old.quality_ids if item not in retry_ids] + ids
+            old.total = len(old.quality_ids)
+            old.processed = old.total - len(ids)
+            old.failed = 0
+            old.failure_ids = []
+            old.status = "PENDING"
+            old.error_code = ""
+            old.finished_at = None
+            old.celery_task_id = ""
+            old.save(
+                update_fields=[
+                    "quality_ids",
+                    "total",
+                    "processed",
+                    "failed",
+                    "failure_ids",
+                    "status",
+                    "error_code",
+                    "finished_at",
+                    "celery_task_id",
+                    "updated_at",
+                ]
             )
         try:
-            job = process_governance_ai_batch.delay(new.id)
-            new.celery_task_id = job.id
-            new.save(update_fields=["celery_task_id", "updated_at"])
+            job = process_governance_ai_batch.delay(old.id)
+            old.celery_task_id = job.id
+            old.save(update_fields=["celery_task_id", "updated_at"])
         except Exception:
-            new.status = "FAILED"
-            new.error_code = "TASK_DISPATCH_FAILED"
-            new.save(update_fields=["status", "error_code", "updated_at"])
+            old.status = "FAILED"
+            old.failed = len(ids)
+            old.failure_ids = ids
+            old.error_code = "TASK_DISPATCH_FAILED"
+            old.save(update_fields=["status", "failed", "failure_ids", "error_code", "updated_at"])
             return Response({"detail": "重试任务投递失败"}, status=503)
-        return Response({"id": new.id, "total": new.total}, status=202)
+        return Response({"id": old.id, "total": old.total, "retry_count": len(ids)}, status=202)
 
     @action(detail=False, methods=["get"])
     def history(self, request: Request) -> Response:

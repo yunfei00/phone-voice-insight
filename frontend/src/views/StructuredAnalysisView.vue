@@ -59,6 +59,7 @@ const count = ref(0)
 const taxonomy = ref<TaxonomyDefinition>()
 const products = ref<Product[]>([])
 const selectedProduct = ref<number>()
+const productStorageKey = 'phone-voice-insight:structured-analysis:selected-product'
 const quality = ref<StructuredQuality>()
 const aggregates = ref<StructuredAggregates>()
 const batches = ref<StructuredBatch[]>([])
@@ -414,6 +415,9 @@ async function startSample() {
 }
 
 async function changeProduct() {
+  if (selectedProduct.value !== undefined) {
+    window.localStorage.setItem(productStorageKey, String(selectedProduct.value))
+  }
   page.value = 1
   batchPage.value = 1
   lastProgressActive = false
@@ -442,7 +446,11 @@ defineExpose({ changeProduct, selectedProduct })
 onMounted(async () => {
   try {
     products.value = (await getProducts({ page_size: 100 })).results
-    selectedProduct.value = products.value[0]?.id
+    const saved = Number(window.localStorage.getItem(productStorageKey))
+    selectedProduct.value =
+      Number.isInteger(saved) && saved > 0 && products.value.some((product) => product.id === saved)
+        ? saved
+        : products.value[0]?.id
   } catch {
     ElMessage.warning('产品列表加载失败')
   }
@@ -569,7 +577,8 @@ onUnmounted(() => {
         }}</strong></el-card
       >
       <el-card shadow="never"
-        ><span>待人工复核</span><strong>{{ quality?.review_required ?? 0 }}</strong></el-card
+        ><span>待人工处理</span><strong>{{ quality?.review_required ?? 0 }}</strong
+        ><router-link :to="{ name: 'manual-analysis' }">查看人工处理列表</router-link></el-card
       >
       <el-card shadow="never"
         ><span>明确问题/观点</span><strong>{{ aggregates?.opinion_count || 0 }}</strong></el-card
@@ -635,7 +644,18 @@ onUnmounted(() => {
       <el-card v-for="item in items" :key="item.id" class="analysis-card" shadow="hover">
         <template #header>
           <div class="card-title">
-            <strong>{{ item.original_title || `反馈 #${item.content}` }}</strong
+            <a
+              v-if="item.source_url"
+              class="original-post-link"
+              :href="item.source_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              :title="`打开原始帖子：${item.original_title || item.content}`"
+              >{{ item.original_title || `反馈 #${item.content}` }} ↗</a
+            >
+            <strong v-else :title="'未采集到原帖链接'">{{
+              item.original_title || `反馈 #${item.content}`
+            }}</strong>
             ><span> {{ item.product_name }} · {{ item.source_name }}</span>
           </div>
         </template>
@@ -751,6 +771,15 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.original-post-link {
+  color: #35b9f0;
+  font-weight: 700;
+  text-decoration: none;
+}
+.original-post-link:hover {
+  text-decoration: underline;
+}
+
 .page-stack {
   display: grid;
   gap: 18px;

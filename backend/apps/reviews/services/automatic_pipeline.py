@@ -13,7 +13,13 @@ from apps.accounts.models import UserAIConfiguration, UserRole
 from apps.analysis.models import AnalysisBatch, AnalysisRun
 from apps.analysis.tasks import run_structured_analysis_batch_task
 from apps.products.models import Product
-from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewQuality
+from apps.reviews.models import (
+    GovernanceAIBatch,
+    GovernanceAIReview,
+    GovernanceTask,
+    ReviewQuality,
+    VoiceAutomationSetting,
+)
 from apps.reviews.services.governance_selection import governance_selection
 from apps.reviews.tasks import process_governance_ai_batch, process_governance_batch
 from apps.sources.models import DataSource
@@ -118,19 +124,50 @@ def _ai_candidates(product_id: int, source_id: int | None) -> list[int]:
     return list(queryset.order_by("review_id").values_list("id", flat=True)[: settings.AI_AUTOMATION_BATCH_SIZE])
 
 
-def run_automatic_pipeline(product_id: int, source_id: int | None = None) -> AutomaticPipelineResult:
+def automation_is_enabled() -> bool:
     if not settings.AI_AUTOMATION_ENABLED:
+        return False
+    return VoiceAutomationSetting.objects.filter(pk=1).values_list("enabled", flat=True).first() is not False
+
+
+def run_automatic_pipeline(product_id: int, source_id: int | None = None) -> AutomaticPipelineResult:
+    if not automation_is_enabled():
         return AutomaticPipelineResult(status="DISABLED", product_id=product_id)
     configuration = _automation_configuration()
+    product = Product.objects.get(pk=product_id)
+    # Rule-based governance must continue even when AI is temporarily unavailable.
+    # The owner is needed only for task attribution; choose an active administrator.
     if configuration is None:
-        return AutomaticPipelineResult(status="AI_NOT_CONFIGURED", product_id=product_id)
+        from django.contrib.auth import get_user_model
+
+        owner_id = (
+            get_user_model()
+            .objects.filter(is_active=True, is_superuser=True)
+            .order_by("pk")
+            .values_list("pk", flat=True)
+            .first()
+        )
+        if owner_id is None:
+            return AutomaticPipelineResult(status="NO_AUTOMATION_OWNER", product_id=product_id)
+    else:
+        owner_id = configuration.user_id
+    governance_task = _govern_new_records(product, source_id, owner_id)
+    if configuration is None:
+        return AutomaticPipelineResult(
+            status="AI_NOT_CONFIGURED",
+            product_id=product_id,
+            governance_task_id=governance_task.id if governance_task else None,
+            governed=governance_task.processed if governance_task else 0,
+        )
     budget = int(settings.AI_AUTOMATION_DAILY_TOKEN_BUDGET)
     used_tokens = _tokens_used_today()
     if settings.AI_AUTOMATION_TOKEN_LIMIT_MODE == "LIMITED" and (budget <= 0 or used_tokens >= budget):
-        return AutomaticPipelineResult(status="DAILY_BUDGET_EXCEEDED", product_id=product_id)
-
-    product = Product.objects.get(pk=product_id)
-    governance_task = _govern_new_records(product, source_id, configuration.user_id)
+        return AutomaticPipelineResult(
+            status="DAILY_BUDGET_EXCEEDED",
+            product_id=product_id,
+            governance_task_id=governance_task.id if governance_task else None,
+            governed=governance_task.processed if governance_task else 0,
+        )
     quality_ids = _ai_candidates(product.id, source_id)
     if not quality_ids:
         return AutomaticPipelineResult(
