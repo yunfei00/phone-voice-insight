@@ -20,6 +20,8 @@ import {
   getGovernanceAIResults,
   getAICorpusSummary,
   retryGovernanceAIBatch,
+  getAutomationSetting,
+  updateAutomationSetting,
 } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
@@ -100,6 +102,9 @@ const emptySummary = (): DataQualitySummary => ({
 
 const auth = useAuthStore()
 const activeQualityTab = ref<'ai' | 'manual'>('ai')
+const automationEnabled = ref(false)
+const automationEnvironmentEnabled = ref(true)
+const automationLoading = ref(false)
 const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
 const productStorageKey = 'phone-voice-insight:data-quality:selected-product'
@@ -564,6 +569,7 @@ onMounted(async () => {
   }
   await loadData()
   if (auth.isAdmin) {
+    await loadAutomationSetting()
     await loadGovernanceTasks()
     await loadAIReviews()
     if (
@@ -577,6 +583,30 @@ onMounted(async () => {
       startTaskPolling()
   }
 })
+
+async function loadAutomationSetting(): Promise<void> {
+  try {
+    const setting = await getAutomationSetting()
+    automationEnabled.value = setting.enabled
+    automationEnvironmentEnabled.value = setting.environment_enabled
+  } catch {
+    ElMessage.warning('自动处理开关状态读取失败')
+  }
+}
+
+async function changeAutomationSetting(enabled: boolean): Promise<void> {
+  automationLoading.value = true
+  try {
+    const setting = await updateAutomationSetting(enabled)
+    automationEnabled.value = setting.enabled
+    ElMessage.success(enabled ? '自动处理已启用，后续由定时任务检查新数据' : '已关闭自动处理，正在执行的任务不会被强制终止')
+  } catch {
+    automationEnabled.value = !enabled
+    ElMessage.error('自动处理开关保存失败，请检查服务器配置')
+  } finally {
+    automationLoading.value = false
+  }
+}
 
 async function changeScope(): Promise<void> {
   fullAIStartNotice.value = ''
@@ -667,8 +697,26 @@ onUnmounted(() => {
           <h3>自动处理概览</h3>
           <p>规则治理和 AI 复核的最近任务状态，点击下方标签查看明细。</p>
         </div>
-        <el-button @click="loadGovernanceTasks(); loadAIReviews()">刷新任务状态</el-button>
+        <div class="filters">
+          <span>自动处理</span>
+          <el-switch
+            v-model="automationEnabled"
+            :loading="automationLoading"
+            :disabled="!automationEnvironmentEnabled || automationLoading"
+            active-text="开启"
+            inactive-text="关闭"
+            @change="changeAutomationSetting"
+          />
+          <el-button @click="loadAutomationSetting(); loadGovernanceTasks(); loadAIReviews()">刷新状态</el-button>
+        </div>
       </div>
+      <el-alert
+        v-if="!automationEnvironmentEnabled"
+        title="服务器环境禁用了自动处理（AI_AUTOMATION_ENABLED=false），请修改服务器配置后重启"
+        type="warning"
+        :closable="false"
+        show-icon
+      />
       <div class="pipeline-steps">
         <div class="pipeline-step">
           <span>01 · 规则治理</span>
