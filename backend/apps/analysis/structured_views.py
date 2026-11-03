@@ -696,9 +696,11 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
                 "successful_runs": successful,
                 "success_rate": successful / total if total else None,
                 "schema_valid_rate": schema_valid / successful if successful else None,
-                "review_required": analyses.filter(review_required=True)
-                .exclude(content__manual_structured_disposition__status__in=("APPROVED", "EXCLUDED"))
-                .count(),
+                "review_required": StructuredManualDisposition.objects.filter(
+                    status__in=("IN_REVIEW", "SUBMITTED"),
+                    **({"content__product_id": int(product_id)} if product_id else {}),
+                    **({"content__source_id": int(source_id)} if source_id else {}),
+                ).count(),
                 "human_evaluation_status": "NOT_EVALUATED",
                 "accuracy_metrics": None,
                 "error_distribution": error_distribution,
