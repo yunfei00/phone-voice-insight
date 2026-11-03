@@ -2,6 +2,7 @@
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import CollectionTasksView from './CollectionTasksView.vue'
 
 import {
   cleanupSourceTarget,
@@ -370,6 +371,12 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
         </el-table-column>
       </el-table>
     </div>
+
+    <section v-if="auth.isAdmin" class="panel" style="margin-top: 18px">
+      <h2>采集任务管理</h2>
+      <p class="page-description">各产品默认折叠，运行中或异常时自动展开；点击产品名称查看采集计划、任务进度及历史。</p>
+      <CollectionTasksView embedded />
+    </section>
 
     <el-dialog
       v-model="productDialog"
