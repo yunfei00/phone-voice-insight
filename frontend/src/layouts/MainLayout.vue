@@ -76,7 +76,7 @@ const navigationItems = computed(() => [
               '/data-quality',
               '/structured-analysis',
             ].includes(item.path)),
-    )
+    ),
   ...(auth.isAdmin ? [{ path: '/users', label: '用户管理', icon: UserFilled }] : []),
 ])
 const activePath = computed(
