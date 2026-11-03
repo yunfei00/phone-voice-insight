@@ -13,7 +13,13 @@ from apps.accounts.models import UserAIConfiguration, UserRole
 from apps.analysis.models import AnalysisBatch, AnalysisRun
 from apps.analysis.tasks import run_structured_analysis_batch_task
 from apps.products.models import Product
-from apps.reviews.models import GovernanceAIBatch, GovernanceAIReview, GovernanceTask, ReviewQuality, VoiceAutomationSetting
+from apps.reviews.models import (
+    GovernanceAIBatch,
+    GovernanceAIReview,
+    GovernanceTask,
+    ReviewQuality,
+    VoiceAutomationSetting,
+)
 from apps.reviews.services.governance_selection import governance_selection
 from apps.reviews.tasks import process_governance_ai_batch, process_governance_batch
 from apps.sources.models import DataSource
@@ -179,7 +185,9 @@ def run_automatic_pipeline(product_id: int, source_id: int | None = None) -> Aut
             status__in=(GovernanceAIBatch.Status.PENDING, GovernanceAIBatch.Status.RUNNING),
         ).first()
         if active_batch is not None:
-            return AutomaticPipelineResult(status="AI_BATCH_ACTIVE", product_id=product.id, ai_batch_id=active_batch.id)
+            return AutomaticPipelineResult(
+                status="AI_BATCH_ACTIVE", product_id=product.id, ai_batch_id=active_batch.id
+            )
         ai_batch = GovernanceAIBatch.objects.create(
             product=product,
             source_id=source_id,
