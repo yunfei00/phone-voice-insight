@@ -131,10 +131,6 @@ async function load(showLoading = true): Promise<void> {
     brands.value = brandResult.results
     sources.value = sourceResult.results
     states.value = stateResult.results
-    if (progressState.value) {
-      progressState.value =
-        states.value.find((state) => state.id === progressState.value?.id) ?? null
-    }
   } finally {
     loading.value = false
   }
