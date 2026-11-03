@@ -698,17 +698,26 @@ onUnmounted(() => {
           <h3>自动处理概览</h3>
           <p>规则治理和 AI 复核的最近任务状态，点击下方标签查看明细。</p>
         </div>
-        <div class="filters">
-          <span>自动处理</span>
-          <el-switch
-            v-model="automationEnabled"
-            :loading="automationLoading"
-            :disabled="!automationEnvironmentEnabled || automationLoading"
-            active-text="开启"
-            inactive-text="关闭"
-            @change="changeAutomationSetting"
-          />
-          <el-button @click="loadAutomationSetting(); loadGovernanceTasks(); loadAIReviews()">刷新状态</el-button>
+        <div class="automation-controls">
+          <div class="automation-status">
+            <span class="automation-label">自动处理</span>
+            <el-tag :type="automationEnabled ? 'success' : 'info'" effect="dark" size="large">
+              {{ automationLoading ? '保存中…' : automationEnabled ? '已开启' : '已关闭' }}
+            </el-tag>
+          </div>
+          <div class="automation-actions">
+            <span class="automation-option" :class="{ 'is-selected': !automationEnabled }">关闭</span>
+            <el-switch
+              v-model="automationEnabled"
+              :loading="automationLoading"
+              :disabled="!automationEnvironmentEnabled || automationLoading"
+              size="large"
+              aria-label="自动处理开关"
+              @change="changeAutomationSetting"
+            />
+            <span class="automation-option" :class="{ 'is-selected': automationEnabled }">开启</span>
+            <el-button @click="loadAutomationSetting(); loadGovernanceTasks(); loadAIReviews()">刷新状态</el-button>
+          </div>
         </div>
       </div>
       <el-alert
@@ -1285,7 +1294,18 @@ onUnmounted(() => {
 <style scoped>
 .quality-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
 .quality-tabs .el-button + .el-button { margin-left: 0; }
-.quality-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.quality-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+.quality-section-heading > div:first-child { flex: 1 1 320px; }
+.automation-controls { display: flex; align-items: center; justify-content: flex-end; gap: 20px; flex-wrap: wrap; }
+.automation-status, .automation-actions { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.automation-label { color: #edf5ff; font-weight: 600; white-space: nowrap; }
+.automation-option { color: #96adc6; font-size: 13px; white-space: nowrap; }
+.automation-option.is-selected { color: #edf5ff; font-weight: 700; }
+.automation-actions .el-button { margin-left: 8px; }
+@media (max-width: 800px) {
+  .automation-controls { width: 100%; justify-content: space-between; }
+  .automation-actions { flex-wrap: wrap; }
+}
 .pipeline-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
 .pipeline-step { background: #0a192a; border: 1px solid #29435c; border-radius: 10px; padding: 16px; }
 .pipeline-step span, .pipeline-step small { display: block; color: #96adc6; }
