@@ -40,7 +40,6 @@ const productDialog = ref(false)
 const brandDialog = ref(false)
 const targetDialog = ref(false)
 const targetValidationError = ref('')
-const progressDialog = ref(false)
 const cleanupDialog = ref(false)
 const targetId = ref<number | null>(null)
 const editingId = ref<number | null>(null)
@@ -76,7 +75,6 @@ async function saveInlineName(product: Product): Promise<void> {
 }
 
 const operatingTargetId = ref<number | null>(null)
-const progressState = ref<CollectionTargetState | null>(null)
 const cleanupPreview = ref<SourceTargetCleanupPreview | null>(null)
 const cleanupConfirmation = ref('')
 const form = reactive({ brand_id: undefined as number | undefined, name: '', is_active: true })
@@ -264,11 +262,6 @@ async function smartStart(product: Product): Promise<void> {
   }
 }
 
-function showProgress(product: Product): void {
-  progressState.value = stateFor(product) ?? null
-  progressDialog.value = true
-}
-
 async function showCleanup(product: Product): Promise<void> {
   const target = targetFor(product)
   if (!target) return
@@ -395,7 +388,6 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
               @click="smartStart(row)"
               >智能采集</el-button
             >
-            <el-button v-if="stateFor(row)" link @click="showProgress(row)">查看进度</el-button>
             <el-button link @click="openRawData(row)">查看原始数据</el-button>
             <el-button
               v-if="auth.isAdmin && targetFor(row)"
@@ -487,37 +479,6 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
           >保存并验证</el-button
         ></template
       >
-    </el-dialog>
-
-    <el-dialog v-model="progressDialog" title="采集进度" width="min(620px, 94vw)">
-      <el-descriptions v-if="progressState" :column="2" border>
-        <el-descriptions-item label="当前状态">{{ progressState.status }}</el-descriptions-item>
-        <el-descriptions-item label="任务阶段">{{
-          progressState.progress_stage || '空闲'
-        }}</el-descriptions-item>
-        <el-descriptions-item label="最近任务"
-          >{{ progressState.last_task_type || '—' }} /
-          {{ progressState.last_task_status || '—' }}</el-descriptions-item
-        >
-        <el-descriptions-item label="失败数量">{{
-          progressState.last_failure_count
-        }}</el-descriptions-item>
-        <el-descriptions-item label="新增帖子">{{
-          progressState.last_new_threads
-        }}</el-descriptions-item>
-        <el-descriptions-item label="新增回复">{{
-          progressState.last_new_replies
-        }}</el-descriptions-item>
-        <el-descriptions-item label="最近错误" :span="2">{{
-          progressState.last_error || '无'
-        }}</el-descriptions-item>
-      </el-descriptions>
-      <el-alert
-        title="仅展示后台可确认的阶段和数量，不提供推测性百分比。"
-        type="info"
-        :closable="false"
-        style="margin-top: 16px"
-      />
     </el-dialog>
 
     <el-dialog v-model="cleanupDialog" title="清理该入口数据" width="min(660px, 94vw)">
