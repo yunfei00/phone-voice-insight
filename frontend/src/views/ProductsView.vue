@@ -328,7 +328,7 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
             </div>
             <strong v-else-if="auth.canWrite" class="editable-product-name" role="button" tabindex="0" @click="beginInlineEdit(row)" @keydown.enter.prevent="beginInlineEdit(row)" @keydown.space.prevent="beginInlineEdit(row)">{{ row.name }}</strong>
             <strong v-else>{{ row.name }}</strong>
-            ></template
+            </template
           ></el-table-column
         >
         <el-table-column label="采集入口" min-width="210">
