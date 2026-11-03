@@ -185,9 +185,7 @@ def run_automatic_pipeline(product_id: int, source_id: int | None = None) -> Aut
             status__in=(GovernanceAIBatch.Status.PENDING, GovernanceAIBatch.Status.RUNNING),
         ).first()
         if active_batch is not None:
-            return AutomaticPipelineResult(
-                status="AI_BATCH_ACTIVE", product_id=product.id, ai_batch_id=active_batch.id
-            )
+            return AutomaticPipelineResult(status="AI_BATCH_ACTIVE", product_id=product.id, ai_batch_id=active_batch.id)
         ai_batch = GovernanceAIBatch.objects.create(
             product=product,
             source_id=source_id,

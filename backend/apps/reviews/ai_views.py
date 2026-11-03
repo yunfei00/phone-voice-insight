@@ -32,6 +32,7 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
         from apps.reviews.services.automatic_pipeline import automation_is_enabled
 
         if request.method == "PATCH":
+
             class Parameters(serializers.Serializer):
                 enabled = serializers.BooleanField()
 
@@ -333,8 +334,16 @@ class GovernanceAIViewSet(viewsets.GenericViewSet):
             old.celery_task_id = ""
             old.save(
                 update_fields=[
-                    "quality_ids", "total", "processed", "failed", "failure_ids",
-                    "status", "error_code", "finished_at", "celery_task_id", "updated_at",
+                    "quality_ids",
+                    "total",
+                    "processed",
+                    "failed",
+                    "failure_ids",
+                    "status",
+                    "error_code",
+                    "finished_at",
+                    "celery_task_id",
+                    "updated_at",
                 ]
             )
         try:
