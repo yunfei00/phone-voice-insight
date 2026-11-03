@@ -343,7 +343,6 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
                 :title="`打开采集入口：${targetFor(row)?.name}`"
               >{{ targetFor(row)?.name }}</el-link>
               <span v-else>{{ targetFor(row)?.name }}</span>
-              >
             </template>
             <span v-else class="muted">未配置</span>
           </template>
