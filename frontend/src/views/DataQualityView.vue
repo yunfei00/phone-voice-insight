@@ -99,6 +99,7 @@ const emptySummary = (): DataQualitySummary => ({
 })
 
 const auth = useAuthStore()
+const activeQualityTab = ref<'ai' | 'manual'>('ai')
 const products = ref<Product[]>([])
 const sources = ref<DataSource[]>([])
 const selectedProduct = ref<number | undefined>(undefined)
@@ -628,8 +629,6 @@ onUnmounted(() => {
             :value="source.id"
           />
         </el-select>
-        <span>处理数量</span>
-        <el-input-number v-model="governanceLimit" :min="1" :max="100" />
       </div>
     </section>
 
@@ -648,6 +647,49 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <section v-if="auth.isAdmin" class="panel quality-pipeline">
+      <div class="quality-section-heading">
+        <div>
+          <h3>自动处理概览</h3>
+          <p>规则治理和 AI 复核的最近任务状态，点击下方标签查看明细。</p>
+        </div>
+        <el-button @click="loadGovernanceTasks(); loadAIReviews()">刷新任务状态</el-button>
+      </div>
+      <div class="pipeline-steps">
+        <div class="pipeline-step">
+          <span>01 · 规则治理</span>
+          <strong>{{ governanceTasks[0] ? aiBatchStatusLabel(governanceTasks[0].status) : '暂无任务' }}</strong>
+          <small>最近开始：{{ displayTaskTime(governanceTasks[0]?.started_at) }}</small>
+        </div>
+        <div class="pipeline-step">
+          <span>02 · AI 复核</span>
+          <strong>{{ aiBatches[0] ? aiBatchStatusLabel(aiBatches[0].status) : '暂无任务' }}</strong>
+          <small>最近任务：{{ aiBatches[0] ? '#' + aiBatches[0].id : '—' }}</small>
+        </div>
+        <div class="pipeline-step">
+          <span>03 · 结构化分析</span>
+          <strong>前往 AI 结构化分析查看</strong>
+          <small>结构化任务在专属页面管理</small>
+        </div>
+      </div>
+    </section>
+
+    <div v-if="auth.isAdmin" class="quality-tabs" role="tablist" aria-label="数据质量处理方式">
+      <el-button
+        :type="activeQualityTab === 'ai' ? 'primary' : 'default'"
+        :aria-selected="activeQualityTab === 'ai'"
+        role="tab"
+        @click="activeQualityTab = 'ai'"
+      >AI 自动治理</el-button>
+      <el-button
+        :type="activeQualityTab === 'manual' ? 'primary' : 'default'"
+        :aria-selected="activeQualityTab === 'manual'"
+        role="tab"
+        @click="activeQualityTab = 'manual'"
+      >手动数据治理与结果明细</el-button>
+    </div>
+
+    <div v-show="!auth.isAdmin || activeQualityTab === 'ai'">
     <section v-if="auth.isAdmin" class="panel governance-actions">
       <h3>AI 自动判断与自动决策</h3>
       <div v-if="corpusSummary" class="panel" style="margin-bottom: 16px">
@@ -853,8 +895,14 @@ onUnmounted(() => {
       />
     </section>
 
+    </div>
+    <div v-show="!auth.isAdmin || activeQualityTab === 'manual'">
     <section v-if="auth.isAdmin" class="panel governance-actions">
       <h3>手动数据治理</h3>
+      <div class="filters">
+        <span>本批最大处理条数</span>
+        <el-input-number v-model="governanceLimit" :min="1" :max="100" />
+      </div>
       <p>
         填写的是本批最大处理条数，不是必须处理的数量。系统自动跳过已治理或正在处理的记录；点击「开始治理」后在后台运行并自动刷新进度。
       </p>
@@ -1091,9 +1139,19 @@ onUnmounted(() => {
       </el-descriptions>
     </el-drawer>
   </div>
+  </div>
 </template>
 
 <style scoped>
+.quality-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.quality-tabs .el-button + .el-button { margin-left: 0; }
+.quality-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.pipeline-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.pipeline-step { background: #0a192a; border: 1px solid #29435c; border-radius: 10px; padding: 16px; }
+.pipeline-step span, .pipeline-step small { display: block; color: #96adc6; }
+.pipeline-step strong { display: block; color: #edf5ff; margin: 8px 0; }
+@media (max-width: 800px) { .pipeline-steps { grid-template-columns: 1fr; } }
+
 .notice,
 .governance-actions,
 .breakdown,
