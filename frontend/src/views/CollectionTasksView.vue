@@ -1,4 +1,5 @@
 <script setup lang="ts">
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
@@ -55,6 +56,23 @@ const scheduleDialogVisible = ref(false)
 const scheduleSubmitting = ref(false)
 const scheduleTarget = ref<CollectionTargetState | null>(null)
 const historyVisible = ref(false)
+const expandedProducts = ref<number[]>([])
+const manuallyCollapsed = ref<number[]>([])
+function isExpanded(target: CollectionTargetState): boolean {
+  if (target.active_task) return !manuallyCollapsed.value.includes(target.product_id)
+  if (target.status === 'DEGRADED' && !manuallyCollapsed.value.includes(target.product_id)) return true
+  return expandedProducts.value.includes(target.product_id)
+}
+function toggleExpanded(target: CollectionTargetState): void {
+  const id = target.product_id
+  if (isExpanded(target)) {
+    expandedProducts.value = expandedProducts.value.filter((value) => value !== id)
+    if (!manuallyCollapsed.value.includes(id)) manuallyCollapsed.value.push(id)
+  } else {
+    manuallyCollapsed.value = manuallyCollapsed.value.filter((value) => value !== id)
+    if (!expandedProducts.value.includes(id)) expandedProducts.value.push(id)
+  }
+}
 const historyTarget = ref<CollectionTargetState | null>(null)
 const history = ref<CollectionTask[]>([])
 const activeTasks = ref<Record<number, CollectionTask>>({})
@@ -394,7 +412,7 @@ onUnmounted(stopPolling)
 
 <template>
   <div>
-    <div class="page-header">
+    <div v-if="!embedded" class="page-header">
       <div>
         <h1 class="page-title">采集控制</h1>
         <p class="page-description">可先按指定页数测试采集；全量基线验证通过后才能启用正式增量。</p>
@@ -409,6 +427,7 @@ onUnmounted(stopPolling)
     </div>
 
     <el-alert
+      v-if="!embedded"
       title="历史任务和反馈会完整保留；全量校验只会刷新、补漏和去重，不会删除已有数据。"
       type="info"
       show-icon
@@ -424,9 +443,9 @@ onUnmounted(stopPolling)
         class="target-card"
         shadow="hover"
       >
-        <div class="card-heading">
+        <div class="card-heading" role="button" tabindex="0" @click="toggleExpanded(target)" @keydown.enter.prevent="toggleExpanded(target)" @keydown.space.prevent="toggleExpanded(target)">
           <div>
-            <h2>{{ target.product_name }}</h2>
+            <h2>{{ isExpanded(target) ? "▾" : "▸" }} {{ target.product_name }}</h2>
             <p>{{ target.source_name }} · {{ target.target_name }}</p>
           </div>
           <el-tag
@@ -438,6 +457,7 @@ onUnmounted(stopPolling)
           </el-tag>
         </div>
 
+        <template v-if="isExpanded(target)">
         <div v-if="target.active_task" class="live-progress">
           <strong>实时采集状态</strong>
           <p v-if="activeTask(target)">
@@ -536,6 +556,7 @@ onUnmounted(stopPolling)
           <el-button :disabled="!auth.canWrite" @click="openSchedule(target)">定时设置</el-button>
           <el-button @click="openHistory(target)">运行历史</el-button>
         </div>
+        </template>
       </el-card>
       <el-empty v-if="!loading && !targets.length" description="暂无可用采集入口" />
     </div>
