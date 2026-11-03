@@ -445,7 +445,7 @@ onUnmounted(stopPolling)
       >
         <div class="card-heading" role="button" tabindex="0" @click="toggleExpanded(target)" @keydown.enter.prevent="toggleExpanded(target)" @keydown.space.prevent="toggleExpanded(target)">
           <div>
-            <h2>{{ isExpanded(target) ? "▾" : "▸" }} {{ target.product_name }}</h2>
+            <h2>{{ target.product_name }}</h2>
             <p>{{ target.source_name }} · {{ target.target_name }}</p>
           </div>
           <el-tag
