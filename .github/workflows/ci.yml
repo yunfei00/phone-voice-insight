@@ -26,6 +26,7 @@ jobs:
         run: uv sync --frozen
       - name: Ruff
         run: |
+          uv run ruff format --diff apps/reviews/ai_views.py apps/reviews/services/automatic_pipeline.py
           uv run ruff format --check . ../collectors ../ai ../tools
           uv run ruff check . ../collectors ../ai ../tools
       - name: Type check
