@@ -333,9 +333,15 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
         <el-table-column label="采集入口" min-width="210">
           <template #default="{ row }">
             <template v-if="targetFor(row)">
-              <div>{{ targetFor(row)?.name }}</div>
-              <el-link :href="targetFor(row)?.target_url" target="_blank" type="primary"
-                >打开原始网页</el-link
+              <el-link
+                v-if="targetFor(row)?.target_url"
+                :href="targetFor(row)?.target_url"
+                target="_blank"
+                type="primary"
+                :underline="false"
+                :title="`打开采集入口：${targetFor(row)?.name}`"
+              >{{ targetFor(row)?.name }}</el-link>
+              <span v-else>{{ targetFor(row)?.name }}</span>
               >
             </template>
             <span v-else class="muted">未配置</span>
