@@ -577,7 +577,7 @@ onUnmounted(() => {
         }}</strong></el-card
       >
       <el-card shadow="never"
-        ><span>待人工处理</span><strong>{{ quality?.review_required ?? 0 }}</strong><router-link to="/manual-analysis">查看人工处理列表</router-link></el-card
+        ><span>待人工处理</span><strong>{{ quality?.review_required ?? 0 }}</strong><router-link  :to="{ name: 'manual-analysis' }">查看人工处理列表</router-link></el-card
       >
       <el-card shadow="never"
         ><span>明确问题/观点</span><strong>{{ aggregates?.opinion_count || 0 }}</strong></el-card
