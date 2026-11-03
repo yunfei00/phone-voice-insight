@@ -77,11 +77,6 @@ const navigationItems = computed(() => [
               '/structured-analysis',
             ].includes(item.path)),
     )
-    .flatMap((item) =>
-      item.path === '/products' && auth.isAdmin
-        ? [item, { path: '/collection-tasks', label: '采集任务', icon: List }]
-        : [item],
-    ),
   ...(auth.isAdmin ? [{ path: '/users', label: '用户管理', icon: UserFilled }] : []),
 ])
 const activePath = computed(
