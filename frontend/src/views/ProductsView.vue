@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CollectionTasksView from './CollectionTasksView.vue'
 
@@ -46,25 +46,29 @@ const editingId = ref<number | null>(null)
 const inlineEditingId = ref<number | null>(null)
 const inlineName = ref('')
 const inlineSaving = ref(false)
+const inlineInput = ref<{ focus: () => void } | null>(null)
+let inlineCancelPending = false
 function beginInlineEdit(product: Product): void {
   if (!auth.canWrite || inlineSaving.value) return
+  inlineCancelPending = false
   inlineEditingId.value = product.id
   inlineName.value = product.name
+  void nextTick(() => inlineInput.value?.focus())
 }
 function cancelInlineEdit(): void {
+  inlineCancelPending = true
   inlineEditingId.value = null
   inlineName.value = ''
 }
 async function saveInlineName(product: Product): Promise<void> {
-  if (inlineEditingId.value !== product.id || inlineSaving.value) return
+  if (inlineCancelPending || inlineEditingId.value !== product.id || inlineSaving.value) return
   const name = inlineName.value.trim()
-  if (!name) { ElMessage.warning('手机名称不能为空'); return }
+  if (!name) { cancelInlineEdit(); return }
   if (name === product.name) { cancelInlineEdit(); return }
   inlineSaving.value = true
   try {
     await updateProduct(product.id, { name })
     cancelInlineEdit()
-    ElMessage.success('手机名称已更新')
     await load()
   } catch { ElMessage.error('修改失败，请重试') }
   finally { inlineSaving.value = false }
@@ -321,11 +325,9 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
         <el-table-column label="手机产品" min-width="150"
           ><template #default="{ row }"
             ><div v-if="inlineEditingId === row.id" class="inline-name-editor">
-              <el-input v-model="inlineName" size="small" maxlength="100" :disabled="inlineSaving" aria-label="修改手机名称" @keyup.enter="saveInlineName(row)" @keyup.esc="cancelInlineEdit" />
-              <el-button size="small" type="primary" :loading="inlineSaving" @click="saveInlineName(row)">保存</el-button>
-              <el-button size="small" :disabled="inlineSaving" @click="cancelInlineEdit">取消</el-button>
+              <el-input ref="inlineInput" v-model="inlineName" size="small" maxlength="100" :disabled="inlineSaving" aria-label="修改手机名称" @keyup.enter="($event.target as HTMLInputElement).blur()" @keyup.esc.stop.prevent="cancelInlineEdit" @blur="saveInlineName(row)" />
             </div>
-            <strong v-else-if="auth.canWrite" class="editable-product-name" role="button" tabindex="0" title="点击修改手机名称" @click="beginInlineEdit(row)" @keydown.enter.prevent="beginInlineEdit(row)" @keydown.space.prevent="beginInlineEdit(row)">{{ row.name }}</strong>
+            <strong v-else-if="auth.canWrite" class="editable-product-name" role="button" tabindex="0" @click="beginInlineEdit(row)" @keydown.enter.prevent="beginInlineEdit(row)" @keydown.space.prevent="beginInlineEdit(row)">{{ row.name }}</strong>
             <strong v-else>{{ row.name }}</strong>
             ></template
           ></el-table-column
@@ -566,8 +568,8 @@ onUnmounted(() => pollTimer && clearInterval(pollTimer))
 </template>
 
 <style scoped>
-.editable-product-name { cursor: pointer; border-bottom: 1px dashed transparent; }
-.editable-product-name:hover, .editable-product-name:focus-visible { color: #35b9f0; border-bottom-color: currentColor; outline-offset: 3px; }
+.editable-product-name { cursor: text; }
+.editable-product-name:focus-visible { outline-offset: 3px; }
 .inline-name-editor { display: flex; align-items: center; gap: 6px; min-width: 240px; }
 .inline-name-editor :deep(.el-input) { min-width: 110px; }
 
