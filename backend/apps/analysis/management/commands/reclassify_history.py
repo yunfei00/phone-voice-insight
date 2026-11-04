@@ -24,7 +24,7 @@ class Command(BaseCommand):
         parser.add_argument("--chunk-size", type=int, default=100)
         parser.add_argument("--execute", action="store_true")
         parser.add_argument("--dry-run", action="store_true")
-        parser.add_argument("--resume", action="store_true")
+        parser.add_argument("--restart", action="store_true", help="Explicitly reprocess even completed reclassification records")
 
     def handle(self, *args, **options):
         if options["execute"] == options["dry_run"]:
@@ -43,7 +43,7 @@ class Command(BaseCommand):
         corpus = final_corpus_reviews().order_by("id")
         if options["product_id"]:
             corpus = corpus.filter(product_id=options["product_id"])
-        if options["resume"]:
+        if not options["restart"]:
             current = AnalysisRun.objects.filter(
                 is_current=True, batch__corpus_version="structured-reclass-v2",
                 status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
