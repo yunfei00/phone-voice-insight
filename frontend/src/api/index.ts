@@ -1041,10 +1041,10 @@ export interface CommunicationDashboardData {
     sentiment: string
   }>
 }
-export const getCommunicationDashboard = async (productId?: number): Promise<CommunicationDashboardData> =>
+export const getCommunicationDashboard = async (productId?: number, topic?: string): Promise<CommunicationDashboardData> =>
   (
     await apiClient.get<CommunicationDashboardData>('/structured-analyses/communication/', {
-      params: productId ? { product: productId } : {},
+      params: { ...(productId ? { product: productId } : {}), ...(topic ? { topic } : {}) },
       timeout: 60_000,
     })
   ).data
