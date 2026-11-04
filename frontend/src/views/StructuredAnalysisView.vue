@@ -31,7 +31,26 @@ const router = useRouter()
 const reclassStatus = ref<HistoricalReclassificationStatus>()
 const reclassStarting = ref(false)
 const reclassError = ref('')
-const reclassChunkSize = ref(100)
+const reclassChunkStorageKey = 'phone-voice.structured.reclassification.chunk-size'
+function savedReclassChunkSize(): number {
+  try {
+    const value = Number(window.localStorage.getItem(reclassChunkStorageKey))
+    if (Number.isInteger(value) && value >= 1 && value <= 500) return value
+  } catch {
+    // Local storage is optional.
+  }
+  return 100
+}
+const reclassChunkSize = ref(savedReclassChunkSize())
+function updateReclassChunkSize(value: number | undefined): void {
+  if (!Number.isInteger(value) || value === undefined || value < 1 || value > 500) return
+  reclassChunkSize.value = value
+  try {
+    window.localStorage.setItem(reclassChunkStorageKey, String(value))
+  } catch {
+    // Continue with the in-memory value if storage is unavailable.
+  }
+}
 async function refreshReclassification() {
   try {
     reclassStatus.value = await getHistoricalReclassificationStatus()
@@ -542,7 +561,7 @@ onUnmounted(() => {
       </p>
       <div class="filters">
         <span>每批处理数量</span>
-        <el-input-number v-model="reclassChunkSize" :min="1" :max="500" :step="10" />
+        <el-input-number  :model-value="reclassChunkSize" :min="1" :max="500" :step="10" @change="updateReclassChunkSize" />
         <el-button
           type="primary"
           :loading="reclassStarting"
