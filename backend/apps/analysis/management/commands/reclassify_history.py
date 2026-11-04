@@ -18,7 +18,7 @@ class Command(BaseCommand):
         parser.add_argument("--execute", action="store_true")
         parser.add_argument("--dry-run", action="store_true")
 
-    def handle(self, *args, **options):
+    def handle(self, *_args, **options):
         if options["execute"] == options["dry_run"]:
             raise CommandError("Specify exactly one of --execute or --dry-run")
         chunk_size = options["chunk_size"]
