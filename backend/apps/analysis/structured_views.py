@@ -707,8 +707,10 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
             limit = min(max(int(raw_limit), 1), 100)
         except ValueError:
             return Response({"error_code": "INVALID_LIMIT"}, status=400)
+        selected_topic = request.query_params.get("topic", "").strip()
+        evidence_query = negatives.filter(topic_code=selected_topic) if selected_topic else negatives
         evidence = list(
-            negatives.select_related("analysis__content", "analysis__content__product")
+            evidence_query.select_related("analysis__content", "analysis__content__product")
             .order_by("-analysis__content__published_at", "-id")
             .values(
                 "analysis__content_id",
