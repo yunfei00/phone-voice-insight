@@ -610,7 +610,7 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
     def get_queryset(self):  # type: ignore[no-untyped-def]
         queryset = StructuredAnalysis.objects.select_related(
             "run", "content", "content__product", "content__source"
-        ).prefetch_related("aspects", "review_history__reviewer")
+        ).prefetch_related("aspects", "review_history__reviewer").filter(run__is_current=True)
         params = self.request.query_params
         if value := params.get("product"):
             queryset = queryset.filter(content__product_id=int(value))
