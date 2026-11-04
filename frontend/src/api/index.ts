@@ -1023,3 +1023,23 @@ export const savePagePreference = async (
 ): Promise<void> => {
   await apiClient.put(`/page-preferences/${page}/`, data)
 }
+
+export interface CommunicationDashboardData {
+  disclaimer: string
+  content_count: number
+  negative_content_count: number
+  categories: Array<{ topic_code: string; count: number }>
+  trend: Array<{ day: string; count: number }>
+  products: Array<{ analysis__content__product__name: string; count: number }>
+  evidence: Array<{
+    analysis__content_id: number
+    analysis__content__product__name: string
+    analysis__content__source_url: string
+    topic_code: string
+    severity: string
+    evidence_text: string
+    sentiment: string
+  }>
+}
+export const getCommunicationDashboard = async (): Promise<CommunicationDashboardData> =>
+  (await apiClient.get<CommunicationDashboardData>('/structured-analyses/communication/', { timeout: 60_000 })).data
