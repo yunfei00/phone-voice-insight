@@ -855,6 +855,14 @@ export const testAssistantModel = async (
     )
   ).data
 
+export const discoverAssistantModels = async (payload: {
+  provider: string
+  base_url: string
+  api_key?: string
+}): Promise<string[]> =>
+  (await apiClient.post<{ models: string[] }>('/assistant/models/discover-models/', payload)).data
+    .models
+
 export const getAssistantAvailableModels = async (id: number): Promise<string[]> =>
   (await apiClient.get<{ models: string[] }>(`/assistant/models/${id}/available-models/`)).data
     .models
