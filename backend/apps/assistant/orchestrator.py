@@ -39,7 +39,7 @@ def _time_context(question: str) -> tuple[str, dict[str, str]]:
     """Resolve relative dates on the server, never using the model's guessed year."""
     today = timezone.localdate()
     context = f"当前系统日期（服务器本地时区）：{today.isoformat()}。不得使用模型训练日期推断当前年份。"
-    match = re.search(r"(?:最近|近)\\s*(\\d{1,3})\\s*天", question)
+    match = re.search(r"(?:最近|近)\s*(\d{1,3})\s*天", question)
     if match:
         days = int(match.group(1))
         if 1 <= days <= 365:
@@ -136,7 +136,7 @@ class AssistantOrchestrator:
             yield {"type": "status", "stage": "generating", "label": "正在生成结论"}
 
             summary_messages = [
-                {"role": "system", "content": SYSTEM_PROMPT + "\\n" + date_context},
+                {"role": "system", "content": SYSTEM_PROMPT + "\n" + date_context},
                 *history,
                 {"role": "user", "content": question},
                 {"role": "tool", "name": tool_name, "content": json.dumps(result, ensure_ascii=False)},
