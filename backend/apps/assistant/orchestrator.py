@@ -98,7 +98,7 @@ class AssistantOrchestrator:
                 tool_name, tool_arguments = self._fallback_route(question, filters)
                 route_mode = "controlled_fallback"
             # Server-resolved dates take precedence over dates hallucinated by the model.
-            if tool_name == "query_posts":
+            if date_filters and "start_date" in TOOL_MODELS[tool_name].model_fields:
                 tool_arguments.update(date_filters)
             yield {
                 "type": "status",
