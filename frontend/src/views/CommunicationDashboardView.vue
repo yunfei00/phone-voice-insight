@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { EChartsOption } from 'echarts'
 import { getCommunicationDashboard, getProducts } from '@/api'
 import TechChart from '@/components/TechChart.vue'
@@ -39,12 +39,10 @@ function onChartClick(params: unknown) {
 const storageKey = 'phone-voice.communication.product'
 const productId = ref<number | undefined>()
 const products = ref<Array<{ id: number; name: string }>>([])
-const evidencePanel = ref<HTMLElement | null>(null)
 let requestVersion = 0
 function selectCategory(code: string) {
   selected.value = code
   void loadEvidence()
-  void nextTick(() => evidencePanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
 }
 async function changeProduct(value: number | undefined) {
   productId.value = value || undefined
@@ -200,8 +198,9 @@ onMounted(async () => {
         >
       </div>
     </section>
-    <section ref="evidencePanel" v-loading="evidenceLoading" class="communication-panel">
+    <section class="communication-panel">
       <h2>近期通信问题证据{{ selected ? ' · ' + label(selected) : '' }}</h2>
+      <p v-if="evidenceLoading" class="communication-evidence-status">正在更新当前分类的反馈证据…</p>
       <el-alert v-if="evidenceError" type="error" :title="evidenceError" :closable="false" />
       <el-empty v-else-if="!evidenceLoading && !evidence.length" description="当前范围暂无通信问题证据" />
       <div v-for="(item, index) in evidence" :key="index" class="communication-evidence">
@@ -226,7 +225,7 @@ onMounted(async () => {
 .communication-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .communication-link { border: 0; background: none; padding: 0; color: #35b9f0; font: inherit; font-size: 22px; font-weight: 700; cursor: pointer; text-align: left; }
 .communication-link:hover { text-decoration: underline; }
-.communication-panel { scroll-margin-top: 24px; }
+.communication-evidence-status { color: #96adc6; }
 .communication-dashboard {
   color: #edf5ff;
   display: grid;
