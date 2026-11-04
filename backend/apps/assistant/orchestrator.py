@@ -2,6 +2,8 @@ from __future__ import annotations
 
 # ruff: noqa: RUF001
 import json
+import re
+from datetime import timedelta
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -33,6 +35,21 @@ SYSTEM_PROMPT = """你是 Phone Voice Insight 的只读数据分析助手。
 """
 
 
+def _time_context(question: str) -> tuple[str, dict[str, str]]:
+    """Resolve relative dates on the server, never using the model's guessed year."""
+    today = timezone.localdate()
+    context = f"当前系统日期（服务器本地时区）：{today.isoformat()}。不得使用模型训练日期推断当前年份。"
+    match = re.search(r"(?:最近|近)\\s*(\\d{1,3})\\s*天", question)
+    if match:
+        days = int(match.group(1))
+        if 1 <= days <= 365:
+            start = today - timedelta(days=days - 1)
+            return context + f" 用户所说最近{days}天为 {start.isoformat()} 至 {today.isoformat()}（含首尾）。", {
+                "start_date": start.isoformat(), "end_date": today.isoformat()
+            }
+    return context, {}
+
+
 class AssistantOrchestrator:
     max_history_messages = 16
     max_history_chars = 16000
@@ -61,8 +78,9 @@ class AssistantOrchestrator:
                 yield {"type": "cancelled", "message_id": str(self.response_message.id)}
                 return
             history = self._history()
+            date_context, date_filters = _time_context(question)
             planning_messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": SYSTEM_PROMPT + "\\n" + date_context},
                 *history,
                 {"role": "user", "content": question},
             ]
@@ -79,6 +97,9 @@ class AssistantOrchestrator:
             else:
                 tool_name, tool_arguments = self._fallback_route(question, filters)
                 route_mode = "controlled_fallback"
+            # Server-resolved dates take precedence over dates hallucinated by the model.
+            if tool_name == "query_posts":
+                tool_arguments.update(date_filters)
             yield {
                 "type": "status",
                 "stage": "retrieving" if tool_name == "query_posts" else "querying",
@@ -115,7 +136,7 @@ class AssistantOrchestrator:
             yield {"type": "status", "stage": "generating", "label": "正在生成结论"}
 
             summary_messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": SYSTEM_PROMPT + "\\n" + date_context},
                 *history,
                 {"role": "user", "content": question},
                 {"role": "tool", "name": tool_name, "content": json.dumps(result, ensure_ascii=False)},
