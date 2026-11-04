@@ -4,6 +4,35 @@ import type { EChartsOption } from 'echarts'
 import { getCommunicationDashboard, getProducts } from '@/api'
 import TechChart from '@/components/TechChart.vue'
 
+type DatePreset = '7' | '30' | '90' | 'custom'
+const dateStorageKey = 'phone-voice.communication.date-filter'
+function rollingDates(days: number): [string, string] {
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(end.getDate() - days + 1)
+  const format = (value: Date) => [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-')
+  return [format(start), format(end)]
+}
+const datePreset = ref<DatePreset>('30')
+const dateRange = ref<[string, string]>(rollingDates(30))
+function saveDateFilter() {
+  try { localStorage.setItem(dateStorageKey, JSON.stringify({ preset: datePreset.value, range: dateRange.value })) } catch { /* storage optional */ }
+}
+function changeDatePreset(value: DatePreset) {
+  datePreset.value = value
+  if (value !== 'custom') {
+    dateRange.value = rollingDates(Number(value))
+    saveDateFilter()
+    void load()
+  }
+}
+function changeDateRange(value: [string, string] | null) {
+  if (!value?.[0] || !value?.[1]) return
+  dateRange.value = value
+  datePreset.value = 'custom'
+  saveDateFilter()
+  void load()
+}
 const loading = ref(false)
 const error = ref('')
 const data = ref<Awaited<ReturnType<typeof getCommunicationDashboard>> | null>(null)
@@ -18,7 +47,7 @@ async function loadEvidence() {
   evidenceLoading.value = true
   evidenceError.value = ''
   try {
-    const result = await getCommunicationDashboard(productId.value, selected.value)
+    const result = await getCommunicationDashboard(productId.value, selected.value, dateRange.value[0], dateRange.value[1])
     if (version === evidenceVersion) evidenceItems.value = result.evidence
   } catch (reason) {
     if (version === evidenceVersion) {
@@ -98,7 +127,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await getCommunicationDashboard(productId.value)
+    const response = await getCommunicationDashboard(productId.value, undefined, dateRange.value[0], dateRange.value[1])
     if (version === requestVersion) {
       data.value = response
       if (!selected.value) {
@@ -120,6 +149,14 @@ async function load() {
   }
 }
 onMounted(async () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(dateStorageKey) || 'null') as { preset?: DatePreset; range?: string[] } | null
+    if (stored && ['7', '30', '90', 'custom'].includes(stored.preset || '')) {
+      datePreset.value = stored.preset!
+      if (stored.preset === 'custom' && stored.range?.length === 2 && stored.range.every((d) => /^\\d{4}-\\d{2}-\\d{2}$/.test(d))) dateRange.value = [stored.range[0], stored.range[1]]
+      else if (stored.preset !== 'custom') dateRange.value = rollingDates(Number(stored.preset))
+    }
+  } catch { /* ignore invalid preference */ }
   try {
     const stored = localStorage.getItem(storageKey)
     const parsed = stored ? Number(stored) : undefined
@@ -150,6 +187,13 @@ onMounted(async () => {
           <el-option label="全部产品" :value="0" />
           <el-option v-for="item in products" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
+        <el-select :model-value="datePreset" aria-label="时间范围" style="width: 130px" @change="changeDatePreset">
+          <el-option label="近7天" value="7" />
+          <el-option label="近30天" value="30" />
+          <el-option label="近90天" value="90" />
+          <el-option label="自定义" value="custom" />
+        </el-select>
+        <el-date-picker :model-value="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" range-separator="至" style="width: 260px" @change="changeDateRange" />
         <el-button type="primary" :loading="loading" @click="load">刷新数据</el-button>
       </div>
     </header>
