@@ -139,7 +139,18 @@ def run_structured_analysis_batch_task(
         ) / Decimal(1_000_000)
         batch.save()
     if batch.status == AnalysisBatchStatus.RUNNING:
-        batch.status = AnalysisBatchStatus.PARTIAL if batch.failed_count else AnalysisBatchStatus.SUCCESS
+        processed_count = batch.success_count + batch.failed_count + batch.skipped_count
+        batch.status = (
+            AnalysisBatchStatus.SUCCESS
+            if batch.failed_count == 0 and batch.skipped_count == 0 and processed_count == batch.requested_count
+            else AnalysisBatchStatus.PARTIAL
+        )
+        if processed_count != batch.requested_count:
+            batch.error_message = (
+                f"BATCH_COUNT_MISMATCH: processed={processed_count}, "
+                f"requested={batch.requested_count}, success={batch.success_count}, "
+                f"failed={batch.failed_count}, skipped={batch.skipped_count}"
+            )
     batch.finished_at = timezone.now()
     batch.save()
     if batch.corpus_version == "structured-reclass-v2" and batch.status in (
