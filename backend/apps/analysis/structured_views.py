@@ -711,7 +711,7 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
             )[:limit]
         )
         return Response({
-            "disclaimer": "论坛反馈占比不等于真实设备故障率；仅统计已审核通过的当前有效结构化分析",
+            "disclaimer": "论坛反馈占比不等于真实设备故障率。仅统计已审核通过的当前有效结构化分析",
             "content_count": total,
             "negative_content_count": negative_total,
             "categories": categories,
