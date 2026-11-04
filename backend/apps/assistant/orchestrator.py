@@ -39,9 +39,25 @@ def _time_context(question: str) -> tuple[str, dict[str, str]]:
     """Resolve relative dates on the server, never using the model's guessed year."""
     today = timezone.localdate()
     context = f"当前系统日期（服务器本地时区）：{today.isoformat()}。不得使用模型训练日期推断当前年份。"
-    match = re.search(r"(?:最近|近)\s*(\d{1,3})\s*天", question)
+    match = re.search(r"(?:最近|近)\\s*(\\d{1,3}|[一二三四五六七八九十百两]{1,4})\\s*天", question)
     if match:
-        days = int(match.group(1))
+        raw_days = match.group(1)
+        if raw_days.isdigit():
+            days = int(raw_days)
+        else:
+            digits = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+            days = 0
+            current = 0
+            for char in raw_days:
+                if char in digits:
+                    current = digits[char]
+                elif char == "十":
+                    days += (current or 1) * 10
+                    current = 0
+                elif char == "百":
+                    days += (current or 1) * 100
+                    current = 0
+            days += current
         if 1 <= days <= 365:
             start = today - timedelta(days=days - 1)
             return context + f" 用户所说最近{days}天为 {start.isoformat()} 至 {today.isoformat()}（含首尾）。", {
