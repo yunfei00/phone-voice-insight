@@ -1,4 +1,5 @@
 """Start or inspect the resumable historical structured-analysis campaign."""
+
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model

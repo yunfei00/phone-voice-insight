@@ -1042,4 +1042,8 @@ export interface CommunicationDashboardData {
   }>
 }
 export const getCommunicationDashboard = async (): Promise<CommunicationDashboardData> =>
-  (await apiClient.get<CommunicationDashboardData>('/structured-analyses/communication/', { timeout: 60_000 })).data
+  (
+    await apiClient.get<CommunicationDashboardData>('/structured-analyses/communication/', {
+      timeout: 60_000,
+    })
+  ).data

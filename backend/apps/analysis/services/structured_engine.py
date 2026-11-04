@@ -355,7 +355,9 @@ def _persist_success(
     output_tokens: int | None,
 ) -> None:
     with transaction.atomic():
-        AnalysisRun.objects.filter(content_id=run.content_id, is_current=True).exclude(pk=run.pk).update(is_current=False)
+        AnalysisRun.objects.filter(content_id=run.content_id, is_current=True).exclude(pk=run.pk).update(
+            is_current=False
+        )
         run.is_current = True
         analysis = StructuredAnalysis.objects.create(
             run=run,
@@ -384,7 +386,9 @@ def _persist_success(
 
 def _persist_failure(run: AnalysisRun, code: str, message: str, *, response: AIProviderResponse | None = None) -> None:
     run.status = StructuredRunStatus.FAILED
-    run.is_current = not AnalysisRun.objects.filter(content_id=run.content_id, is_current=True).exclude(pk=run.pk).exists()
+    run.is_current = (
+        not AnalysisRun.objects.filter(content_id=run.content_id, is_current=True).exclude(pk=run.pk).exists()
+    )
     run.error_code = code
     run.error_message = message[:1000]
     if response is not None:

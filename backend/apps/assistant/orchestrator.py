@@ -3,9 +3,9 @@ from __future__ import annotations
 # ruff: noqa: RUF001
 import json
 import re
-from datetime import timedelta
 import time
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
 
 from ai.providers.base import AIProviderError
@@ -45,7 +45,8 @@ def _time_context(question: str) -> tuple[str, dict[str, str]]:
         if 1 <= days <= 365:
             start = today - timedelta(days=days - 1)
             return context + f" 用户所说最近{days}天为 {start.isoformat()} 至 {today.isoformat()}（含首尾）。", {
-                "start_date": start.isoformat(), "end_date": today.isoformat()
+                "start_date": start.isoformat(),
+                "end_date": today.isoformat(),
             }
     return context, {}
 

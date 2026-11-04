@@ -1,4 +1,5 @@
 """Guard the communication dashboard's counting contract without database fixtures."""
+
 from django.test import SimpleTestCase
 
 

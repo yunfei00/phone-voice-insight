@@ -348,7 +348,12 @@ class StructuredBatchViewSet(ViewSet):
         )
         celery_task_id = None
         if not values["dry_run"]:
-            result = run_structured_analysis_batch_task.delay(batch.id, content_ids, max_retries=values["max_retries"], force_reclassify=values.get("force_reclassify", False))
+            result = run_structured_analysis_batch_task.delay(
+                batch.id,
+                content_ids,
+                max_retries=values["max_retries"],
+                force_reclassify=values.get("force_reclassify", False),
+            )
             celery_task_id = result.id
         return Response(
             {
@@ -608,9 +613,11 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
     ordering_fields = ("created_at", "updated_at")
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
-        queryset = StructuredAnalysis.objects.select_related(
-            "run", "content", "content__product", "content__source"
-        ).prefetch_related("aspects", "review_history__reviewer").filter(run__is_current=True)
+        queryset = (
+            StructuredAnalysis.objects.select_related("run", "content", "content__product", "content__source")
+            .prefetch_related("aspects", "review_history__reviewer")
+            .filter(run__is_current=True)
+        )
         params = self.request.query_params
         if value := params.get("product"):
             queryset = queryset.filter(content__product_id=int(value))
@@ -659,7 +666,6 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
             analysis.run.save(update_fields=("status", "updated_at"))
         return Response(StructuredAnalysisSerializer(self.get_object()).data)
 
-
     @action(detail=False, methods=("get",), url_path="communication")
     def communication(self, request: Request) -> Response:
         """Full-corpus communication metrics, never sampled from a paginated UI response."""
@@ -705,20 +711,26 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
             negatives.select_related("analysis__content", "analysis__content__product")
             .order_by("-analysis__content__published_at", "-id")
             .values(
-                "analysis__content_id", "analysis__content__product__name",
-                "analysis__content__source_url", "topic_code", "severity",
-                "evidence_text", "sentiment"
+                "analysis__content_id",
+                "analysis__content__product__name",
+                "analysis__content__source_url",
+                "topic_code",
+                "severity",
+                "evidence_text",
+                "sentiment",
             )[:limit]
         )
-        return Response({
-            "disclaimer": "论坛反馈占比不等于真实设备故障率。仅统计已审核通过的当前有效结构化分析",
-            "content_count": total,
-            "negative_content_count": negative_total,
-            "categories": categories,
-            "trend": trend,
-            "products": products,
-            "evidence": evidence,
-        })
+        return Response(
+            {
+                "disclaimer": "论坛反馈占比不等于真实设备故障率。仅统计已审核通过的当前有效结构化分析",
+                "content_count": total,
+                "negative_content_count": negative_total,
+                "categories": categories,
+                "trend": trend,
+                "products": products,
+                "evidence": evidence,
+            }
+        )
 
     @action(detail=False, methods=("get",), url_path="quality")
     def quality(self, request: Request) -> Response:

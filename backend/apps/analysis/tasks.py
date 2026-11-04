@@ -54,7 +54,12 @@ def run_analysis_batch_task(
 
 @shared_task(name="run_structured_analysis_batch_task", autoretry_for=(), max_retries=0)
 def run_structured_analysis_batch_task(
-    batch_id: int, content_ids: list[int], *, max_retries: int = 1, retry_failed: bool = False, force_reclassify: bool = False
+    batch_id: int,
+    content_ids: list[int],
+    *,
+    max_retries: int = 1,
+    retry_failed: bool = False,
+    force_reclassify: bool = False,
 ) -> dict[str, Any]:
     batch = AnalysisBatch.objects.select_related("created_by").get(pk=batch_id)
     if batch.created_by is None:
@@ -107,7 +112,9 @@ def run_structured_analysis_batch_task(
         if wait_seconds > 0:
             time.sleep(wait_seconds)
         try:
-            run = analyze_content(content_id, provider, force=force_reclassify, max_retries=max_retries, batch_id=batch.id)
+            run = analyze_content(
+                content_id, provider, force=force_reclassify, max_retries=max_retries, batch_id=batch.id
+            )
         except Exception as exc:
             logger.exception("structured_analysis_item_failed batch_id=%s content_id=%s", batch.id, content_id)
             batch.failed_count += 1
@@ -299,19 +306,26 @@ def continue_historical_reclassification(user_id: int, chunk_size: int = 100) ->
         if first is None:
             return {"queued": 0, "complete": True}
         ids = list(
-            corpus.filter(product_id=first.product_id, source_id=first.source_id)
-            .values_list("id", flat=True)[:chunk_size]
+            corpus.filter(product_id=first.product_id, source_id=first.source_id).values_list("id", flat=True)[
+                :chunk_size
+            ]
         )
         batch = AnalysisBatch.objects.create(
-            created_by=owner, product_id=first.product_id, source_id=first.source_id,
-            corpus_version="structured-reclass-v2", provider="USER_CONFIG",
-            model_name="USER_CONFIG", prompt_version="structured_analysis_v1",
-            requested_count=len(ids), dry_run=False, max_concurrency=1,
-            requests_per_minute=10, status=AnalysisBatchStatus.PENDING, total_tokens=0,
+            created_by=owner,
+            product_id=first.product_id,
+            source_id=first.source_id,
+            corpus_version="structured-reclass-v2",
+            provider="USER_CONFIG",
+            model_name="USER_CONFIG",
+            prompt_version="structured_analysis_v1",
+            requested_count=len(ids),
+            dry_run=False,
+            max_concurrency=1,
+            requests_per_minute=10,
+            status=AnalysisBatchStatus.PENDING,
+            total_tokens=0,
         )
         transaction.on_commit(
-            lambda: run_structured_analysis_batch_task.delay(
-                batch.id, ids, force_reclassify=True, max_retries=1
-            )
+            lambda: run_structured_analysis_batch_task.delay(batch.id, ids, force_reclassify=True, max_retries=1)
         )
     return {"queued": len(ids), "batch_id": batch.id}
