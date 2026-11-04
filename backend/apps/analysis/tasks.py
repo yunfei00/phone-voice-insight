@@ -142,7 +142,10 @@ def run_structured_analysis_batch_task(
         batch.status = AnalysisBatchStatus.PARTIAL if batch.failed_count else AnalysisBatchStatus.SUCCESS
     batch.finished_at = timezone.now()
     batch.save()
-    if batch.corpus_version == "structured-reclass-v2" and batch.status == AnalysisBatchStatus.SUCCESS:
+    if batch.corpus_version == "structured-reclass-v2" and batch.status in (
+        AnalysisBatchStatus.SUCCESS,
+        AnalysisBatchStatus.PARTIAL,
+    ):
         try:
             continue_historical_reclassification.delay(batch.created_by_id, batch.requested_count)
         except Exception:
@@ -281,7 +284,7 @@ def recover_stale_structured_batches() -> int:
 def continue_historical_reclassification(user_id: int, chunk_size: int = 100) -> dict[str, Any]:
     """Schedule the next bounded chunk, excluding every record already attempted in this campaign.
 
-    A failed batch halts automatic continuation; operators can inspect and retry explicitly.
+    Per-item failures are recorded and excluded from this pass; later chunks continue.\n    Operators can explicitly retry failed items after the pass completes.
     """
     from django.db import transaction
 
