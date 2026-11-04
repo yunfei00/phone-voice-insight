@@ -1048,3 +1048,19 @@ export const getCommunicationDashboard = async (productId?: number, topic?: stri
       timeout: 60_000,
     })
   ).data
+
+export interface HistoricalReclassificationStatus {
+  total: number
+  attempted: number
+  remaining: number
+  successful_batches: number
+  failed_batches: number
+  active_batch_id: number | null
+  latest_batch: StructuredBatch | null
+}
+export async function getHistoricalReclassificationStatus(): Promise<HistoricalReclassificationStatus> {
+  return (await apiClient.get<HistoricalReclassificationStatus>('/structured-batches/reclassification-status/')).data
+}
+export async function startHistoricalReclassification(chunkSize = 100): Promise<{ queued: boolean | number; complete?: boolean }> {
+  return (await apiClient.post('/structured-batches/reclassification-start/', { chunk_size: chunkSize })).data
+}
