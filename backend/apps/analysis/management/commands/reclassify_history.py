@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from argparse import ArgumentParser
+from typing import Any
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
