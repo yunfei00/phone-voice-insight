@@ -15,6 +15,7 @@ const evidencePanel = ref<HTMLElement | null>(null)
 let requestVersion = 0
 function selectCategory(code: string) {
   selected.value = code
+  void load()
   void nextTick(() => evidencePanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
 }
 async function changeProduct(value: number | undefined) {
@@ -75,7 +76,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await getCommunicationDashboard(productId.value)
+    const response = await getCommunicationDashboard(productId.value, selected.value)
     if (version === requestVersion) data.value = response
   } catch (reason) {
     if (version === requestVersion) {
