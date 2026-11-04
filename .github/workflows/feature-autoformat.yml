@@ -1,5 +1,6 @@
 name: Feature autoformat
 on:
+  pull_request:
   push:
     branches: [feature/communication-dashboard]
     paths:
