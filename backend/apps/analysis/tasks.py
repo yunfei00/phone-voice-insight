@@ -134,6 +134,11 @@ def run_structured_analysis_batch_task(
         batch.status = AnalysisBatchStatus.PARTIAL if batch.failed_count else AnalysisBatchStatus.SUCCESS
     batch.finished_at = timezone.now()
     batch.save()
+    if batch.corpus_version == "structured-reclass-v2" and batch.status == AnalysisBatchStatus.SUCCESS:
+        try:
+            continue_historical_reclassification.delay(batch.created_by_id, batch.requested_count)
+        except Exception:
+            logger.exception("historical_reclassification_dispatch_failed batch_id=%s", batch.id)
     try:
         dispatch_pending_structured_reviews.delay(batch.created_by_id, batch.product_id)
     except Exception:
@@ -262,3 +267,51 @@ def recover_stale_structured_batches() -> int:
         error_message="WORKER_INTERRUPTED: batch did not report progress for two hours",
         finished_at=timezone.now(),
     )
+
+
+@shared_task(name="continue_historical_reclassification", max_retries=0)
+def continue_historical_reclassification(user_id: int, chunk_size: int = 100) -> dict[str, Any]:
+    """Schedule the next bounded chunk, excluding every record already attempted in this campaign.
+
+    A failed batch halts automatic continuation; operators can inspect and retry explicitly.
+    """
+    from django.db import transaction
+
+    from apps.reviews.services.final_corpus import final_corpus_reviews
+
+    if not 1 <= chunk_size <= 500:
+        return {"queued": 0, "error_code": "INVALID_CHUNK_SIZE"}
+    with transaction.atomic():
+        from django.contrib.auth import get_user_model
+
+        owner = get_user_model().objects.select_for_update().filter(pk=user_id, is_active=True).first()
+        if owner is None:
+            return {"queued": 0, "error_code": "OWNER_MISSING"}
+        active = AnalysisBatch.objects.filter(
+            prompt_version="structured_analysis_v1",
+            status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
+        )
+        if active.exists():
+            return {"queued": 0, "active_batch": active.values_list("id", flat=True).first()}
+        attempted = AnalysisRun.objects.filter(batch__corpus_version="structured-reclass-v2").values("content_id")
+        corpus = final_corpus_reviews().exclude(pk__in=attempted).order_by("id")
+        first = corpus.first()
+        if first is None:
+            return {"queued": 0, "complete": True}
+        ids = list(
+            corpus.filter(product_id=first.product_id, source_id=first.source_id)
+            .values_list("id", flat=True)[:chunk_size]
+        )
+        batch = AnalysisBatch.objects.create(
+            created_by=owner, product_id=first.product_id, source_id=first.source_id,
+            corpus_version="structured-reclass-v2", provider="USER_CONFIG",
+            model_name="USER_CONFIG", prompt_version="structured_analysis_v1",
+            requested_count=len(ids), dry_run=False, max_concurrency=1,
+            requests_per_minute=10, status=AnalysisBatchStatus.PENDING, total_tokens=0,
+        )
+        transaction.on_commit(
+            lambda: run_structured_analysis_batch_task.delay(
+                batch.id, ids, force_reclassify=True, max_retries=1
+            )
+        )
+    return {"queued": len(ids), "batch_id": batch.id}
