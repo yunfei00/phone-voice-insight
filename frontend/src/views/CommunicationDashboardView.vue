@@ -1,13 +1,31 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import type { EChartsOption } from 'echarts'
-import { getCommunicationDashboard } from '@/api'
+import { getCommunicationDashboard, getProducts } from '@/api'
 import TechChart from '@/components/TechChart.vue'
 
 const loading = ref(false)
 const error = ref('')
 const data = ref<Awaited<ReturnType<typeof getCommunicationDashboard>> | null>(null)
 const selected = ref('')
+const storageKey = 'phone-voice.communication.product'
+const productId = ref<number | undefined>()
+const products = ref<Array<{ id: number; name: string }>>([])
+const evidencePanel = ref<HTMLElement | null>(null)
+let requestVersion = 0
+function selectCategory(code: string) {
+  selected.value = code
+  void nextTick(() => evidencePanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+}
+async function changeProduct(value: number | undefined) {
+  productId.value = value || undefined
+  selected.value = ''
+  try {
+    if (productId.value) localStorage.setItem(storageKey, String(productId.value))
+    else localStorage.removeItem(storageKey)
+  } catch { /* optional storage */ }
+  await load()
+}
 const names: Record<string, string> = {
   'NET.CELLULAR': '蜂窝信号',
   'NET.WIFI_BLUETOOTH': 'Wi-Fi与蓝牙',
@@ -53,18 +71,36 @@ const chart = computed<EChartsOption>(() => ({
   ],
 }))
 async function load() {
+  const version = ++requestVersion
   loading.value = true
   error.value = ''
   try {
-    data.value = await getCommunicationDashboard()
+    const response = await getCommunicationDashboard(productId.value)
+    if (version === requestVersion) data.value = response
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : '通信数据加载失败'
+    if (version === requestVersion) {
+      error.value = reason instanceof Error ? reason.message : '通信数据加载失败'
+      data.value = null
+    }
   } finally {
-    loading.value = false
+    if (version === requestVersion) loading.value = false
   }
 }
-onMounted(() => {
-  void load()
+onMounted(async () => {
+  try {
+    const stored = localStorage.getItem(storageKey)
+    const parsed = stored ? Number(stored) : undefined
+    if (parsed && Number.isSafeInteger(parsed) && parsed > 0) productId.value = parsed
+  } catch { /* optional storage */ }
+  try {
+    const response = await getProducts({ page_size: 1000 })
+    products.value = response.results.map((item) => ({ id: item.id, name: item.name }))
+    if (productId.value && !products.value.some((item) => item.id === productId.value)) {
+      productId.value = undefined
+      try { localStorage.removeItem(storageKey) } catch { /* optional storage */ }
+    }
+  } catch { /* dashboard remains usable */ }
+  await load()
 })
 </script>
 
@@ -76,7 +112,13 @@ onMounted(() => {
         <h1>通信智能看板</h1>
         <span>通信场景 · 网络质量 · 用户问题洞察</span>
       </div>
-      <el-button type="primary" :loading="loading" @click="load">刷新数据</el-button>
+      <div class="communication-actions">
+        <el-select :model-value="productId" placeholder="全部产品" clearable filterable style="width: 220px" aria-label="选择手机产品" @change="changeProduct">
+          <el-option label="全部产品" :value="0" />
+          <el-option v-for="item in products" :key="item.id" :label="item.name" :value="item.id" />
+        </el-select>
+        <el-button type="primary" :loading="loading" @click="load">刷新数据</el-button>
+      </div>
     </header>
     <el-alert v-if="error" type="error" :title="error" show-icon :closable="false" />
     <el-alert
@@ -103,7 +145,7 @@ onMounted(() => {
       </article>
       <article>
         <span>当前最多问题</span
-        ><strong>{{ categories.length ? label(categories[0].topic_code) : '暂无数据' }}</strong>
+        ><button v-if="categories.length" class="communication-link" @click="selectCategory(categories[0].topic_code)">{{ label(categories[0].topic_code) }}</button><strong v-else>暂无数据</strong>
       </article>
     </section>
     <section class="communication-panel">
@@ -118,13 +160,13 @@ onMounted(() => {
           v-for="item in categories"
           :key="item.topic_code"
           :type="selected === item.topic_code ? 'primary' : 'default'"
-          @click="selected = item.topic_code"
+          @click="selectCategory(item.topic_code)"
           >{{ label(item.topic_code) }} · {{ item.count }}</el-button
         >
       </div>
     </section>
-    <section class="communication-panel">
-      <h2>近期通信问题证据</h2>
+    <section ref="evidencePanel" class="communication-panel">
+      <h2>近期通信问题证据{{ selected ? ' · ' + label(selected) : '' }}</h2>
       <el-empty v-if="!evidence.length" description="当前范围暂无通信问题证据" />
       <div v-for="(item, index) in evidence" :key="index" class="communication-evidence">
         <div>
@@ -145,6 +187,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.communication-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.communication-link { border: 0; background: none; padding: 0; color: #35b9f0; font: inherit; font-size: 22px; font-weight: 700; cursor: pointer; text-align: left; }
+.communication-link:hover { text-decoration: underline; }
+.communication-panel { scroll-margin-top: 24px; }
 .communication-dashboard {
   color: #edf5ff;
   display: grid;
