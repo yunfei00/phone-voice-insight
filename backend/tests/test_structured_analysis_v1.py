@@ -436,3 +436,27 @@ def test_topic_taxonomy_repairs_mismatched_primary_aspect(review):  # type: igno
     aspect = run.structured_analysis.aspects.get()
     assert aspect.aspect_code == "NET"
     assert "NET" in aspect.business_domains
+
+
+@pytest.mark.parametrize(
+    ("post_id", "description", "invented_code"),
+    [
+        ("30434705", "前置摄像头物理安装歪斜", "cam.stabilization"),
+        ("30463097", "铝合金手机壳的镜头开孔问题", "accessory.camera_cutout"),
+        ("30481006", "美团应用中导航光标不准确", "net.signal"),
+    ],
+)
+def test_ambiguous_posts_reject_invented_codes_and_offer_legal_retry(
+    post_id: str, description: str, invented_code: str
+) -> None:
+    """Synthetic regression based on reported symptoms, not live forum contents."""
+    from ai.taxonomy import load_taxonomy
+    from apps.analysis.services.structured_engine import _taxonomy_retry_feedback
+
+    feedback = _taxonomy_retry_feedback({"aspects": [{"topic_code": invented_code}]})
+    assert post_id and description
+    assert invented_code in feedback
+    assert "不得编造" in feedback
+    assert "NET.CELLULAR" in feedback
+    assert invented_code not in load_taxonomy().topic_parent_map
+    assert _taxonomy_retry_feedback({"aspects": [{"topic_code": "NET.CELLULAR"}]}) == ""
