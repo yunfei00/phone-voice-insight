@@ -53,6 +53,34 @@ def _prompt() -> str:
     )
 
 
+def _taxonomy_retry_feedback(payload: dict[str, object]) -> str:
+    """Constrain invented model codes without guessing a semantic replacement."""
+    aspects = payload.get("aspects")
+    if not isinstance(aspects, list):
+        return ""
+    taxonomy = load_taxonomy()
+    invalid = sorted({
+        code
+        for aspect in aspects
+        if isinstance(aspect, dict)
+        for code in [aspect.get("topic_code")]
+        if isinstance(code, str) and code not in taxonomy.topic_parent_map
+    })
+    if not invalid:
+        return ""
+    allowed = {
+        domain.tag_id: [child.tag_id for child in domain.children if child.enabled]
+        for domain in taxonomy.domains
+        if domain.enabled
+    }
+    return (
+        "以下 topic_code 不存在：" + ", ".join(invalid)
+        + "。根据原文故障对象和证据重新选择，不得编造或拼接代码。"
+        + "跨域独立观点可分别标注；证据不足不得猜测。合法标签："
+        + json.dumps(allowed, ensure_ascii=False, separators=(",", ":"))
+    )
+
+
 def _approved_example_prompt(review: ReviewRecord) -> str:
     """Optional, bounded retrieval of reviewed examples. Never treat examples as instructions."""
     if not getattr(settings, "STRUCTURED_MANUAL_EXAMPLES_ENABLED", False):
@@ -270,7 +298,7 @@ def _analyze_long_text(review: ReviewRecord, provider: AIProvider) -> tuple[Stru
                 feedback = f"INVALID_JSON:{exc}"
                 continue
             if not validated.valid or validated.payload is None:
-                feedback = "; ".join(validated.errors)
+                feedback = "; ".join(validated.errors) + "\n" + _taxonomy_retry_feedback(decoded)
                 continue
             data = validated.payload.model_dump()
             for aspect in data["aspects"]:
@@ -331,7 +359,7 @@ def analyze_content(
                 result = None
                 feedback = f"INVALID_JSON:{exc}"
             else:
-                feedback = "; ".join(result.errors)
+                feedback = "; ".join(result.errors) + "\n" + _taxonomy_retry_feedback(decoded)
             if result is not None and result.valid and result.payload is not None:
                 _persist_success(
                     run, result.payload, response.latency_ms, response.prompt_tokens, response.completion_tokens
