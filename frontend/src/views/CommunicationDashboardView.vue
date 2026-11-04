@@ -93,7 +93,7 @@ onMounted(async () => {
     if (parsed && Number.isSafeInteger(parsed) && parsed > 0) productId.value = parsed
   } catch { /* optional storage */ }
   try {
-    const response = await getProducts({ page_size: 1000 })
+    const response = await getProducts({ page_size: 100 })
     products.value = response.results.map((item) => ({ id: item.id, name: item.name }))
     if (productId.value && !products.value.some((item) => item.id === productId.value)) {
       productId.value = undefined
