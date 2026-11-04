@@ -54,7 +54,7 @@ def run_analysis_batch_task(
 
 @shared_task(name="run_structured_analysis_batch_task", autoretry_for=(), max_retries=0)
 def run_structured_analysis_batch_task(
-    batch_id: int, content_ids: list[int], *, max_retries: int = 1, retry_failed: bool = False
+    batch_id: int, content_ids: list[int], *, max_retries: int = 1, retry_failed: bool = False, force_reclassify: bool = False
 ) -> dict[str, Any]:
     batch = AnalysisBatch.objects.select_related("created_by").get(pk=batch_id)
     if batch.created_by is None:
@@ -107,7 +107,7 @@ def run_structured_analysis_batch_task(
         if wait_seconds > 0:
             time.sleep(wait_seconds)
         try:
-            run = analyze_content(content_id, provider, max_retries=max_retries, batch_id=batch.id)
+            run = analyze_content(content_id, provider, force=force_reclassify, max_retries=max_retries, batch_id=batch.id)
         except Exception as exc:
             logger.exception("structured_analysis_item_failed batch_id=%s content_id=%s", batch.id, content_id)
             batch.failed_count += 1
