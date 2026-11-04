@@ -7,6 +7,7 @@ import {
   getPersonalAIConfiguration,
   getAssistantModels,
   getAssistantAvailableModels,
+  discoverAssistantModels,
   createAssistantModel,
   deleteAssistantModel,
   updateAssistantModel,
@@ -190,7 +191,10 @@ async function assignStructuredModel(): Promise<void> {
 }
 
 async function saveConfiguration(): Promise<boolean> {
-  if (!(await formRef.value?.validate().catch(() => false))) return false
+  if (!(await formRef.value?.validate().catch(() => false))) {
+    ElMessage.warning('请检查模型名称、服务地址等必填项')
+    return false
+  }
   saving.value = true
   try {
     const payload = { ...form }
@@ -219,24 +223,34 @@ async function saveConfiguration(): Promise<boolean> {
       ElMessage.success('个人默认模型已保存')
     }
     return true
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '保存模型失败，请检查服务地址及后端日志')
+    return false
   } finally {
     saving.value = false
   }
 }
 
 async function fetchAvailableModels(): Promise<void> {
-  if (!selectedProfileId.value) {
-    ElMessage.info('请先保存模型配置，再获取模型列表；获取后可选择其他模型并保存为新配置。')
+  if (!form.base_url.trim()) {
+    ElMessage.warning('请先填写模型服务地址')
     return
   }
   discovering.value = true
   try {
-    availableModels.value = await getAssistantAvailableModels(selectedProfileId.value)
+    availableModels.value = selectedProfileId.value
+      ? await getAssistantAvailableModels(selectedProfileId.value)
+      : await discoverAssistantModels({
+          provider: form.provider,
+          base_url: form.base_url.trim(),
+          ...(form.api_key ? { api_key: form.api_key } : {}),
+        })
+    ollamaModels.value = form.provider === 'ollama' ? availableModels.value : []
     if (!availableModels.value.length)
-      ElMessage.warning('接口已连接，但未返回可用模型；仍可手动输入')
-    else ElMessage.success(`已获取 ${availableModels.value.length} 个模型`)
+      ElMessage.warning('服务已连接，但没有返回模型；仍可手动输入')
+    else ElMessage.success(`已获取 ${availableModels.value.length} 个模型，请选择后保存`)
   } catch (error) {
-    ElMessage.warning(error instanceof Error ? error.message : '获取模型列表失败，请手动输入')
+    ElMessage.error(error instanceof Error ? error.message : '获取模型列表失败，请检查后端连接')
   } finally {
     discovering.value = false
   }
