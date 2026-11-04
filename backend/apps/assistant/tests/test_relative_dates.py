@@ -27,6 +27,7 @@ class RelativeDateTests(SimpleTestCase):
         prompt, filters = _time_context(question)
         self.assertEqual(filters, {"start_date": "2026-09-16", "end_date": "2026-11-04"})
         self.assertIn("2026-09-16", prompt)
-        name, args = AssistantOrchestrator._fallback_route(AssistantOrchestrator.__new__(AssistantOrchestrator), question, {})
+        router = AssistantOrchestrator.__new__(AssistantOrchestrator)
+        name, args = router._fallback_route(question, {})
         self.assertEqual(name, "get_issue_statistics")
         self.assertNotIn("limit", args)
