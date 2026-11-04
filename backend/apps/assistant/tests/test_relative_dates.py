@@ -22,7 +22,7 @@ class RelativeDateTests(SimpleTestCase):
 
     @patch("apps.assistant.orchestrator.timezone.localdate", return_value=date(2026, 11, 4))
     def test_fifty_days_is_a_date_range_not_result_limit(self, _localdate: Any) -> None:
-        question = "最近五十天有哪些问题，通信相关的"
+        question = "最近五十天有哪些问题,通信相关的"
         # Chinese numerals are a normal customer phrasing, not a tool limit.
         prompt, filters = _time_context(question)
         self.assertEqual(filters, {"start_date": "2026-09-16", "end_date": "2026-11-04"})
