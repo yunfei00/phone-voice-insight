@@ -294,7 +294,8 @@ class StructuredBatchViewSet(ViewSet):
             status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
             is_current=True,
         ).values("content_id")
-        queryset = queryset.exclude(id__in=completed_ids)
+        if not values.get("force_reclassify"):
+            queryset = queryset.exclude(id__in=completed_ids)
         content_ids = list(queryset.values_list("id", flat=True)[: values["max_items"]])
         first = queryset.first()
         if first is None:
@@ -347,7 +348,7 @@ class StructuredBatchViewSet(ViewSet):
         )
         celery_task_id = None
         if not values["dry_run"]:
-            result = run_structured_analysis_batch_task.delay(batch.id, content_ids, max_retries=values["max_retries"])
+            result = run_structured_analysis_batch_task.delay(batch.id, content_ids, max_retries=values["max_retries"], force_reclassify=values.get("force_reclassify", False))
             celery_task_id = result.id
         return Response(
             {
