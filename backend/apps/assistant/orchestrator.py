@@ -111,7 +111,19 @@ class AssistantOrchestrator:
                 self._finish_cancelled()
                 yield {"type": "cancelled", "message_id": str(self.response_message.id)}
                 return
-            result = execute_tool(tool_name, tool_arguments)
+            try:
+                result = execute_tool(tool_name, tool_arguments)
+            except (ValueError, ValidationError):
+                # Model-generated tool arguments may contain unsupported keys or invalid
+                # limits. Recover using the deterministic route rather than exposing an
+                # internal validation error to the customer.
+                if route_mode != "native_tool_call":
+                    raise
+                tool_name, tool_arguments = self._fallback_route(question, filters)
+                if date_filters and "start_date" in TOOL_MODELS[tool_name].model_fields:
+                    tool_arguments.update(date_filters)
+                route_mode = "validated_fallback"
+                result = execute_tool(tool_name, tool_arguments)
             evidence = _extract_evidence(result)
             trace = [
                 {
