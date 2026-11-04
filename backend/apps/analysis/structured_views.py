@@ -659,6 +659,70 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
             analysis.run.save(update_fields=("status", "updated_at"))
         return Response(StructuredAnalysisSerializer(self.get_object()).data)
 
+
+    @action(detail=False, methods=("get",), url_path="communication")
+    def communication(self, request: Request) -> Response:
+        """Full-corpus communication metrics, never sampled from a paginated UI response."""
+        from django.db.models import F
+        from django.db.models.functions import Coalesce
+
+        analyses = StructuredAnalysis.objects.filter(
+            run__is_current=True,
+            run__status=StructuredRunStatus.SUCCEEDED,
+            schema_valid=True,
+            review_required=False,
+            content_id__in=final_corpus_reviews().values("pk"),
+        )
+        if product := request.query_params.get("product"):
+            try:
+                analyses = analyses.filter(content__product_id=int(product))
+            except (TypeError, ValueError):
+                return Response({"error_code": "INVALID_PRODUCT"}, status=400)
+        aspects = OpinionAspect.objects.filter(analysis__in=analyses, aspect_code="NET")
+        total = aspects.values("analysis__content_id").distinct().count()
+        negatives = aspects.filter(sentiment="NEGATIVE")
+        negative_total = negatives.values("analysis__content_id").distinct().count()
+        categories = list(
+            negatives.values("topic_code")
+            .annotate(count=Count("analysis__content_id", distinct=True))
+            .order_by("-count", "topic_code")
+        )
+        trend = list(
+            negatives.annotate(day=TruncDate("analysis__content__published_at"))
+            .exclude(day__isnull=True)
+            .values("day")
+            .annotate(count=Count("analysis__content_id", distinct=True))
+            .order_by("day")
+        )
+        products = list(
+            negatives.values("analysis__content__product__name")
+            .annotate(count=Count("analysis__content_id", distinct=True))
+            .order_by("-count")
+        )
+        raw_limit = request.query_params.get("limit", "30")
+        try:
+            limit = min(max(int(raw_limit), 1), 100)
+        except ValueError:
+            return Response({"error_code": "INVALID_LIMIT"}, status=400)
+        evidence = list(
+            negatives.select_related("analysis__content", "analysis__content__product")
+            .order_by("-analysis__content__published_at", "-id")
+            .values(
+                "analysis__content_id", "analysis__content__product__name",
+                "analysis__content__source_url", "topic_code", "severity",
+                "evidence_text", "sentiment"
+            )[:limit]
+        )
+        return Response({
+            "disclaimer": "论坛反馈占比不等于真实设备故障率；仅统计已审核通过的当前有效结构化分析",
+            "content_count": total,
+            "negative_content_count": negative_total,
+            "categories": categories,
+            "trend": trend,
+            "products": products,
+            "evidence": evidence,
+        })
+
     @action(detail=False, methods=("get",), url_path="quality")
     def quality(self, request: Request) -> Response:
         runs = AnalysisRun.objects.filter(is_current=True)
