@@ -663,9 +663,6 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
     @action(detail=False, methods=("get",), url_path="communication")
     def communication(self, request: Request) -> Response:
         """Full-corpus communication metrics, never sampled from a paginated UI response."""
-        from django.db.models import F
-        from django.db.models.functions import Coalesce
-
         analyses = StructuredAnalysis.objects.filter(
             run__is_current=True,
             run__status=StructuredRunStatus.SUCCEEDED,
