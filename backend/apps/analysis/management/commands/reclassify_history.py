@@ -44,9 +44,8 @@ class Command(BaseCommand):
         if options["product_id"]:
             corpus = corpus.filter(product_id=options["product_id"])
         if options["resume"]:
-            from ai.taxonomy import TAXONOMY_VERSION
             current = AnalysisRun.objects.filter(
-                is_current=True, taxonomy_version=TAXONOMY_VERSION,
+                is_current=True, batch__corpus_version="structured-reclass-v2",
                 status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
             ).values("content_id")
             corpus = corpus.exclude(pk__in=current)
@@ -65,7 +64,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             batch = AnalysisBatch.objects.create(
                 created_by=user, product_id=first.product_id, source_id=first.source_id,
-                corpus_version="structured-v1", provider="USER_CONFIG", model_name="USER_CONFIG",
+                corpus_version="structured-reclass-v2", provider="USER_CONFIG", model_name="USER_CONFIG",
                 prompt_version="structured_analysis_v1", requested_count=len(ids),
                 dry_run=False, max_concurrency=1, requests_per_minute=10,
                 status=AnalysisBatchStatus.PENDING, total_tokens=0,
