@@ -4,7 +4,7 @@ from django.test import SimpleTestCase
 
 
 class CommunicationAggregationContractTests(SimpleTestCase):
-    def test_distinct_feedback_not_opinion_count(self):
+    def test_distinct_feedback_not_opinion_count(self) -> None:
         opinions = [
             {"content_id": 1, "topic": "NET.ELEVATOR"},
             {"content_id": 1, "topic": "NET.WEAK_SIGNAL"},
