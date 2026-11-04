@@ -10,13 +10,25 @@ function rollingDates(days: number): [string, string] {
   const end = new Date()
   const start = new Date(end)
   start.setDate(end.getDate() - days + 1)
-  const format = (value: Date) => [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-')
+  const format = (value: Date) =>
+    [
+      value.getFullYear(),
+      String(value.getMonth() + 1).padStart(2, '0'),
+      String(value.getDate()).padStart(2, '0'),
+    ].join('-')
   return [format(start), format(end)]
 }
 const datePreset = ref<DatePreset>('30')
 const dateRange = ref<[string, string]>(rollingDates(30))
 function saveDateFilter() {
-  try { localStorage.setItem(dateStorageKey, JSON.stringify({ preset: datePreset.value, range: dateRange.value })) } catch { /* storage optional */ }
+  try {
+    localStorage.setItem(
+      dateStorageKey,
+      JSON.stringify({ preset: datePreset.value, range: dateRange.value }),
+    )
+  } catch {
+    /* storage optional */
+  }
 }
 function changeDatePreset(value: DatePreset) {
   datePreset.value = value
@@ -47,7 +59,12 @@ async function loadEvidence() {
   evidenceLoading.value = true
   evidenceError.value = ''
   try {
-    const result = await getCommunicationDashboard(productId.value, selected.value, dateRange.value[0], dateRange.value[1])
+    const result = await getCommunicationDashboard(
+      productId.value,
+      selected.value,
+      dateRange.value[0],
+      dateRange.value[1],
+    )
     if (version === evidenceVersion) evidenceItems.value = result.evidence
   } catch (reason) {
     if (version === evidenceVersion) {
@@ -79,7 +96,9 @@ async function changeProduct(value: number | undefined) {
   try {
     if (productId.value) localStorage.setItem(storageKey, String(productId.value))
     else localStorage.removeItem(storageKey)
-  } catch { /* optional storage */ }
+  } catch {
+    /* optional storage */
+  }
   await load()
 }
 const names: Record<string, string> = {
@@ -127,7 +146,12 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await getCommunicationDashboard(productId.value, undefined, dateRange.value[0], dateRange.value[1])
+    const response = await getCommunicationDashboard(
+      productId.value,
+      undefined,
+      dateRange.value[0],
+      dateRange.value[1],
+    )
     if (version === requestVersion) {
       data.value = response
       if (!selected.value) {
@@ -150,26 +174,44 @@ async function load() {
 }
 onMounted(async () => {
   try {
-    const stored = JSON.parse(localStorage.getItem(dateStorageKey) || 'null') as { preset?: DatePreset; range?: string[] } | null
+    const stored = JSON.parse(localStorage.getItem(dateStorageKey) || 'null') as {
+      preset?: DatePreset
+      range?: string[]
+    } | null
     if (stored && ['7', '30', '90', 'custom'].includes(stored.preset || '')) {
       datePreset.value = stored.preset!
-      if (stored.preset === 'custom' && stored.range?.length === 2 && stored.range.every((d) => /^\\d{4}-\\d{2}-\\d{2}$/.test(d))) dateRange.value = [stored.range[0], stored.range[1]]
+      if (
+        stored.preset === 'custom' &&
+        stored.range?.length === 2 &&
+        stored.range.every((d) => /^\\d{4}-\\d{2}-\\d{2}$/.test(d))
+      )
+        dateRange.value = [stored.range[0], stored.range[1]]
       else if (stored.preset !== 'custom') dateRange.value = rollingDates(Number(stored.preset))
     }
-  } catch { /* ignore invalid preference */ }
+  } catch {
+    /* ignore invalid preference */
+  }
   try {
     const stored = localStorage.getItem(storageKey)
     const parsed = stored ? Number(stored) : undefined
     if (parsed && Number.isSafeInteger(parsed) && parsed > 0) productId.value = parsed
-  } catch { /* optional storage */ }
+  } catch {
+    /* optional storage */
+  }
   try {
     const response = await getProducts({ page_size: 100 })
     products.value = response.results.map((item) => ({ id: item.id, name: item.name }))
     if (productId.value && !products.value.some((item) => item.id === productId.value)) {
       productId.value = undefined
-      try { localStorage.removeItem(storageKey) } catch { /* optional storage */ }
+      try {
+        localStorage.removeItem(storageKey)
+      } catch {
+        /* optional storage */
+      }
     }
-  } catch { /* dashboard remains usable */ }
+  } catch {
+    /* dashboard remains usable */
+  }
   await load()
 })
 </script>
@@ -183,17 +225,39 @@ onMounted(async () => {
         <span>通信场景 · 网络质量 · 用户问题洞察</span>
       </div>
       <div class="communication-actions">
-        <el-select :model-value="productId" placeholder="全部产品" clearable filterable style="width: 220px" aria-label="选择手机产品" @change="changeProduct">
+        <el-select
+          :model-value="productId"
+          placeholder="全部产品"
+          clearable
+          filterable
+          style="width: 220px"
+          aria-label="选择手机产品"
+          @change="changeProduct"
+        >
           <el-option label="全部产品" :value="0" />
           <el-option v-for="item in products" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
-        <el-select :model-value="datePreset" aria-label="时间范围" style="width: 130px" @change="changeDatePreset">
+        <el-select
+          :model-value="datePreset"
+          aria-label="时间范围"
+          style="width: 130px"
+          @change="changeDatePreset"
+        >
           <el-option label="近7天" value="7" />
           <el-option label="近30天" value="30" />
           <el-option label="近90天" value="90" />
           <el-option label="自定义" value="custom" />
         </el-select>
-        <el-date-picker :model-value="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" range-separator="至" style="width: 260px" @change="changeDateRange" />
+        <el-date-picker
+          :model-value="dateRange"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          range-separator="至"
+          style="width: 260px"
+          @change="changeDateRange"
+        />
         <el-button type="primary" :loading="loading" @click="load">刷新数据</el-button>
       </div>
     </header>
@@ -222,13 +286,24 @@ onMounted(async () => {
       </article>
       <article>
         <span>当前最多问题</span
-        ><button v-if="categories.length" class="communication-link" @click="selectCategory(categories[0].topic_code)">{{ label(categories[0].topic_code) }}</button><strong v-else>暂无数据</strong>
+        ><button
+          v-if="categories.length"
+          class="communication-link"
+          @click="selectCategory(categories[0].topic_code)"
+        >
+          {{ label(categories[0].topic_code) }}</button
+        ><strong v-else>暂无数据</strong>
       </article>
     </section>
     <section class="communication-panel">
       <h2>全量通信 TOP 问题子类</h2>
       <p>按独立原始反馈去重统计，非分页抽样</p>
-      <TechChart :option="chart" :loading="loading" :empty="!categories.length" @chart-click="onChartClick" />
+      <TechChart
+        :option="chart"
+        :loading="loading"
+        :empty="!categories.length"
+        @chart-click="onChartClick"
+      />
       <div class="communication-tags">
         <el-button :type="!selected ? 'primary' : 'default'" @click="selectCategory('')"
           >全部通信问题</el-button
@@ -244,9 +319,14 @@ onMounted(async () => {
     </section>
     <section class="communication-panel">
       <h2>近期通信问题证据{{ selected ? ' · ' + label(selected) : '' }}</h2>
-      <p v-if="evidenceLoading" class="communication-evidence-status">正在更新当前分类的反馈证据…</p>
+      <p v-if="evidenceLoading" class="communication-evidence-status">
+        正在更新当前分类的反馈证据…
+      </p>
       <el-alert v-if="evidenceError" type="error" :title="evidenceError" :closable="false" />
-      <el-empty v-else-if="!evidenceLoading && !evidence.length" description="当前范围暂无通信问题证据" />
+      <el-empty
+        v-else-if="!evidenceLoading && !evidence.length"
+        description="当前范围暂无通信问题证据"
+      />
       <div v-for="(item, index) in evidence" :key="index" class="communication-evidence">
         <div>
           <strong>{{ item.analysis__content__product__name }} · {{ label(item.topic_code) }}</strong
@@ -266,10 +346,29 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.communication-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.communication-link { border: 0; background: none; padding: 0; color: #35b9f0; font: inherit; font-size: 22px; font-weight: 700; cursor: pointer; text-align: left; }
-.communication-link:hover { text-decoration: underline; }
-.communication-evidence-status { color: #96adc6; }
+.communication-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.communication-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #35b9f0;
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+.communication-link:hover {
+  text-decoration: underline;
+}
+.communication-evidence-status {
+  color: #96adc6;
+}
 .communication-dashboard {
   color: #edf5ff;
   display: grid;

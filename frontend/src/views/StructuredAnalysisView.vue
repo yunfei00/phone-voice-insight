@@ -45,7 +45,9 @@ async function startReclassification() {
   reclassStarting.value = true
   try {
     const result = await startHistoricalReclassification(reclassChunkSize.value)
-    ElMessage.success(result.complete ? '历史有效语料均已尝试重新分类' : '历史重新分类已提交后台执行')
+    ElMessage.success(
+      result.complete ? '历史有效语料均已尝试重新分类' : '历史重新分类已提交后台执行',
+    )
     await refreshReclassification()
   } catch {
     ElMessage.error('启动失败，请检查是否已有分析任务执行或 AI 模型配置')
@@ -535,20 +537,44 @@ onUnmounted(() => {
     </el-card>
     <el-card shadow="never">
       <template #header><strong>历史数据重新分类（全部产品）</strong></template>
-      <p>按最新结构化标签重新分析历史有效语料。每批完成后自动进入下一批，已尝试的记录不会重复提交。</p>
+      <p>
+        按最新结构化标签重新分析历史有效语料。每批完成后自动进入下一批，已尝试的记录不会重复提交。
+      </p>
       <div class="filters">
         <span>每批处理数量</span>
         <el-input-number v-model="reclassChunkSize" :min="1" :max="500" :step="10" />
-        <el-button type="primary" :loading="reclassStarting" :disabled="!!reclassStatus?.active_batch_id" @click="startReclassification">启动 / 继续重新分类</el-button>
+        <el-button
+          type="primary"
+          :loading="reclassStarting"
+          :disabled="!!reclassStatus?.active_batch_id"
+          @click="startReclassification"
+          >启动 / 继续重新分类</el-button
+        >
         <el-button @click="refreshReclassification">刷新进度</el-button>
       </div>
       <el-alert v-if="reclassError" type="warning" :title="reclassError" :closable="false" />
       <template v-if="reclassStatus">
-        <el-progress :percentage="reclassStatus.total ? Math.round(reclassStatus.attempted / reclassStatus.total * 100) : 100" />
-        <p>有效语料 {{ reclassStatus.total }} · 已尝试 {{ reclassStatus.attempted }} · 剩余 {{ reclassStatus.remaining }}</p>
-        <p>成功批次 {{ reclassStatus.successful_batches }} · 失败/部分失败批次 {{ reclassStatus.failed_batches }}</p>
-        <p v-if="reclassStatus.active_batch_id">正在处理批次 #{{ reclassStatus.active_batch_id }}</p>
-        <p v-if="reclassStatus.latest_batch?.error_message">最近错误：{{ reclassStatus.latest_batch.error_message }}</p>
+        <el-progress
+          :percentage="
+            reclassStatus.total
+              ? Math.round((reclassStatus.attempted / reclassStatus.total) * 100)
+              : 100
+          "
+        />
+        <p>
+          有效语料 {{ reclassStatus.total }} · 已尝试 {{ reclassStatus.attempted }} · 剩余
+          {{ reclassStatus.remaining }}
+        </p>
+        <p>
+          成功批次 {{ reclassStatus.successful_batches }} · 失败/部分失败批次
+          {{ reclassStatus.failed_batches }}
+        </p>
+        <p v-if="reclassStatus.active_batch_id">
+          正在处理批次 #{{ reclassStatus.active_batch_id }}
+        </p>
+        <p v-if="reclassStatus.latest_batch?.error_message">
+          最近错误：{{ reclassStatus.latest_batch.error_message }}
+        </p>
       </template>
     </el-card>
     <el-alert

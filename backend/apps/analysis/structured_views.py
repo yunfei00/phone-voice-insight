@@ -76,19 +76,21 @@ class StructuredBatchViewSet(ViewSet):
         active = batches.filter(status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING)).first()
         total = corpus.count()
         attempted_count = corpus.filter(pk__in=attempted).count()
-        return Response({
-            "total": total,
-            "attempted": attempted_count,
-            "remaining": max(total - attempted_count, 0),
-            "successful_batches": batches.filter(status=AnalysisBatchStatus.SUCCESS).count(),
-            "failed_batches": batches.filter(
-                status__in=(AnalysisBatchStatus.FAILED, AnalysisBatchStatus.PARTIAL)
-            ).count(),
-            "active_batch_id": active.id if active else None,
-            "latest_batch": (
-                StructuredBatchSerializer(batches.order_by("-id").first()).data if batches.exists() else None
-            ),
-        })
+        return Response(
+            {
+                "total": total,
+                "attempted": attempted_count,
+                "remaining": max(total - attempted_count, 0),
+                "successful_batches": batches.filter(status=AnalysisBatchStatus.SUCCESS).count(),
+                "failed_batches": batches.filter(
+                    status__in=(AnalysisBatchStatus.FAILED, AnalysisBatchStatus.PARTIAL)
+                ).count(),
+                "active_batch_id": active.id if active else None,
+                "latest_batch": (
+                    StructuredBatchSerializer(batches.order_by("-id").first()).data if batches.exists() else None
+                ),
+            }
+        )
 
     @action(detail=False, methods=("post",), url_path="reclassification-start")
     def reclassification_start(self, request: Request) -> Response:

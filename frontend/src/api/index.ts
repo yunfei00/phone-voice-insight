@@ -1041,10 +1041,20 @@ export interface CommunicationDashboardData {
     sentiment: string
   }>
 }
-export const getCommunicationDashboard = async (productId?: number, topic?: string, startDate?: string, endDate?: string): Promise<CommunicationDashboardData> =>
+export const getCommunicationDashboard = async (
+  productId?: number,
+  topic?: string,
+  startDate?: string,
+  endDate?: string,
+): Promise<CommunicationDashboardData> =>
   (
     await apiClient.get<CommunicationDashboardData>('/structured-analyses/communication/', {
-      params: { ...(productId ? { product: productId } : {}), ...(topic ? { topic } : {}), ...(startDate ? { start_date: startDate } : {}), ...(endDate ? { end_date: endDate } : {}) },
+      params: {
+        ...(productId ? { product: productId } : {}),
+        ...(topic ? { topic } : {}),
+        ...(startDate ? { start_date: startDate } : {}),
+        ...(endDate ? { end_date: endDate } : {}),
+      },
       timeout: 60_000,
     })
   ).data
@@ -1059,8 +1069,16 @@ export interface HistoricalReclassificationStatus {
   latest_batch: StructuredBatch | null
 }
 export async function getHistoricalReclassificationStatus(): Promise<HistoricalReclassificationStatus> {
-  return (await apiClient.get<HistoricalReclassificationStatus>('/structured-batches/reclassification-status/')).data
+  return (
+    await apiClient.get<HistoricalReclassificationStatus>(
+      '/structured-batches/reclassification-status/',
+    )
+  ).data
 }
-export async function startHistoricalReclassification(chunkSize = 100): Promise<{ queued: boolean | number; complete?: boolean }> {
-  return (await apiClient.post('/structured-batches/reclassification-start/', { chunk_size: chunkSize })).data
+export async function startHistoricalReclassification(
+  chunkSize = 100,
+): Promise<{ queued: boolean | number; complete?: boolean }> {
+  return (
+    await apiClient.post('/structured-batches/reclassification-start/', { chunk_size: chunkSize })
+  ).data
 }
