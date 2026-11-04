@@ -1,6 +1,5 @@
-from typing import Any
-
 from datetime import date
+from typing import Any
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
