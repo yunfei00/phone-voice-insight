@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from argparse import ArgumentParser
+
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
@@ -13,13 +17,13 @@ from apps.reviews.services.final_corpus import final_corpus_reviews
 class Command(BaseCommand):
     help = "Start historical reclassification; automatically continues one bounded batch at a time."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument("--user-id", type=int, required=True)
         parser.add_argument("--chunk-size", type=int, default=100)
         parser.add_argument("--execute", action="store_true")
         parser.add_argument("--dry-run", action="store_true")
 
-    def handle(self, *_args, **options):
+    def handle(self, *_args: Any, **options: Any) -> None:
         if options["execute"] == options["dry_run"]:
             raise CommandError("Specify exactly one of --execute or --dry-run")
         chunk_size = options["chunk_size"]
