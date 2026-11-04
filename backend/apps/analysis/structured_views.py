@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any, cast
 
 from ai.taxonomy import load_taxonomy
@@ -722,6 +722,19 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
                 analyses = analyses.filter(content__product_id=int(product))
             except (TypeError, ValueError):
                 return Response({"error_code": "INVALID_PRODUCT"}, status=400)
+        start_raw = request.query_params.get("start_date")
+        end_raw = request.query_params.get("end_date")
+        try:
+            start_date = date.fromisoformat(start_raw) if start_raw else None
+            end_date = date.fromisoformat(end_raw) if end_raw else None
+        except ValueError:
+            return Response({"error_code": "INVALID_DATE_RANGE"}, status=400)
+        if start_date and end_date and start_date > end_date:
+            return Response({"error_code": "INVALID_DATE_RANGE"}, status=400)
+        if start_date:
+            analyses = analyses.filter(content__published_at__date__gte=start_date)
+        if end_date:
+            analyses = analyses.filter(content__published_at__date__lte=end_date)
         aspects = OpinionAspect.objects.filter(analysis__in=analyses, aspect_code="NET")
         total = aspects.values("analysis__content_id").distinct().count()
         negatives = aspects.filter(sentiment="NEGATIVE")
