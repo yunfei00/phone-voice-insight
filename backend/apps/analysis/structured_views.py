@@ -68,7 +68,7 @@ class StructuredBatchViewSet(ViewSet):
     permission_classes = (IsAnalystOrAdministrator,)
 
     @action(detail=False, methods=("get",), url_path="reclassification-status")
-    def reclassification_status(self, request: Request) -> Response:
+    def reclassification_status(self, _request: Request) -> Response:
         """Report campaign progress over the current eligible corpus."""
         corpus = final_corpus_reviews()
         attempted = AnalysisRun.objects.filter(batch__corpus_version="structured-reclass-v2").values("content_id")
@@ -81,9 +81,13 @@ class StructuredBatchViewSet(ViewSet):
             "attempted": attempted_count,
             "remaining": max(total - attempted_count, 0),
             "successful_batches": batches.filter(status=AnalysisBatchStatus.SUCCESS).count(),
-            "failed_batches": batches.filter(status__in=(AnalysisBatchStatus.FAILED, AnalysisBatchStatus.PARTIAL)).count(),
+            "failed_batches": batches.filter(
+                status__in=(AnalysisBatchStatus.FAILED, AnalysisBatchStatus.PARTIAL)
+            ).count(),
             "active_batch_id": active.id if active else None,
-            "latest_batch": StructuredBatchSerializer(batches.order_by("-id").first()).data if batches.exists() else None,
+            "latest_batch": (
+                StructuredBatchSerializer(batches.order_by("-id").first()).data if batches.exists() else None
+            ),
         })
 
     @action(detail=False, methods=("post",), url_path="reclassification-start")
