@@ -80,7 +80,8 @@ class StructuredBatchViewSet(ViewSet):
             "total": total,
             "attempted": attempted_count,
             "remaining": max(total - attempted_count, 0),
-            "successful": batches.aggregate(total=Count("id", filter=Q(status=AnalysisBatchStatus.SUCCESS)))["total"],
+            "successful_batches": batches.filter(status=AnalysisBatchStatus.SUCCESS).count(),
+            "failed_batches": batches.filter(status__in=(AnalysisBatchStatus.FAILED, AnalysisBatchStatus.PARTIAL)).count(),
             "active_batch_id": active.id if active else None,
             "latest_batch": StructuredBatchSerializer(batches.order_by("-id").first()).data if batches.exists() else None,
         })
