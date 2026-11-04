@@ -8,6 +8,34 @@ const loading = ref(false)
 const error = ref('')
 const data = ref<Awaited<ReturnType<typeof getCommunicationDashboard>> | null>(null)
 const selected = ref('')
+const evidenceLoading = ref(false)
+const evidenceError = ref('')
+type EvidenceItem = Awaited<ReturnType<typeof getCommunicationDashboard>>['evidence'][number]
+const evidenceItems = ref<EvidenceItem[]>([])
+let evidenceVersion = 0
+async function loadEvidence() {
+  const version = ++evidenceVersion
+  evidenceLoading.value = true
+  evidenceError.value = ''
+  try {
+    const result = await getCommunicationDashboard(productId.value, selected.value)
+    if (version === evidenceVersion) evidenceItems.value = result.evidence
+  } catch (reason) {
+    if (version === evidenceVersion) {
+      evidenceError.value = reason instanceof Error ? reason.message : '通信问题证据加载失败'
+      evidenceItems.value = []
+    }
+  } finally {
+    if (version === evidenceVersion) evidenceLoading.value = false
+  }
+}
+function onChartClick(params: unknown) {
+  const index = (params as { dataIndex?: number })?.dataIndex
+  if (typeof index === 'number' && categories.value[index]) {
+    selectCategory(categories.value[index].topic_code)
+  }
+}
+
 const storageKey = 'phone-voice.communication.product'
 const productId = ref<number | undefined>()
 const products = ref<Array<{ id: number; name: string }>>([])
@@ -15,7 +43,7 @@ const evidencePanel = ref<HTMLElement | null>(null)
 let requestVersion = 0
 function selectCategory(code: string) {
   selected.value = code
-  void load()
+  void loadEvidence()
   void nextTick(() => evidencePanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
 }
 async function changeProduct(value: number | undefined) {
@@ -47,11 +75,7 @@ const names: Record<string, string> = {
 }
 const label = (code: string) => names[code] || code
 const categories = computed(() => data.value?.categories ?? [])
-const evidence = computed(() =>
-  (data.value?.evidence ?? []).filter(
-    (item) => !selected.value || item.topic_code === selected.value,
-  ),
-)
+const evidence = computed(() => evidenceItems.value)
 const chart = computed<EChartsOption>(() => ({
   tooltip: { trigger: 'axis' },
   grid: { left: 115, right: 32, top: 20, bottom: 30 },
@@ -76,12 +100,22 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await getCommunicationDashboard(productId.value, selected.value)
-    if (version === requestVersion) data.value = response
+    const response = await getCommunicationDashboard(productId.value)
+    if (version === requestVersion) {
+      data.value = response
+      if (!selected.value) {
+        ++evidenceVersion
+        evidenceItems.value = response.evidence
+        evidenceLoading.value = false
+      } else {
+        void loadEvidence()
+      }
+    }
   } catch (reason) {
     if (version === requestVersion) {
       error.value = reason instanceof Error ? reason.message : '通信数据加载失败'
       data.value = null
+      evidenceItems.value = []
     }
   } finally {
     if (version === requestVersion) loading.value = false
@@ -152,9 +186,9 @@ onMounted(async () => {
     <section class="communication-panel">
       <h2>全量通信 TOP 问题子类</h2>
       <p>按独立原始反馈去重统计，非分页抽样</p>
-      <TechChart :option="chart" :loading="loading" :empty="!categories.length" />
+      <TechChart :option="chart" :loading="loading" :empty="!categories.length" @chart-click="onChartClick" />
       <div class="communication-tags">
-        <el-button :type="!selected ? 'primary' : 'default'" @click="selected = ''"
+        <el-button :type="!selected ? 'primary' : 'default'" @click="selectCategory('')"
           >全部通信问题</el-button
         >
         <el-button
@@ -166,9 +200,10 @@ onMounted(async () => {
         >
       </div>
     </section>
-    <section ref="evidencePanel" class="communication-panel">
+    <section ref="evidencePanel" v-loading="evidenceLoading" class="communication-panel">
       <h2>近期通信问题证据{{ selected ? ' · ' + label(selected) : '' }}</h2>
-      <el-empty v-if="!evidence.length" description="当前范围暂无通信问题证据" />
+      <el-alert v-if="evidenceError" type="error" :title="evidenceError" :closable="false" />
+      <el-empty v-else-if="!evidenceLoading && !evidence.length" description="当前范围暂无通信问题证据" />
       <div v-for="(item, index) in evidence" :key="index" class="communication-evidence">
         <div>
           <strong>{{ item.analysis__content__product__name }} · {{ label(item.topic_code) }}</strong
