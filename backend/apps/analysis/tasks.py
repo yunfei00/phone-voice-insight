@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
 from apps.accounts.ai_service import get_user_ai_provider
@@ -263,7 +264,7 @@ def recover_stale_structured_batches() -> int:
     """Mark orphaned batches interrupted; the next dispatch resumes pending corpus."""
     from datetime import timedelta
 
-    cutoff = timezone.now() - timedelta(hours=2)
+    cutoff = timezone.now() - timedelta(seconds=60 * 60 + int(getattr(settings, "CELERY_TASK_TIME_LIMIT", 7200)))
     stale = AnalysisBatch.objects.filter(
         prompt_version="structured_analysis_v1",
         status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
