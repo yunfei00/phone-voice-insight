@@ -80,7 +80,7 @@ class AssistantOrchestrator:
             history = self._history()
             date_context, date_filters = _time_context(question)
             planning_messages = [
-                {"role": "system", "content": SYSTEM_PROMPT + "\\n" + date_context},
+                {"role": "system", "content": SYSTEM_PROMPT + "\n" + date_context},
                 *history,
                 {"role": "user", "content": question},
             ]
