@@ -38,7 +38,11 @@ from apps.analysis.structured_serializers import (
     StructuredBatchCreateSerializer,
     StructuredBatchSerializer,
 )
-from apps.analysis.tasks import dispatch_pending_structured_reviews, run_structured_analysis_batch_task
+from apps.analysis.tasks import (
+    continue_historical_reclassification,
+    dispatch_pending_structured_reviews,
+    run_structured_analysis_batch_task,
+)
 from apps.products.models import Product
 from apps.reviews.models import ReviewRecord
 from apps.reviews.services.final_corpus import final_corpus_reviews
@@ -62,6 +66,42 @@ class StructuredRunViewSet(ReadOnlyModelViewSet):
 
 class StructuredBatchViewSet(ViewSet):
     permission_classes = (IsAnalystOrAdministrator,)
+
+    @action(detail=False, methods=("get",), url_path="reclassification-status")
+    def reclassification_status(self, request: Request) -> Response:
+        """Report campaign progress over the current eligible corpus."""
+        corpus = final_corpus_reviews()
+        attempted = AnalysisRun.objects.filter(batch__corpus_version="structured-reclass-v2").values("content_id")
+        batches = AnalysisBatch.objects.filter(corpus_version="structured-reclass-v2")
+        active = batches.filter(status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING)).first()
+        total = corpus.count()
+        attempted_count = corpus.filter(pk__in=attempted).count()
+        return Response({
+            "total": total,
+            "attempted": attempted_count,
+            "remaining": max(total - attempted_count, 0),
+            "successful": batches.aggregate(total=Count("id", filter=Q(status=AnalysisBatchStatus.SUCCESS)))["total"],
+            "active_batch_id": active.id if active else None,
+            "latest_batch": StructuredBatchSerializer(batches.order_by("-id").first()).data if batches.exists() else None,
+        })
+
+    @action(detail=False, methods=("post",), url_path="reclassification-start")
+    def reclassification_start(self, request: Request) -> Response:
+        """Start or resume a bounded background campaign; never run the model in the HTTP request."""
+        raw_chunk = request.data.get("chunk_size", 100)
+        if type(raw_chunk) is not int or not 1 <= raw_chunk <= 500:
+            return Response({"error_code": "INVALID_CHUNK_SIZE"}, status=400)
+        active = AnalysisBatch.objects.filter(
+            prompt_version="structured_analysis_v1",
+            status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
+        ).first()
+        if active:
+            return Response({"error_code": "ANALYSIS_ALREADY_RUNNING", "active_batch_id": active.id}, status=409)
+        attempted = AnalysisRun.objects.filter(batch__corpus_version="structured-reclass-v2").values("content_id")
+        if not final_corpus_reviews().exclude(pk__in=attempted).exists():
+            return Response({"queued": 0, "complete": True})
+        task = continue_historical_reclassification.delay(request.user.pk, raw_chunk)
+        return Response({"queued": True, "celery_task_id": task.id}, status=202)
 
     @action(detail=False, methods=("get",), url_path="manual-queue")
     def manual_queue(self, request: Request) -> Response:
