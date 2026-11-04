@@ -443,7 +443,9 @@
           "parent_id": "NET",
           "name": "电梯场景",
           "description": "电梯内弱信号、无服务、断网和出电梯后的恢复。",
-          "positive_examples": [],
+          "positive_examples": [
+            "一进电梯就没有信号，出电梯才恢复"
+          ],
           "negative_examples": [
             "电梯里没有信号"
           ],
@@ -456,7 +458,9 @@
           "parent_id": "NET",
           "name": "地下停车场",
           "description": "地下车库、地下室的覆盖与网络恢复。",
-          "positive_examples": [],
+          "positive_examples": [
+            "地下停车场经常没有网络"
+          ],
           "negative_examples": [
             "地下车库无法上网"
           ],
@@ -469,7 +473,9 @@
           "parent_id": "NET",
           "name": "地铁隧道",
           "description": "地铁、隧道、高铁等移动场景的覆盖和切换。",
-          "positive_examples": [],
+          "positive_examples": [
+            "坐地铁经过隧道时信号中断"
+          ],
           "negative_examples": [
             "坐地铁经常断流"
           ],
@@ -482,7 +488,9 @@
           "parent_id": "NET",
           "name": "弱信号与无服务",
           "description": "蜂窝信号弱、无服务、搜网慢。",
-          "positive_examples": [],
+          "positive_examples": [
+            "室内只有一格信号"
+          ],
           "negative_examples": [
             "室内只有一格信号"
           ],
@@ -495,7 +503,9 @@
           "parent_id": "NET",
           "name": "移动数据断流",
           "description": "4G/5G 有信号但无法联网、数据卡顿、恢复慢。",
-          "positive_examples": [],
+          "positive_examples": [
+            "显示5G满格但网页一直打不开"
+          ],
           "negative_examples": [
             "满格信号却上不了网"
           ],
@@ -508,7 +518,9 @@
           "parent_id": "NET",
           "name": "网络切换",
           "description": "4G/5G、基站、小区、Wi-Fi与蜂窝切换异常。",
-          "positive_examples": [],
+          "positive_examples": [
+            "从5G切到4G时网络会断开"
+          ],
           "negative_examples": [
             "切换5G后断网"
           ],
@@ -521,7 +533,9 @@
           "parent_id": "NET",
           "name": "导航体验",
           "description": "导航偏航、定位漂移、隧道定位恢复和导航延迟。",
-          "positive_examples": [],
+          "positive_examples": [
+            "导航时定位漂移导致路线错误"
+          ],
           "negative_examples": [
             "导航一直漂移"
           ],
@@ -534,7 +548,9 @@
           "parent_id": "NET",
           "name": "掉话与呼叫失败",
           "description": "拨号失败、接通慢、通话中断。",
-          "positive_examples": [],
+          "positive_examples": [
+            "通话几分钟就自动掉线"
+          ],
           "negative_examples": [
             "通话中途断线"
           ],
@@ -547,7 +563,9 @@
           "parent_id": "NET",
           "name": "VoLTE与VoWiFi",
           "description": "高清语音、Wi-Fi通话、通话时数据连接异常。",
-          "positive_examples": [],
+          "positive_examples": [
+            "开启VoLTE后通话时无法上网"
+          ],
           "negative_examples": [
             "打电话时网络断了"
           ],
@@ -560,7 +578,9 @@
           "parent_id": "NET",
           "name": "Wi-Fi连接",
           "description": "Wi-Fi搜网、连接、掉线、吞吐及漫游。",
-          "positive_examples": [],
+          "positive_examples": [
+            "连接Wi-Fi后频繁掉线"
+          ],
           "negative_examples": [
             "Wi-Fi频繁断开"
           ],
@@ -573,7 +593,9 @@
           "parent_id": "NET",
           "name": "蓝牙连接",
           "description": "蓝牙配对、断连和连接稳定性。",
-          "positive_examples": [],
+          "positive_examples": [
+            "蓝牙耳机连接经常断开"
+          ],
           "negative_examples": [
             "蓝牙耳机反复断连"
           ],
@@ -586,7 +608,9 @@
           "parent_id": "NET",
           "name": "双卡与运营商",
           "description": "双卡切换、运营商适配、SIM识别和数据卡选择。",
-          "positive_examples": [],
+          "positive_examples": [
+            "双卡切换数据卡后无法联网"
+          ],
           "negative_examples": [
             "双卡切换后无网络"
           ],
