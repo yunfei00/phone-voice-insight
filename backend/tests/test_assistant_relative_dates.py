@@ -9,7 +9,7 @@ from apps.assistant.orchestrator import _time_context
 class RelativeDateTests(SimpleTestCase):
     @patch("apps.assistant.orchestrator.timezone.localdate", return_value=date(2026, 11, 4))
     def test_recent_thirty_days(self, _localdate):
-        prompt, filters = _time_context("最近30天导航相关的有哪些问题？")
+        prompt, filters = _time_context("最近30天导航相关的有哪些问题?")
         self.assertEqual(filters, {"start_date": "2026-10-06", "end_date": "2026-11-04"})
         self.assertIn("2026-11-04", prompt)
 
