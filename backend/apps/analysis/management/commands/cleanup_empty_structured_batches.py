@@ -1,10 +1,8 @@
 """Safely preview/purge empty structured task shells, never analysis results."""
-from datetime import datetime
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Exists, OuterRef
-from django.utils import timezone
 
 from apps.analysis.models import AnalysisBatch, AnalysisRun, AnalysisResult
 
@@ -40,7 +38,13 @@ class Command(BaseCommand):
             .filter(has_run=False, has_result=False)
         )
         count = queryset.count()
-        self.stdout.write(f"EMPTY_BATCHES={count} RANGE={lower}..{upper}")
+        total = AnalysisBatch.objects.filter(
+            pk__gte=lower, pk__lte=upper, prompt_version="structured_analysis_v1"
+        ).count()
+        self.stdout.write(
+            f"RANGE={lower}..{upper} TOTAL_STRUCTURED_BATCHES={total} "
+            f"SAFE_EMPTY_BATCHES={count} PRESERVED_BATCHES={total - count}"
+        )
         if not options["apply"]:
             self.stdout.write("DRY_RUN: no data changed; inspect range before --apply.")
             return
