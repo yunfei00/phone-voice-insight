@@ -533,7 +533,8 @@ def generate_report(
         "disclaimer": data["disclaimer"],
     }
     report_name = "每日摘要" if report_type == ReportType.DAILY else "最近 7 日趋势"
-    title = f"{product.name if product else '全部产品'} · {report_name} · {timezone.localtime(end - timedelta(microseconds=1)).date():%Y-%m-%d}"
+    report_date = timezone.localtime(end - timedelta(microseconds=1)).date()
+    title = f"{product.name if product else '全部产品'} · {report_name} · {report_date:%Y-%m-%d}"
     with transaction.atomic():
         report, _ = AggregateReport.objects.update_or_create(
             product=product,
