@@ -1,6 +1,8 @@
 """Safely preview/purge empty structured task shells, never analysis results."""
 
-from django.core.management.base import BaseCommand, CommandError
+from typing import Any
+
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 
@@ -10,12 +12,12 @@ from apps.analysis.models import AnalysisBatch, AnalysisResult, AnalysisRun
 class Command(BaseCommand):
     help = "Preview or delete empty structured batches in an explicit ID range."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--min-id", type=int, required=True)
         parser.add_argument("--max-id", type=int, required=True)
         parser.add_argument("--apply", action="store_true")
 
-    def handle(self, *_args, **options):
+    def handle(self, *_args: Any, **options: Any) -> None:
         lower, upper = options["min_id"], options["max_id"]
         if lower <= 0 or upper < lower:
             raise CommandError("Specify a valid positive ID range.")
