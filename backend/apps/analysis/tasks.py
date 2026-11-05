@@ -161,10 +161,6 @@ def run_structured_analysis_batch_task(
             continue_historical_reclassification.delay(batch.created_by_id, batch.requested_count)
         except Exception:
             logger.exception("historical_reclassification_dispatch_failed batch_id=%s", batch.id)
-    try:
-        dispatch_pending_structured_reviews.delay(batch.created_by_id, batch.product_id)
-    except Exception:
-        logger.exception("structured_followup_dispatch_failed batch_id=%s", batch.id)
     return {"batch_id": batch.id, "status": batch.status, "success": batch.success_count, "failed": batch.failed_count}
 
 
@@ -181,6 +177,10 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
     from apps.analysis.models import AnalysisRun
     from apps.reviews.services.final_corpus import final_corpus_reviews
 
+    # Disabled by default: legacy periodic dispatch can create unlimited empty batches.
+    # Explicit user actions must opt in to this scheduler.
+    if not getattr(settings, "STRUCTURED_AUTO_DISPATCH_ENABLED", False):
+        return {"queued": 0, "disabled": True}
     lock_key = f"structured-dispatch:{user_id or 'auto'}:{product_id or 'all'}"
     if not cache.add(lock_key, "1", timeout=240):
         return {"queued": 0, "locked": 1}
@@ -320,15 +320,12 @@ def continue_historical_reclassification(user_id: int, chunk_size: int = 100) ->
         first = corpus.first()
         if first is None:
             return {"queued": 0, "complete": True}
-        ids = list(
-            corpus.filter(product_id=first.product_id, source_id=first.source_id).values_list("id", flat=True)[
-                :chunk_size
-            ]
-        )
+        # Fill the requested chunk across source groups; never silently shrink to five.
+        ids = list(corpus.values_list("id", flat=True)[:chunk_size])
         batch = AnalysisBatch.objects.create(
             created_by=owner,
-            product_id=first.product_id,
-            source_id=first.source_id,
+            product_id=None,
+            source_id=None,
             corpus_version="structured-reclass-v2",
             provider="USER_CONFIG",
             model_name="USER_CONFIG",
