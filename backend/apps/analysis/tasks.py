@@ -124,7 +124,7 @@ def run_structured_analysis_batch_task(
                 is_current=False,
                 error_code="SKIPPED_MANUAL_EXCLUDED",
                 error_message=(
-                    "人工治理已排除：本次未调用模型，"
+                    "人工治理已排除: 本次未调用模型, "
                     "请先解除排除再重试。"
                 ),
                 completed_at=timezone.now(),
