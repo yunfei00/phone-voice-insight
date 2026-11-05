@@ -111,6 +111,21 @@ def run_structured_analysis_batch_task(
             batch.status = AnalysisBatchStatus.BUDGET_EXCEEDED
             break
         if StructuredManualDisposition.objects.filter(content_id=content_id, status="EXCLUDED").exists():
+            # Record the skipped content in the batch failure-details view without
+            # changing any previous successful/current analysis for this content.
+            AnalysisRun.objects.create(
+                content_id=content_id,
+                batch=batch,
+                status=StructuredRunStatus.FAILED,
+                provider=batch.provider,
+                model=batch.model_name,
+                input_hash="",
+                configuration_hash="",
+                is_current=False,
+                error_code="SKIPPED_MANUAL_EXCLUDED",
+                error_message="人工治理已排除：本次未调用模型，请先解除排除再重试。",
+                completed_at=timezone.now(),
+            )
             batch.skipped_count += 1
             batch.save(update_fields=("skipped_count", "updated_at"))
             continue
