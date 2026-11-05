@@ -158,6 +158,14 @@ def run_structured_analysis_batch_task(
             )
     batch.finished_at = timezone.now()
     batch.save()
+    if batch.corpus_version == "structured-reclass-v2" and batch.status in (
+        AnalysisBatchStatus.SUCCESS, AnalysisBatchStatus.PARTIAL
+    ) and content_ids:
+        # Historical reclassification is a continuous campaign, unlike a manual batch.
+        # Cursor advances even when an item fails or is skipped: no repeat storm.
+        continue_historical_reclassification.delay(
+            batch.created_by_id, batch.requested_count, after_id=max(content_ids)
+        )
     return {"batch_id": batch.id, "status": batch.status, "success": batch.success_count, "failed": batch.failed_count}
 
 
@@ -289,7 +297,7 @@ def recover_stale_structured_batches() -> int:
 
 
 @shared_task(name="continue_historical_reclassification", max_retries=0)
-def continue_historical_reclassification(user_id: int, chunk_size: int = 100) -> dict[str, Any]:
+def continue_historical_reclassification(user_id: int, chunk_size: int = 100, after_id: int = 0) -> dict[str, Any]:
     """Schedule the next bounded chunk, excluding every record already attempted in this campaign.
 
     Per-item failures are recorded and excluded from this pass; later chunks continue.\n    Operators can explicitly retry failed items after the pass completes.
@@ -313,11 +321,11 @@ def continue_historical_reclassification(user_id: int, chunk_size: int = 100) ->
         if active.exists():
             return {"queued": 0, "active_batch": active.values_list("id", flat=True).first()}
         attempted = AnalysisRun.objects.filter(batch__corpus_version="structured-reclass-v2").values("content_id")
-        corpus = final_corpus_reviews().exclude(pk__in=attempted).order_by("id")
+        corpus = final_corpus_reviews().filter(pk__gt=after_id).exclude(pk__in=attempted).order_by("id")
         first = corpus.first()
         if first is None:
             return {"queued": 0, "complete": True}
-        # Explicitly requested one-shot batch; never auto-chain further batches.
+        # Continue historical reclassification only; ordinary manual batches remain one-shot.
         ids = list(corpus.values_list("id", flat=True)[:chunk_size])
         batch = AnalysisBatch.objects.create(
             created_by=owner,
