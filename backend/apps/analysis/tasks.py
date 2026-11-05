@@ -153,9 +153,11 @@ def run_structured_analysis_batch_task(
             )
     batch.finished_at = timezone.now()
     batch.save()
-    if batch.corpus_version == "structured-reclass-v2" and batch.status in (
-        AnalysisBatchStatus.SUCCESS,
-        AnalysisBatchStatus.PARTIAL,
+    if (
+        batch.corpus_version == "structured-reclass-v2"
+        and batch.status in (AnalysisBatchStatus.SUCCESS, AnalysisBatchStatus.PARTIAL)
+        and batch.success_count + batch.failed_count + batch.skipped_count == batch.requested_count
+        and batch.requested_count > 0
     ):
         try:
             continue_historical_reclassification.delay(batch.created_by_id, batch.requested_count)
