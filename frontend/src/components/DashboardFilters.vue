@@ -38,6 +38,7 @@ function inferPreset(start: string, end: string): string {
     const [expectedStart, expectedEnd] = dates(days)
     if (start === iso(expectedStart) && end === iso(expectedEnd)) return String(days)
   }
+  if (start === 'all') return 'all'
   return 'custom'
 }
 
@@ -49,6 +50,11 @@ function update(values: Partial<DashboardFilters>): void {
 
 function applyPreset(value: string): void {
   if (value === 'custom') return
+  if (value === 'all') {
+    dateRange.value = null
+    update({ start_date: 'all', end_date: '' })
+    return
+  }
   const [start, end] = dates(Number(value))
   dateRange.value = [start, end]
   update({ start_date: iso(start), end_date: iso(end) })
@@ -65,7 +71,10 @@ function applyCustomDates(): void {
 watch(
   () => [props.modelValue.start_date, props.modelValue.end_date],
   ([start, end]) => {
-    if (start && end) {
+    if (start === 'all') {
+      dateRange.value = null
+      preset.value = 'all'
+    } else if (start && end) {
       dateRange.value = [new Date(`${start}T00:00:00`), new Date(`${end}T00:00:00`)]
       preset.value = inferPreset(start, end)
       customStart.value = start
@@ -82,7 +91,7 @@ onMounted(async () => {
   ])
   products.value = productPage.results
   sources.value = sourcePage.results
-  if (!dateRange.value) applyPreset('30')
+  if (!dateRange.value && preset.value !== 'all') applyPreset('30')
 })
 </script>
 
@@ -106,6 +115,7 @@ onMounted(async () => {
       <el-option v-for="item in sources" :key="item.id" :label="item.name" :value="item.id" />
     </el-select>
     <el-select v-model="preset" class="range-select" @change="applyPreset">
+      <el-option label="全部时间" value="all" />
       <el-option label="最近 7 天" value="7" />
       <el-option label="最近 30 天" value="30" />
       <el-option label="最近 90 天" value="90" />

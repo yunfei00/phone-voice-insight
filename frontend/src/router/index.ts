@@ -29,6 +29,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '智能驾驶舱' },
       },
       {
+        path: 'communication-dashboard',
+        name: 'communication-dashboard',
+        component: () => import('@/views/CommunicationDashboardView.vue'),
+        meta: { title: '通信智能看板' },
+      },
+      {
         path: 'ai-assistant',
         name: 'ai-assistant',
         component: () => import('@/views/AIAssistantView.vue'),

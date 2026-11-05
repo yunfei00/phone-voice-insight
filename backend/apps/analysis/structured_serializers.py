@@ -77,6 +77,7 @@ class StructuredBatchCreateSerializer(serializers.Serializer):
     published_at_before = serializers.DateTimeField(required=False)
     max_items = serializers.IntegerField(min_value=1, max_value=1000, default=20)
     dry_run = serializers.BooleanField(default=True)
+    force_reclassify = serializers.BooleanField(default=False)
     max_concurrency = serializers.IntegerField(min_value=1, max_value=8, default=1)
     requests_per_minute = serializers.IntegerField(min_value=1, max_value=120, default=10)
     token_limit = serializers.IntegerField(min_value=1, required=False)

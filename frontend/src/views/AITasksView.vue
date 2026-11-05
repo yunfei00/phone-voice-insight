@@ -3,11 +3,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   cancelStructuredBatch,
+  deleteStructuredBatch,
   createStructuredBatch,
   getProducts,
   getSources,
   getStructuredBatches,
   getStructuredBatchFailures,
+  getStructuredBatchSkipped,
   getManualDispositions,
   setManualDisposition,
   cancelManualDisposition,
@@ -27,6 +29,7 @@ function originalPostUrl(value: string | undefined): string {
   }
 }
 const failureDialog = ref(false)
+const detailMode = ref<'failed' | 'skipped'>('failed')
 const failureLoading = ref(false)
 const failureRows = ref<StructuredFailure[]>([])
 const dispositions = ref<
@@ -68,6 +71,21 @@ const form = reactive({
   token_limit: 50000,
   cost_budget: 1,
 })
+function taskDescription(row: StructuredBatch): string {
+  const processed = row.success_count + row.failed_count + row.skipped_count
+  const remaining = Math.max(0, row.requested_count - processed)
+  const kind = row.corpus_version === 'structured-reclass-v2' ? '历史数据重新分类' : 'AI 结构化分析'
+  const parts = [
+    kind,
+    `成功 ${row.success_count} 条`,
+    `失败 ${row.failed_count} 条`,
+    `跳过 ${row.skipped_count} 条`,
+  ]
+  if (remaining) parts.push(`尚未处理 ${remaining} 条`)
+  if (row.skipped_count) parts.push('跳过可能来自人工排除或模型返回跳过状态')
+  if (row.error_message) parts.push(`异常信息：${row.error_message}`)
+  return parts.join('；')
+}
 function formatTaskTime(value: string | null | undefined): string {
   if (!value) return '—'
   const date = new Date(value)
@@ -85,8 +103,8 @@ function formatTaskTime(value: string | null | undefined): string {
   const get = (key: string) => parts.find((part) => part.type === key)?.value || ''
   return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
 }
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   error.value = ''
   try {
     const [b, p, s] = await Promise.all([
@@ -104,9 +122,24 @@ async function load() {
     products.value = p.results
     sources.value = s.results
   } catch {
-    error.value = '任务数据加载失败'
+    if (!silent) error.value = '任务数据加载失败'
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
+  }
+}
+async function refreshBatchRows() {
+  if (document.hidden || loading.value || submitting.value) return
+  try {
+    const result = await getStructuredBatches({
+      page: page.value,
+      page_size: pageSize.value,
+      product: form.product_id,
+      source: form.source_id,
+    })
+    batches.value = result.results
+    total.value = result.count
+  } catch {
+    // Keep the current table visible on transient polling failures.
   }
 }
 function onFilterChange() {
@@ -154,6 +187,25 @@ async function cancel(id: number) {
   ElMessage.success('已停止启动后续项目')
   await load()
 }
+async function deleteHistory(id: number) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除任务 #${id} 的历史记录吗？原始帖子及已有 AI 分析结果会保留，此操作不可撤销。`,
+      '删除历史任务',
+      { type: 'warning', confirmButtonText: '删除任务', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteStructuredBatch(id)
+    ElMessage.success('任务记录已删除，分析结果已保留')
+    if (batches.value.length === 1 && page.value > 1) page.value -= 1
+    await refreshBatchRows()
+  } catch {
+    ElMessage.error('删除失败：任务可能仍在运行，请先停止任务')
+  }
+}
 async function pause(id: number) {
   await pauseStructuredBatch(id)
   ElMessage.success('任务已暂停，不再启动新项目')
@@ -164,17 +216,23 @@ async function resume(id: number) {
   ElMessage.success('任务已恢复')
   await load()
 }
-async function showFailures(id: number) {
+async function showFailures(id: number, mode: 'failed' | 'skipped' = 'failed') {
+  detailMode.value = mode
   failureBatchId.value = id
   failureDialog.value = true
   failureLoading.value = true
   failureError.value = ''
   failureRows.value = []
   try {
-    const result = await getStructuredBatchFailures(id)
+    const result = await (mode === 'skipped'
+      ? getStructuredBatchSkipped(id)
+      : getStructuredBatchFailures(id))
     failureRows.value = result.results
     dispositions.value = await getManualDispositions(result.results.map((row) => row.content))
-    if (result.next) failureError.value = '失败记录超过 100 条，当前仅展示前 100 条。'
+    if (result.next) failureError.value = '明细超过 100 条，当前仅展示前 100 条。'
+    if (mode === 'skipped' && result.results.length === 0)
+      failureError.value =
+        '当前批次未保存逐条跳过明细。旧任务仅有跳过总数时，无法准确反推出帖子 ID。'
   } catch {
     failureError.value = '失败明细加载失败，请稍后重试。'
   } finally {
@@ -281,8 +339,8 @@ async function retry(id: number) {
 onMounted(() => {
   void load()
   refreshTimer = setInterval(() => {
-    if (!loading.value) void load()
-  }, 5000)
+    void refreshBatchRows()
+  }, 15000)
 })
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
@@ -367,6 +425,8 @@ onUnmounted(() => {
             row.requested_count
           }}</template
         ></el-table-column
+      ><el-table-column label="任务描述" min-width="350" show-overflow-tooltip>
+        <template #default="{ row }">{{ taskDescription(row) }}</template> </el-table-column
       ><el-table-column prop="retry_count" label="重试轮次" width="95" /><el-table-column
         prop="success_count"
         label="成功"
@@ -386,6 +446,12 @@ onUnmounted(() => {
             >恢复</el-button
           ><el-button v-if="row.failed_count" text type="primary" @click="showFailures(row.id)"
             >失败详情</el-button
+          ><el-button
+            v-if="row.skipped_count"
+            text
+            type="warning"
+            @click="showFailures(row.id, 'skipped')"
+            >跳过详情</el-button
           ><el-button v-if="row.failed_count" text type="warning" @click="retry(row.id)"
             >重试失败</el-button
           ><el-button
@@ -394,6 +460,12 @@ onUnmounted(() => {
             type="danger"
             @click="cancel(row.id)"
             >取消</el-button
+          ><el-button
+            v-if="row.status !== 'RUNNING'"
+            text
+            type="danger"
+            @click="deleteHistory(row.id)"
+            >删除</el-button
           ></template
         ></el-table-column
       ></el-table
@@ -409,7 +481,7 @@ onUnmounted(() => {
     />
     <el-dialog
       v-model="failureDialog"
-      :title="`批次 #${failureBatchId} · 失败帖子`"
+      :title="`批次 #${failureBatchId} · ${detailMode === 'skipped' ? '跳过帖子' : '失败帖子'}`"
       width="min(900px, 95%)"
     >
       <el-alert v-if="failureError" :title="failureError" type="warning" :closable="false" />

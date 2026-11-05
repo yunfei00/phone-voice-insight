@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any, cast
 
 from ai.taxonomy import load_taxonomy
@@ -38,7 +38,11 @@ from apps.analysis.structured_serializers import (
     StructuredBatchCreateSerializer,
     StructuredBatchSerializer,
 )
-from apps.analysis.tasks import dispatch_pending_structured_reviews, run_structured_analysis_batch_task
+from apps.analysis.tasks import (
+    continue_historical_reclassification,
+    dispatch_pending_structured_reviews,
+    run_structured_analysis_batch_task,
+)
 from apps.products.models import Product
 from apps.reviews.models import ReviewRecord
 from apps.reviews.services.final_corpus import final_corpus_reviews
@@ -57,11 +61,57 @@ class StructuredRunViewSet(ReadOnlyModelViewSet):
     ordering_fields = ("created_at", "completed_at", "latency_ms", "estimated_cost")
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
-        return AnalysisRun.objects.select_related("content", "structured_analysis")
+        queryset = AnalysisRun.objects.select_related("content", "structured_analysis")
+        if self.request.query_params.get("skipped_only") == "true":
+            return queryset.filter(error_code__startswith="SKIPPED_")
+        return queryset
 
 
 class StructuredBatchViewSet(ViewSet):
     permission_classes = (IsAnalystOrAdministrator,)
+
+    @action(detail=False, methods=("get",), url_path="reclassification-status")
+    def reclassification_status(self, _request: Request) -> Response:
+        """Report campaign progress over the current eligible corpus."""
+        corpus = final_corpus_reviews()
+        attempted = AnalysisRun.objects.filter(batch__corpus_version="structured-reclass-v2").values("content_id")
+        batches = AnalysisBatch.objects.filter(corpus_version="structured-reclass-v2")
+        active = batches.filter(status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING)).first()
+        total = corpus.count()
+        attempted_count = corpus.filter(pk__in=attempted).count()
+        return Response(
+            {
+                "total": total,
+                "attempted": attempted_count,
+                "remaining": max(total - attempted_count, 0),
+                "successful_batches": batches.filter(status=AnalysisBatchStatus.SUCCESS).count(),
+                "failed_batches": batches.filter(
+                    status__in=(AnalysisBatchStatus.FAILED, AnalysisBatchStatus.PARTIAL)
+                ).count(),
+                "active_batch_id": active.id if active else None,
+                "latest_batch": (
+                    StructuredBatchSerializer(batches.order_by("-id").first()).data if batches.exists() else None
+                ),
+            }
+        )
+
+    @action(detail=False, methods=("post",), url_path="reclassification-start")
+    def reclassification_start(self, request: Request) -> Response:
+        """Start or resume a bounded background campaign; never run the model in the HTTP request."""
+        raw_chunk = request.data.get("chunk_size", 100)
+        if type(raw_chunk) is not int or not 1 <= raw_chunk <= 500:
+            return Response({"error_code": "INVALID_CHUNK_SIZE"}, status=400)
+        active = AnalysisBatch.objects.filter(
+            prompt_version="structured_analysis_v1",
+            status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
+        ).first()
+        if active:
+            return Response({"error_code": "ANALYSIS_ALREADY_RUNNING", "active_batch_id": active.id}, status=409)
+        attempted = AnalysisRun.objects.filter(batch__corpus_version="structured-reclass-v2").values("content_id")
+        if not final_corpus_reviews().exclude(pk__in=attempted).exists():
+            return Response({"queued": 0, "complete": True})
+        task = continue_historical_reclassification.delay(request.user.pk, raw_chunk)
+        return Response({"queued": True, "celery_task_id": task.id}, status=202)
 
     @action(detail=False, methods=("get",), url_path="manual-queue")
     def manual_queue(self, request: Request) -> Response:
@@ -250,8 +300,10 @@ class StructuredBatchViewSet(ViewSet):
         return Response({"content_id": content_id, "status": item.status, "reason": item.reason})
 
     def list(self, request: Request) -> Response:
-        queryset = AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1", dry_run=False).select_related(
-            "product", "source"
+        queryset = (
+            AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1", dry_run=False)
+            .exclude(error_message__startswith="HISTORY_HIDDEN:")
+            .select_related("product", "source")
         )
         if product_id := request.query_params.get("product"):
             queryset = queryset.filter(product_id=int(product_id))
@@ -294,7 +346,13 @@ class StructuredBatchViewSet(ViewSet):
             status__in=(StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED),
             is_current=True,
         ).values("content_id")
-        queryset = queryset.exclude(id__in=completed_ids)
+        if not values.get("force_reclassify"):
+            queryset = queryset.exclude(id__in=completed_ids)
+        # Exclude manually blocked records before applying the requested limit.
+        # Otherwise a 30-item batch may start with five SKIPPED items.
+        queryset = queryset.exclude(
+            id__in=StructuredManualDisposition.objects.filter(status="EXCLUDED").values("content_id")
+        )
         content_ids = list(queryset.values_list("id", flat=True)[: values["max_items"]])
         first = queryset.first()
         if first is None:
@@ -347,7 +405,12 @@ class StructuredBatchViewSet(ViewSet):
         )
         celery_task_id = None
         if not values["dry_run"]:
-            result = run_structured_analysis_batch_task.delay(batch.id, content_ids, max_retries=values["max_retries"])
+            result = run_structured_analysis_batch_task.delay(
+                batch.id,
+                content_ids,
+                max_retries=values["max_retries"],
+                force_reclassify=values.get("force_reclassify", False),
+            )
             celery_task_id = result.id
         return Response(
             {
@@ -522,6 +585,29 @@ class StructuredBatchViewSet(ViewSet):
             return Response(result, status=status.HTTP_400_BAD_REQUEST)
         return Response(result, status=status.HTTP_202_ACCEPTED if result.get("batch_id") else status.HTTP_200_OK)
 
+    def destroy(self, _request: Request, pk: str | None = None) -> Response:
+        """Remove completed task history while preserving analysis runs and results."""
+        from django.db import transaction
+
+        assert pk is not None
+        with transaction.atomic():
+            batch = AnalysisBatch.objects.select_for_update().get(pk=pk)
+            if batch.status == AnalysisBatchStatus.RUNNING:
+                return Response({"error_code": "ACTIVE_BATCH_CANNOT_DELETE"}, status=409)
+            if batch.status in (AnalysisBatchStatus.PENDING, AnalysisBatchStatus.PAUSED):
+                batch.status = AnalysisBatchStatus.CANCELLED
+                batch.finished_at = timezone.now()
+                batch.save(update_fields=("status", "finished_at", "updated_at"))
+            if batch.corpus_version == "structured-reclass-v2":
+                # Preserve the batch-to-run link used by the reclassification
+                # progress query; hide only the task-center history row.
+                if not batch.error_message.startswith("HISTORY_HIDDEN:"):
+                    batch.error_message = "HISTORY_HIDDEN:" + batch.error_message
+                    batch.save(update_fields=("error_message", "updated_at"))
+            else:
+                batch.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=("post",))
     def cancel(self, _request: Request, pk: str | None = None) -> Response:
         assert pk is not None
@@ -607,9 +693,11 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
     ordering_fields = ("created_at", "updated_at")
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
-        queryset = StructuredAnalysis.objects.select_related(
-            "run", "content", "content__product", "content__source"
-        ).prefetch_related("aspects", "review_history__reviewer")
+        queryset = (
+            StructuredAnalysis.objects.select_related("run", "content", "content__product", "content__source")
+            .prefetch_related("aspects", "review_history__reviewer")
+            .filter(run__is_current=True)
+        )
         params = self.request.query_params
         if value := params.get("product"):
             queryset = queryset.filter(content__product_id=int(value))
@@ -657,6 +745,87 @@ class StructuredAnalysisViewSet(ReadOnlyModelViewSet):
             analysis.run.status = StructuredRunStatus.SUCCEEDED
             analysis.run.save(update_fields=("status", "updated_at"))
         return Response(StructuredAnalysisSerializer(self.get_object()).data)
+
+    @action(detail=False, methods=("get",), url_path="communication")
+    def communication(self, request: Request) -> Response:
+        """Full-corpus communication metrics, never sampled from a paginated UI response."""
+        analyses = StructuredAnalysis.objects.filter(
+            run__is_current=True,
+            run__status=StructuredRunStatus.SUCCEEDED,
+            schema_valid=True,
+            review_required=False,
+            content_id__in=final_corpus_reviews().values("pk"),
+        )
+        if product := request.query_params.get("product"):
+            try:
+                analyses = analyses.filter(content__product_id=int(product))
+            except (TypeError, ValueError):
+                return Response({"error_code": "INVALID_PRODUCT"}, status=400)
+        start_raw = request.query_params.get("start_date")
+        end_raw = request.query_params.get("end_date")
+        try:
+            start_date = date.fromisoformat(start_raw) if start_raw else None
+            end_date = date.fromisoformat(end_raw) if end_raw else None
+        except ValueError:
+            return Response({"error_code": "INVALID_DATE_RANGE"}, status=400)
+        if start_date and end_date and start_date > end_date:
+            return Response({"error_code": "INVALID_DATE_RANGE"}, status=400)
+        if start_date:
+            analyses = analyses.filter(content__published_at__date__gte=start_date)
+        if end_date:
+            analyses = analyses.filter(content__published_at__date__lte=end_date)
+        aspects = OpinionAspect.objects.filter(analysis__in=analyses, aspect_code="NET")
+        total = aspects.values("analysis__content_id").distinct().count()
+        negatives = aspects.filter(sentiment="NEGATIVE")
+        negative_total = negatives.values("analysis__content_id").distinct().count()
+        categories = list(
+            negatives.values("topic_code")
+            .annotate(count=Count("analysis__content_id", distinct=True))
+            .order_by("-count", "topic_code")
+        )
+        trend = list(
+            negatives.annotate(day=TruncDate("analysis__content__published_at"))
+            .exclude(day__isnull=True)
+            .values("day")
+            .annotate(count=Count("analysis__content_id", distinct=True))
+            .order_by("day")
+        )
+        products = list(
+            negatives.values("analysis__content__product__name")
+            .annotate(count=Count("analysis__content_id", distinct=True))
+            .order_by("-count")
+        )
+        raw_limit = request.query_params.get("limit", "30")
+        try:
+            limit = min(max(int(raw_limit), 1), 100)
+        except ValueError:
+            return Response({"error_code": "INVALID_LIMIT"}, status=400)
+        selected_topic = request.query_params.get("topic", "").strip()
+        evidence_query = negatives.filter(topic_code=selected_topic) if selected_topic else negatives
+        evidence = list(
+            evidence_query.select_related("analysis__content", "analysis__content__product")
+            .order_by("-analysis__content__published_at", "-id")
+            .values(
+                "analysis__content_id",
+                "analysis__content__product__name",
+                "analysis__content__source_url",
+                "topic_code",
+                "severity",
+                "evidence_text",
+                "sentiment",
+            )[:limit]
+        )
+        return Response(
+            {
+                "disclaimer": "论坛反馈占比不等于真实设备故障率。仅统计已审核通过的当前有效结构化分析",
+                "content_count": total,
+                "negative_content_count": negative_total,
+                "categories": categories,
+                "trend": trend,
+                "products": products,
+                "evidence": evidence,
+            }
+        )
 
     @action(detail=False, methods=("get",), url_path="quality")
     def quality(self, request: Request) -> Response:
