@@ -451,6 +451,7 @@ def test_ambiguous_posts_reject_invented_codes_and_offer_legal_retry(
 ) -> None:
     """Synthetic regression based on reported symptoms, not live forum contents."""
     from ai.taxonomy import load_taxonomy
+
     from apps.analysis.services.structured_engine import _taxonomy_retry_feedback
 
     feedback = _taxonomy_retry_feedback({"aspects": [{"topic_code": invented_code}]})
