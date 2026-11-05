@@ -153,16 +153,6 @@ def run_structured_analysis_batch_task(
             )
     batch.finished_at = timezone.now()
     batch.save()
-    if (
-        batch.corpus_version == "structured-reclass-v2"
-        and batch.status in (AnalysisBatchStatus.SUCCESS, AnalysisBatchStatus.PARTIAL)
-        and batch.success_count + batch.failed_count + batch.skipped_count == batch.requested_count
-        and batch.requested_count > 0
-    ):
-        try:
-            continue_historical_reclassification.delay(batch.created_by_id, batch.requested_count)
-        except Exception:
-            logger.exception("historical_reclassification_dispatch_failed batch_id=%s", batch.id)
     return {"batch_id": batch.id, "status": batch.status, "success": batch.success_count, "failed": batch.failed_count}
 
 
@@ -322,12 +312,12 @@ def continue_historical_reclassification(user_id: int, chunk_size: int = 100) ->
         first = corpus.first()
         if first is None:
             return {"queued": 0, "complete": True}
-        # Fill the requested chunk across source groups; never silently shrink to five.
+        # Explicitly requested one-shot batch; never auto-chain further batches.
         ids = list(corpus.values_list("id", flat=True)[:chunk_size])
         batch = AnalysisBatch.objects.create(
             created_by=owner,
-            product_id=None,
-            source_id=None,
+            product_id=first.product_id,
+            source_id=first.source_id,
             corpus_version="structured-reclass-v2",
             provider="USER_CONFIG",
             model_name="USER_CONFIG",
