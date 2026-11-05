@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 
-from apps.analysis.models import AnalysisBatch, AnalysisRun, AnalysisResult
+from apps.analysis.models import AnalysisBatch, AnalysisResult, AnalysisRun
 
 
 class Command(BaseCommand):
@@ -15,7 +15,7 @@ class Command(BaseCommand):
         parser.add_argument("--max-id", type=int, required=True)
         parser.add_argument("--apply", action="store_true")
 
-    def handle(self, *args, **options):
+    def handle(self, *_args, **options):
         lower, upper = options["min_id"], options["max_id"]
         if lower <= 0 or upper < lower:
             raise CommandError("Specify a valid positive ID range.")
