@@ -43,7 +43,11 @@ def taxonomy_labels() -> tuple[dict[str, str], dict[str, str]]:
 def parse_range(params: Mapping[str, Any]) -> tuple[datetime, datetime, date, date]:
     today = timezone.localdate()
     try:
-        start_day = date.fromisoformat(str(params.get("start_date") or today - timedelta(days=29)))
+        start_day = (
+            date(1970, 1, 1)
+            if params.get("start_date") == "all"
+            else date.fromisoformat(str(params.get("start_date") or today - timedelta(days=29)))
+        )
         end_day = date.fromisoformat(str(params.get("end_date") or today))
     except ValueError as exc:
         raise ValueError("日期格式必须为 YYYY-MM-DD") from exc
@@ -69,7 +73,9 @@ def filtered_reviews(params: Mapping[str, Any]) -> QuerySet[ReviewRecord]:
     start, end, _, _ = parse_range(params)
     queryset = ReviewRecord.objects.annotate(
         metric_time=Coalesce("published_at", "collected_at", output_field=DateTimeField())
-    ).filter(metric_time__gte=start, metric_time__lt=end)
+    )
+    if params.get("start_date") != "all":
+        queryset = queryset.filter(metric_time__gte=start, metric_time__lt=end)
     if product_id := _integer(params, "product_id"):
         queryset = queryset.filter(product_id=product_id)
     if source_id := _integer(params, "source_id"):
