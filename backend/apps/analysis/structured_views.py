@@ -300,7 +300,7 @@ class StructuredBatchViewSet(ViewSet):
         return Response({"content_id": content_id, "status": item.status, "reason": item.reason})
 
     def list(self, request: Request) -> Response:
-        queryset = AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1", dry_run=False).select_related(
+        queryset = AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1", dry_run=False).exclude(\n            error_message__startswith="HISTORY_HIDDEN:"\n        ).select_related(
             "product", "source"
         )
         if product_id := request.query_params.get("product"):
@@ -590,15 +590,20 @@ class StructuredBatchViewSet(ViewSet):
         assert pk is not None
         with transaction.atomic():
             batch = AnalysisBatch.objects.select_for_update().get(pk=pk)
-            if batch.status in (
-                AnalysisBatchStatus.PENDING,
-                AnalysisBatchStatus.RUNNING,
-                AnalysisBatchStatus.PAUSED,
-            ):
+            if batch.status == AnalysisBatchStatus.RUNNING:
                 return Response({"error_code": "ACTIVE_BATCH_CANNOT_DELETE"}, status=409)
+            if batch.status in (AnalysisBatchStatus.PENDING, AnalysisBatchStatus.PAUSED):
+                batch.status = AnalysisBatchStatus.CANCELLED
+                batch.finished_at = timezone.now()
+                batch.save(update_fields=("status", "finished_at", "updated_at"))
             if batch.corpus_version == "structured-reclass-v2":
-                return Response({"error_code": "RECLASSIFICATION_HISTORY_REQUIRED"}, status=409)
-            batch.delete()
+                # Preserve the batch-to-run link used by the reclassification
+                # progress query; hide only the task-center history row.
+                if not batch.error_message.startswith("HISTORY_HIDDEN:"):
+                    batch.error_message = "HISTORY_HIDDEN:" + batch.error_message
+                    batch.save(update_fields=("error_message", "updated_at"))
+            else:
+                batch.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=("post",))
