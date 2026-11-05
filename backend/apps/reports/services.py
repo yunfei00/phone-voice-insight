@@ -494,12 +494,16 @@ def issue_detail(issue_id: str, params: Mapping[str, Any]) -> dict[str, Any]:
 def generate_report(
     *, report_type: str, product: Product | None, source: DataSource | None, period_end: datetime | None = None
 ) -> AggregateReport:
-    end = period_end or timezone.now()
+    if period_end is None:
+        tomorrow = timezone.localdate() + timedelta(days=1)
+        end = timezone.make_aware(datetime.combine(tomorrow, time.min), timezone.get_current_timezone())
+    else:
+        end = period_end
     days = 1 if report_type == ReportType.DAILY else 7
     start = end - timedelta(days=days)
     params: dict[str, Any] = {
         "start_date": timezone.localtime(start).date(),
-        "end_date": timezone.localtime(end).date(),
+        "end_date": timezone.localtime(end - timedelta(microseconds=1)).date(),
     }
     if product:
         params["product_id"] = product.id
@@ -523,7 +527,7 @@ def generate_report(
         "disclaimer": data["disclaimer"],
     }
     report_name = "每日摘要" if report_type == ReportType.DAILY else "最近 7 日趋势"
-    title = f"{product.name if product else '全部产品'} · {report_name}"
+    title = f"{product.name if product else '全部产品'} · {report_name} · {timezone.localtime(end - timedelta(microseconds=1)).date():%Y-%m-%d}"
     with transaction.atomic():
         report, _ = AggregateReport.objects.update_or_create(
             product=product,
