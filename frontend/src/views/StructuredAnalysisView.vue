@@ -340,7 +340,7 @@ async function loadProgress(
   progressController?.abort()
   const controller = new AbortController()
   progressController = controller
-  progressLoading.value = true
+  if (!detectCompletion) progressLoading.value = true
   progressError.value = ''
   try {
     const result = await withBoundedRetry(
@@ -478,7 +478,7 @@ async function applyResultFilters(): Promise<void> {
 }
 
 function startRefreshTimers(): void {
-  progressTimer ||= setInterval(() => void pollProgress(), 5000)
+  progressTimer ||= setInterval(() => void pollProgress(), 15000)
   aggregateTimer ||= setInterval(() => void refreshAggregatesOnSchedule(), 60_000)
 }
 
