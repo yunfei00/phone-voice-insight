@@ -446,6 +446,16 @@ export const getStructuredBatchFailures = async (
     })
   ).data
 
+export const getStructuredBatchSkipped = async (
+  batchId: number,
+): Promise<PaginatedResponse<StructuredFailure>> =>
+  (
+    await apiClient.get<PaginatedResponse<StructuredFailure>>('/structured-runs/', {
+      params: { batch: batchId, skipped_only: 'true', page_size: 100 },
+      timeout: 30_000,
+    })
+  ).data
+
 export const getStructuredBatches = async (
   params: PageParams = {},
   options: StructuredRequestOptions = {},
