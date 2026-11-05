@@ -3,6 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   cancelStructuredBatch,
+  deleteStructuredBatch,
   createStructuredBatch,
   getProducts,
   getSources,
@@ -168,6 +169,25 @@ async function cancel(id: number) {
   await cancelStructuredBatch(id)
   ElMessage.success('已停止启动后续项目')
   await load()
+}
+async function deleteHistory(id: number) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除任务 #${id} 的历史记录吗？原始帖子及已有 AI 分析结果会保留，此操作不可撤销。`,
+      '删除历史任务',
+      { type: 'warning', confirmButtonText: '删除任务', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteStructuredBatch(id)
+    ElMessage.success('任务记录已删除，分析结果已保留')
+    if (batches.value.length === 1 && page.value > 1) page.value -= 1
+    await refreshBatchRows()
+  } catch {
+    ElMessage.error('删除失败：任务可能仍在运行或属于历史重新分类批次')
+  }
 }
 async function pause(id: number) {
   await pauseStructuredBatch(id)
@@ -409,6 +429,12 @@ onUnmounted(() => {
             type="danger"
             @click="cancel(row.id)"
             >取消</el-button
+          ><el-button
+            v-if="!['PENDING', 'RUNNING', 'PAUSED'].includes(row.status) && row.corpus_version !== 'structured-reclass-v2'"
+            text
+            type="danger"
+            @click="deleteHistory(row.id)"
+            >删除</el-button
           ></template
         ></el-table-column
       ></el-table
