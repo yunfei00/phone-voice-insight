@@ -85,8 +85,8 @@ function formatTaskTime(value: string | null | undefined): string {
   const get = (key: string) => parts.find((part) => part.type === key)?.value || ''
   return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
 }
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   error.value = ''
   try {
     const [b, p, s] = await Promise.all([
@@ -104,9 +104,24 @@ async function load() {
     products.value = p.results
     sources.value = s.results
   } catch {
-    error.value = '任务数据加载失败'
+    if (!silent) error.value = '任务数据加载失败'
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
+  }
+}
+async function refreshBatchRows() {
+  if (document.hidden || loading.value || submitting.value) return
+  try {
+    const result = await getStructuredBatches({
+      page: page.value,
+      page_size: pageSize.value,
+      product: form.product_id,
+      source: form.source_id,
+    })
+    batches.value = result.results
+    total.value = result.count
+  } catch {
+    // Keep the current table visible on transient polling failures.
   }
 }
 function onFilterChange() {
@@ -281,8 +296,8 @@ async function retry(id: number) {
 onMounted(() => {
   void load()
   refreshTimer = setInterval(() => {
-    if (!loading.value) void load()
-  }, 5000)
+    void refreshBatchRows()
+  }, 15000)
 })
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
