@@ -45,7 +45,7 @@ app.conf.beat_schedule = {
     },
     "generate-weekly-insight-reports": {
         "task": "generate_insight_reports",
-        "schedule": crontab(hour=1, minute=20, day_of_week="monday"),
+        "schedule": crontab(hour=1, minute=20),
         "args": ("WEEKLY",),
     },
     "reconcile-rag-index": {
