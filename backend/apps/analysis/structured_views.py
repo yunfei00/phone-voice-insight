@@ -343,6 +343,11 @@ class StructuredBatchViewSet(ViewSet):
         ).values("content_id")
         if not values.get("force_reclassify"):
             queryset = queryset.exclude(id__in=completed_ids)
+        # Exclude manually blocked records before applying the requested limit.
+        # Otherwise a 30-item batch may start with five SKIPPED items.
+        queryset = queryset.exclude(
+            id__in=StructuredManualDisposition.objects.filter(status="EXCLUDED").values("content_id")
+        )
         content_ids = list(queryset.values_list("id", flat=True)[: values["max_items"]])
         first = queryset.first()
         if first is None:
