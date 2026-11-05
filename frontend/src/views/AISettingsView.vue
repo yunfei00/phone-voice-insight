@@ -224,7 +224,9 @@ async function saveConfiguration(): Promise<boolean> {
     }
     return true
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存模型失败，请检查服务地址及后端日志')
+    ElMessage.error(
+      error instanceof Error ? error.message : '保存模型失败，请检查服务地址及后端日志',
+    )
     return false
   } finally {
     saving.value = false
@@ -246,8 +248,7 @@ async function fetchAvailableModels(): Promise<void> {
           ...(form.api_key ? { api_key: form.api_key } : {}),
         })
     ollamaModels.value = form.provider === 'ollama' ? availableModels.value : []
-    if (!availableModels.value.length)
-      ElMessage.warning('服务已连接，但没有返回模型；仍可手动输入')
+    if (!availableModels.value.length) ElMessage.warning('服务已连接，但没有返回模型；仍可手动输入')
     else ElMessage.success(`已获取 ${availableModels.value.length} 个模型，请选择后保存`)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '获取模型列表失败，请检查后端连接')

@@ -82,9 +82,9 @@ def run_structured_analysis_batch_task(
         )
         batch.failed_count = max(0, batch.failed_count - previous)
     # A queued task may be cancelled before the worker starts; never revive it.
-    started = AnalysisBatch.objects.filter(
-        pk=batch_id, status=AnalysisBatchStatus.PENDING
-    ).update(status=AnalysisBatchStatus.RUNNING, started_at=timezone.now())
+    started = AnalysisBatch.objects.filter(pk=batch_id, status=AnalysisBatchStatus.PENDING).update(
+        status=AnalysisBatchStatus.RUNNING, started_at=timezone.now()
+    )
     if not started:
         batch.refresh_from_db()
         return {"batch_id": batch_id, "status": batch.status, "cancelled_or_already_started": True}
@@ -123,10 +123,7 @@ def run_structured_analysis_batch_task(
                 configuration_hash="",
                 is_current=False,
                 error_code="SKIPPED_MANUAL_EXCLUDED",
-                error_message=(
-                    "人工治理已排除: 本次未调用模型, "
-                    "请先解除排除再重试。"
-                ),
+                error_message=("人工治理已排除: 本次未调用模型, 请先解除排除再重试。"),
                 completed_at=timezone.now(),
             )
             batch.skipped_count += 1
@@ -320,7 +317,7 @@ def recover_stale_structured_batches() -> int:
 def continue_historical_reclassification(user_id: int, chunk_size: int = 100, after_id: int = 0) -> dict[str, Any]:
     """Schedule the next bounded chunk, excluding every record already attempted in this campaign.
 
-    Per-item failures are recorded and excluded from this pass; later chunks continue.\n 
+    Per-item failures are recorded and excluded from this pass; later chunks continue.\n
     Operators can explicitly retry failed items after the pass completes.
     """
     from django.db import transaction

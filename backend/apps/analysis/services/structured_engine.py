@@ -59,13 +59,15 @@ def _taxonomy_retry_feedback(payload: dict[str, object]) -> str:
     if not isinstance(aspects, list):
         return ""
     taxonomy = load_taxonomy()
-    invalid = sorted({
-        code
-        for aspect in aspects
-        if isinstance(aspect, dict)
-        for code in [aspect.get("topic_code")]
-        if isinstance(code, str) and code not in taxonomy.topic_parent_map
-    })
+    invalid = sorted(
+        {
+            code
+            for aspect in aspects
+            if isinstance(aspect, dict)
+            for code in [aspect.get("topic_code")]
+            if isinstance(code, str) and code not in taxonomy.topic_parent_map
+        }
+    )
     if not invalid:
         return ""
     allowed = {
@@ -74,7 +76,8 @@ def _taxonomy_retry_feedback(payload: dict[str, object]) -> str:
         if domain.enabled
     }
     return (
-        "以下 topic_code 不存在：" + ", ".join(invalid)
+        "以下 topic_code 不存在："
+        + ", ".join(invalid)
         + "。根据原文故障对象和证据重新选择，不得编造或拼接代码。"
         + "跨域独立观点可分别标注；证据不足不得猜测。合法标签："
         + json.dumps(allowed, ensure_ascii=False, separators=(",", ":"))

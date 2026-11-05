@@ -561,7 +561,13 @@ onUnmounted(() => {
       </p>
       <div class="filters">
         <span>每批处理数量</span>
-        <el-input-number  :model-value="reclassChunkSize" :min="1" :max="500" :step="10" @change="updateReclassChunkSize" />
+        <el-input-number
+          :model-value="reclassChunkSize"
+          :min="1"
+          :max="500"
+          :step="10"
+          @change="updateReclassChunkSize"
+        />
         <el-button
           type="primary"
           :loading="reclassStarting"

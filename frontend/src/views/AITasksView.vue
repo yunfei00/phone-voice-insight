@@ -224,12 +224,15 @@ async function showFailures(id: number, mode: 'failed' | 'skipped' = 'failed') {
   failureError.value = ''
   failureRows.value = []
   try {
-    const result = await (mode === 'skipped' ? getStructuredBatchSkipped(id) : getStructuredBatchFailures(id))
+    const result = await (mode === 'skipped'
+      ? getStructuredBatchSkipped(id)
+      : getStructuredBatchFailures(id))
     failureRows.value = result.results
     dispositions.value = await getManualDispositions(result.results.map((row) => row.content))
     if (result.next) failureError.value = '明细超过 100 条，当前仅展示前 100 条。'
     if (mode === 'skipped' && result.results.length === 0)
-      failureError.value = '当前批次未保存逐条跳过明细。旧任务仅有跳过总数时，无法准确反推出帖子 ID。'
+      failureError.value =
+        '当前批次未保存逐条跳过明细。旧任务仅有跳过总数时，无法准确反推出帖子 ID。'
   } catch {
     failureError.value = '失败明细加载失败，请稍后重试。'
   } finally {
@@ -423,8 +426,8 @@ onUnmounted(() => {
           }}</template
         ></el-table-column
       ><el-table-column label="任务描述" min-width="350" show-overflow-tooltip>
-          <template #default="{ row }">{{ taskDescription(row) }}</template>
-        </el-table-column><el-table-column prop="retry_count" label="重试轮次" width="95" /><el-table-column
+        <template #default="{ row }">{{ taskDescription(row) }}</template> </el-table-column
+      ><el-table-column prop="retry_count" label="重试轮次" width="95" /><el-table-column
         prop="success_count"
         label="成功"
         width="80"
@@ -443,7 +446,11 @@ onUnmounted(() => {
             >恢复</el-button
           ><el-button v-if="row.failed_count" text type="primary" @click="showFailures(row.id)"
             >失败详情</el-button
-          ><el-button v-if="row.skipped_count" text type="warning" @click="showFailures(row.id, 'skipped')"
+          ><el-button
+            v-if="row.skipped_count"
+            text
+            type="warning"
+            @click="showFailures(row.id, 'skipped')"
             >跳过详情</el-button
           ><el-button v-if="row.failed_count" text type="warning" @click="retry(row.id)"
             >重试失败</el-button

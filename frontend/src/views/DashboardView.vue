@@ -97,13 +97,14 @@ function savePreference(value: FilterValues): void {
       const range = rollingDates(days)
       return range.start_date === value.start_date && range.end_date === value.end_date
     })
-    const preset = value.start_date === 'all'
-      ? 'all'
-      : rolling
-        ? String(rolling)
-      : saved.preset !== 'custom' && !value.start_date && !value.end_date
-        ? '30'
-        : 'custom'
+    const preset =
+      value.start_date === 'all'
+        ? 'all'
+        : rolling
+          ? String(rolling)
+          : saved.preset !== 'custom' && !value.start_date && !value.end_date
+            ? '30'
+            : 'custom'
     window.localStorage.setItem(preferenceKey, JSON.stringify({ ...value, preset }))
     void saveDashboardPreference({
       product_id: value.product_id ?? null,
