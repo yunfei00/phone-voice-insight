@@ -580,6 +580,24 @@ class StructuredBatchViewSet(ViewSet):
             return Response(result, status=status.HTTP_400_BAD_REQUEST)
         return Response(result, status=status.HTTP_202_ACCEPTED if result.get("batch_id") else status.HTTP_200_OK)
 
+    def destroy(self, request: Request, pk: str | None = None) -> Response:
+        """Remove completed task history while preserving analysis runs and results."""
+        from django.db import transaction
+
+        assert pk is not None
+        with transaction.atomic():
+            batch = AnalysisBatch.objects.select_for_update().get(pk=pk)
+            if batch.status in (
+                AnalysisBatchStatus.PENDING,
+                AnalysisBatchStatus.RUNNING,
+                AnalysisBatchStatus.PAUSED,
+            ):
+                return Response({"error_code": "ACTIVE_BATCH_CANNOT_DELETE"}, status=409)
+            if batch.corpus_version == "structured-reclass-v2":
+                return Response({"error_code": "RECLASSIFICATION_HISTORY_REQUIRED"}, status=409)
+            batch.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=("post",))
     def cancel(self, _request: Request, pk: str | None = None) -> Response:
         assert pk is not None
