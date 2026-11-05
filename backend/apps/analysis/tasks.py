@@ -180,7 +180,9 @@ def run_structured_analysis_batch_task(
     ):
         # Historical reclassification is continuous, unlike a manual batch.
         # Cursor advances even when an item fails or is skipped: no repeat storm.
-        continue_historical_reclassification.delay(batch.created_by_id, batch.requested_count, after_id=max(content_ids))
+        continue_historical_reclassification.delay(
+            batch.created_by_id, batch.requested_count, after_id=max(content_ids)
+        )
     return {"batch_id": batch.id, "status": batch.status, "success": batch.success_count, "failed": batch.failed_count}
 
 
