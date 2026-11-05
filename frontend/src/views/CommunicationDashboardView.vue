@@ -38,7 +38,25 @@ function changeDatePreset(value: DatePreset) {
     void load()
   }
 }
+const pendingStartDate = ref<string | null>(null)
+function onCalendarChange(value: [Date, Date | null]) {
+  const start = value?.[0]
+  if (!start) return
+  const year = start.getFullYear()
+  const month = String(start.getMonth() + 1).padStart(2, '0')
+  const day = String(start.getDate()).padStart(2, '0')
+  pendingStartDate.value = `${year}-${month}-${day}`
+}
+function onDatePickerVisibleChange(visible: boolean) {
+  if (visible || !pendingStartDate.value) return
+  const start = pendingStartDate.value
+  pendingStartDate.value = null
+  if (start === dateRange.value[0]) return
+  const end = dateRange.value[1] >= start ? dateRange.value[1] : start
+  changeDateRange([start, end])
+}
 function changeDateRange(value: [string, string] | null) {
+  pendingStartDate.value = null
   if (!value?.[0] || !value?.[1]) return
   dateRange.value = value
   datePreset.value = 'custom'
@@ -257,6 +275,8 @@ onMounted(async () => {
           range-separator="至"
           style="width: 260px"
           @change="changeDateRange"
+          @calendar-change="onCalendarChange"
+          @visible-change="onDatePickerVisibleChange"
         />
         <el-button type="primary" :loading="loading" @click="load">刷新数据</el-button>
       </div>
