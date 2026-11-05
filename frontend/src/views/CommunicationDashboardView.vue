@@ -4,7 +4,7 @@ import type { EChartsOption } from 'echarts'
 import { getCommunicationDashboard, getProducts } from '@/api'
 import TechChart from '@/components/TechChart.vue'
 
-type DatePreset = '7' | '30' | '90' | 'custom'
+type DatePreset = 'all' | '7' | '30' | '90' | 'custom'
 const dateStorageKey = 'phone-voice.communication.date-filter'
 function rollingDates(days: number): [string, string] {
   const end = new Date()
@@ -33,7 +33,7 @@ function saveDateFilter() {
 function changeDatePreset(value: DatePreset) {
   datePreset.value = value
   if (value !== 'custom') {
-    dateRange.value = rollingDates(Number(value))
+    if (value !== 'all') dateRange.value = rollingDates(Number(value))
     saveDateFilter()
     void load()
   }
@@ -80,8 +80,8 @@ async function loadEvidence() {
     const result = await getCommunicationDashboard(
       productId.value,
       selected.value,
-      dateRange.value[0],
-      dateRange.value[1],
+      datePreset.value === 'all' ? undefined : dateRange.value[0],
+      datePreset.value === 'all' ? undefined : dateRange.value[1],
     )
     if (version === evidenceVersion) evidenceItems.value = result.evidence
   } catch (reason) {
@@ -167,8 +167,8 @@ async function load() {
     const response = await getCommunicationDashboard(
       productId.value,
       undefined,
-      dateRange.value[0],
-      dateRange.value[1],
+      datePreset.value === 'all' ? undefined : dateRange.value[0],
+      datePreset.value === 'all' ? undefined : dateRange.value[1],
     )
     if (version === requestVersion) {
       data.value = response
@@ -196,7 +196,7 @@ onMounted(async () => {
       preset?: DatePreset
       range?: string[]
     } | null
-    if (stored && ['7', '30', '90', 'custom'].includes(stored.preset || '')) {
+    if (stored && ['all', '7', '30', '90', 'custom'].includes(stored.preset || '')) {
       datePreset.value = stored.preset!
       if (
         stored.preset === 'custom' &&
@@ -204,7 +204,8 @@ onMounted(async () => {
         stored.range.every((d) => /^\\d{4}-\\d{2}-\\d{2}$/.test(d))
       )
         dateRange.value = [stored.range[0], stored.range[1]]
-      else if (stored.preset !== 'custom') dateRange.value = rollingDates(Number(stored.preset))
+      else if (stored.preset !== 'custom' && stored.preset !== 'all')
+        dateRange.value = rollingDates(Number(stored.preset))
     }
   } catch {
     /* ignore invalid preference */
@@ -261,6 +262,7 @@ onMounted(async () => {
           style="width: 130px"
           @change="changeDatePreset"
         >
+          <el-option label="全部时间" value="all" />
           <el-option label="近7天" value="7" />
           <el-option label="近30天" value="30" />
           <el-option label="近90天" value="90" />
@@ -268,6 +270,7 @@ onMounted(async () => {
         </el-select>
         <el-date-picker
           :model-value="dateRange"
+          :disabled="datePreset === 'all'"
           type="daterange"
           value-format="YYYY-MM-DD"
           start-placeholder="开始日期"
