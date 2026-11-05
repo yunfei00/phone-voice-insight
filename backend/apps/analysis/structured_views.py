@@ -300,10 +300,10 @@ class StructuredBatchViewSet(ViewSet):
         return Response({"content_id": content_id, "status": item.status, "reason": item.reason})
 
     def list(self, request: Request) -> Response:
-        queryset = AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1", dry_run=False).exclude(
-            error_message__startswith="HISTORY_HIDDEN:"
-        ).select_related
-            "product", "source"
+        queryset = (
+            AnalysisBatch.objects.filter(prompt_version="structured_analysis_v1", dry_run=False)
+            .exclude(error_message__startswith="HISTORY_HIDDEN:")
+            .select_related("product", "source")
         )
         if product_id := request.query_params.get("product"):
             queryset = queryset.filter(product_id=int(product_id))
