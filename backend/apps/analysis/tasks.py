@@ -300,7 +300,8 @@ def recover_stale_structured_batches() -> int:
 def continue_historical_reclassification(user_id: int, chunk_size: int = 100, after_id: int = 0) -> dict[str, Any]:
     """Schedule the next bounded chunk, excluding every record already attempted in this campaign.
 
-    Per-item failures are recorded and excluded from this pass; later chunks continue.\n\n    Operators can explicitly retry failed items after the pass completes.
+    Per-item failures are recorded and excluded from this pass; later chunks continue.\n 
+    Operators can explicitly retry failed items after the pass completes.
     """
     from django.db import transaction
 
