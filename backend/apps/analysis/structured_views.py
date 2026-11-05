@@ -61,7 +61,10 @@ class StructuredRunViewSet(ReadOnlyModelViewSet):
     ordering_fields = ("created_at", "completed_at", "latency_ms", "estimated_cost")
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
-        return AnalysisRun.objects.select_related("content", "structured_analysis")
+        queryset = AnalysisRun.objects.select_related("content", "structured_analysis")
+        if self.request.query_params.get("skipped_only") == "true":
+            return queryset.filter(error_code__startswith="SKIPPED_")
+        return queryset
 
 
 class StructuredBatchViewSet(ViewSet):
