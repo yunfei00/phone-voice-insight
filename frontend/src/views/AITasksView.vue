@@ -9,6 +9,7 @@ import {
   getSources,
   getStructuredBatches,
   getStructuredBatchFailures,
+  getStructuredBatchSkipped,
   getManualDispositions,
   setManualDisposition,
   cancelManualDisposition,
@@ -28,6 +29,7 @@ function originalPostUrl(value: string | undefined): string {
   }
 }
 const failureDialog = ref(false)
+const detailMode = ref<'failed' | 'skipped'>('failed')
 const failureLoading = ref(false)
 const failureRows = ref<StructuredFailure[]>([])
 const dispositions = ref<
@@ -214,17 +216,20 @@ async function resume(id: number) {
   ElMessage.success('任务已恢复')
   await load()
 }
-async function showFailures(id: number) {
+async function showFailures(id: number, mode: 'failed' | 'skipped' = 'failed') {
+  detailMode.value = mode
   failureBatchId.value = id
   failureDialog.value = true
   failureLoading.value = true
   failureError.value = ''
   failureRows.value = []
   try {
-    const result = await getStructuredBatchFailures(id)
+    const result = await (mode === 'skipped' ? getStructuredBatchSkipped(id) : getStructuredBatchFailures(id))
     failureRows.value = result.results
     dispositions.value = await getManualDispositions(result.results.map((row) => row.content))
-    if (result.next) failureError.value = '失败记录超过 100 条，当前仅展示前 100 条。'
+    if (result.next) failureError.value = '明细超过 100 条，当前仅展示前 100 条。'
+    if (mode === 'skipped' && result.results.length === 0)
+      failureError.value = '当前批次未保存逐条跳过明细。旧任务仅有跳过总数时，无法准确反推出帖子 ID。'
   } catch {
     failureError.value = '失败明细加载失败，请稍后重试。'
   } finally {
@@ -438,6 +443,8 @@ onUnmounted(() => {
             >恢复</el-button
           ><el-button v-if="row.failed_count" text type="primary" @click="showFailures(row.id)"
             >失败详情</el-button
+          ><el-button v-if="row.skipped_count" text type="warning" @click="showFailures(row.id, 'skipped')"
+            >跳过详情</el-button
           ><el-button v-if="row.failed_count" text type="warning" @click="retry(row.id)"
             >重试失败</el-button
           ><el-button
@@ -467,7 +474,7 @@ onUnmounted(() => {
     />
     <el-dialog
       v-model="failureDialog"
-      :title="`批次 #${failureBatchId} · 失败帖子`"
+      :title="`批次 #${failureBatchId} · ${detailMode === 'skipped' ? '跳过帖子' : '失败帖子'}`"
       width="min(900px, 95%)"
     >
       <el-alert v-if="failureError" :title="failureError" type="warning" :closable="false" />
