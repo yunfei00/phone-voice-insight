@@ -81,9 +81,14 @@ def run_structured_analysis_batch_task(
             .count()
         )
         batch.failed_count = max(0, batch.failed_count - previous)
-    batch.status = AnalysisBatchStatus.RUNNING
-    batch.started_at = timezone.now()
-    batch.save()
+    # A queued task may be cancelled before the worker starts; never revive it.
+    started = AnalysisBatch.objects.filter(
+        pk=batch_id, status=AnalysisBatchStatus.PENDING
+    ).update(status=AnalysisBatchStatus.RUNNING, started_at=timezone.now())
+    if not started:
+        batch.refresh_from_db()
+        return {"batch_id": batch_id, "status": batch.status, "cancelled_or_already_started": True}
+    batch.refresh_from_db()
     try:
         from apps.accounts.ai_service import get_structured_ai_provider
 
