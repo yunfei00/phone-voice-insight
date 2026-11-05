@@ -203,7 +203,7 @@ async function deleteHistory(id: number) {
     if (batches.value.length === 1 && page.value > 1) page.value -= 1
     await refreshBatchRows()
   } catch {
-    ElMessage.error('删除失败：任务可能仍在运行或属于历史重新分类批次')
+    ElMessage.error('删除失败：任务可能仍在运行，请先停止任务')
   }
 }
 async function pause(id: number) {
@@ -454,7 +454,7 @@ onUnmounted(() => {
             @click="cancel(row.id)"
             >取消</el-button
           ><el-button
-            v-if="!['PENDING', 'RUNNING', 'PAUSED'].includes(row.status) && row.corpus_version !== 'structured-reclass-v2'"
+            v-if="row.status !== 'RUNNING'"
             text
             type="danger"
             @click="deleteHistory(row.id)"
