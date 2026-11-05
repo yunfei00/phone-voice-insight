@@ -69,6 +69,21 @@ const form = reactive({
   token_limit: 50000,
   cost_budget: 1,
 })
+function taskDescription(row: StructuredBatch): string {
+  const processed = row.success_count + row.failed_count + row.skipped_count
+  const remaining = Math.max(0, row.requested_count - processed)
+  const kind = row.corpus_version === 'structured-reclass-v2' ? '历史数据重新分类' : 'AI 结构化分析'
+  const parts = [
+    kind,
+    `成功 ${row.success_count} 条`,
+    `失败 ${row.failed_count} 条`,
+    `跳过 ${row.skipped_count} 条`,
+  ]
+  if (remaining) parts.push(`尚未处理 ${remaining} 条`)
+  if (row.skipped_count) parts.push('跳过可能来自人工排除或模型返回跳过状态')
+  if (row.error_message) parts.push(`异常信息：${row.error_message}`)
+  return parts.join('；')
+}
 function formatTaskTime(value: string | null | undefined): string {
   if (!value) return '—'
   const date = new Date(value)
@@ -402,7 +417,9 @@ onUnmounted(() => {
             row.requested_count
           }}</template
         ></el-table-column
-      ><el-table-column prop="retry_count" label="重试轮次" width="95" /><el-table-column
+      ><el-table-column label="任务描述" min-width="350" show-overflow-tooltip>
+          <template #default="{ row }">{{ taskDescription(row) }}</template>
+        </el-table-column><el-table-column prop="retry_count" label="重试轮次" width="95" /><el-table-column
         prop="success_count"
         label="成功"
         width="80"
