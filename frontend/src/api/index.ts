@@ -513,6 +513,10 @@ export const createStructuredBatch = async (payload: {
   }
 }> => (await apiClient.post('/structured-batches/', payload)).data
 
+export const deleteStructuredBatch = async (id: number): Promise<void> => {
+  await apiClient.delete(`/structured-batches/${id}/`)
+}
+
 export const cancelStructuredBatch = async (id: number): Promise<StructuredBatch> =>
   (await apiClient.post<StructuredBatch>(`/structured-batches/${id}/cancel/`)).data
 
