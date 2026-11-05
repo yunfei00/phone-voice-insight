@@ -478,7 +478,7 @@ async function applyResultFilters(): Promise<void> {
 }
 
 function startRefreshTimers(): void {
-  progressTimer ||= setInterval(() => void pollProgress(), 15000)
+  progressTimer ||= setInterval(() => void pollProgress(), 5000)
   aggregateTimer ||= setInterval(() => void refreshAggregatesOnSchedule(), 60_000)
 }
 
