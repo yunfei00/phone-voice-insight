@@ -62,7 +62,8 @@ function categoryLabel(code: string): string {
 }
 
 async function load(persistPreference = true): Promise<void> {
-  if (persistPreference) void savePagePreference('issues', {
+  if (persistPreference)
+    void savePagePreference('issues', {
     ...filters.value,
     search: search.value,
     category: category.value,
