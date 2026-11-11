@@ -246,7 +246,14 @@ onMounted(async () => {
           @click="
             router.push({
               path: '/issues',
-              query: { product_id: side.product_id, search: issue.name },
+              query: {
+                product_id: side.product_id,
+                search: issue.name,
+                source_id: filters.source_id,
+                start_date: filters.start_date,
+                end_date: filters.end_date,
+                from: 'comparison',
+              },
             })
           "
         >
