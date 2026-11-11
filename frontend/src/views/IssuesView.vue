@@ -61,8 +61,8 @@ function categoryLabel(code: string): string {
   return findTaxonomyName(code, domains.value) || code
 }
 
-async function load(): Promise<void> {
-  void savePagePreference('issues', {
+async function load(persistPreference = true): Promise<void> {
+  if (persistPreference) void savePagePreference('issues', {
     ...filters.value,
     search: search.value,
     category: category.value,
@@ -129,7 +129,7 @@ onMounted(async () => {
     /* preferences are optional */
   }
   domains.value = (await getTaxonomy()).domains
-  await load()
+  await load(route.query.from !== 'comparison')
 })
 </script>
 
