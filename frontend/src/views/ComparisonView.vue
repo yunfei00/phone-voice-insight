@@ -10,11 +10,35 @@ import type { DashboardComparison, DashboardFilters as FilterValues, Product } f
 
 const router = useRouter()
 const route = useRoute()
+const preferenceKey = 'pvi:comparison:filters:v1'
+function savedFilters(): FilterValues {
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(preferenceKey) || '{}')
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    const saved = value as Record<string, unknown>
+    return {
+      source_id: typeof saved.source_id === 'number' ? saved.source_id : undefined,
+      start_date: typeof saved.start_date === 'string' ? saved.start_date : '',
+      end_date: typeof saved.end_date === 'string' ? saved.end_date : '',
+    }
+  } catch {
+    return {}
+  }
+}
+const previous = savedFilters()
 const filters = ref<FilterValues>({
-  source_id: route.query.source_id ? Number(route.query.source_id) : undefined,
-  start_date: String(route.query.start_date || ''),
-  end_date: String(route.query.end_date || ''),
+  source_id: route.query.source_id !== undefined ? Number(route.query.source_id) : previous.source_id,
+  start_date: typeof route.query.start_date === 'string' ? route.query.start_date : previous.start_date || '',
+  end_date: typeof route.query.end_date === 'string' ? route.query.end_date : previous.end_date || '',
 })
+function changeFilters(): void {
+  try {
+    window.localStorage.setItem(preferenceKey, JSON.stringify(filters.value))
+  } catch {
+    // The page remains usable when local storage is unavailable.
+  }
+  void load()
+}
 const products = ref<Product[]>([])
 const leftId = ref<number>()
 const rightId = ref<number>()
@@ -152,7 +176,7 @@ onMounted(async () => {
             :disabled="item.id === leftId"
         /></el-select>
       </div>
-      <DashboardFilters v-model="filters" compact :show-product="false" @change="load" />
+      <DashboardFilters v-model="filters" compact :show-product="false" @change="changeFilters" />
     </section>
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
     <el-alert
