@@ -62,14 +62,15 @@ function categoryLabel(code: string): string {
 }
 
 async function load(persistPreference = true): Promise<void> {
-  if (persistPreference)
+  if (persistPreference) {
     void savePagePreference('issues', {
-    ...filters.value,
-    search: search.value,
-    category: category.value,
-    severity: severity.value,
-    ordering: ordering.value,
-  })
+      ...filters.value,
+      search: search.value,
+      category: category.value,
+      severity: severity.value,
+      ordering: ordering.value,
+    })
+  }
   loading.value = true
   error.value = ''
   try {
