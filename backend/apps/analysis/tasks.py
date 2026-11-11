@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
 from apps.accounts.ai_service import get_user_ai_provider
@@ -54,7 +55,12 @@ def run_analysis_batch_task(
 
 @shared_task(name="run_structured_analysis_batch_task", autoretry_for=(), max_retries=0)
 def run_structured_analysis_batch_task(
-    batch_id: int, content_ids: list[int], *, max_retries: int = 1, retry_failed: bool = False
+    batch_id: int,
+    content_ids: list[int],
+    *,
+    max_retries: int = 1,
+    retry_failed: bool = False,
+    force_reclassify: bool = False,
 ) -> dict[str, Any]:
     batch = AnalysisBatch.objects.select_related("created_by").get(pk=batch_id)
     if batch.created_by is None:
@@ -75,9 +81,14 @@ def run_structured_analysis_batch_task(
             .count()
         )
         batch.failed_count = max(0, batch.failed_count - previous)
-    batch.status = AnalysisBatchStatus.RUNNING
-    batch.started_at = timezone.now()
-    batch.save()
+    # A queued task may be cancelled before the worker starts; never revive it.
+    started = AnalysisBatch.objects.filter(pk=batch_id, status=AnalysisBatchStatus.PENDING).update(
+        status=AnalysisBatchStatus.RUNNING, started_at=timezone.now()
+    )
+    if not started:
+        batch.refresh_from_db()
+        return {"batch_id": batch_id, "status": batch.status, "cancelled_or_already_started": True}
+    batch.refresh_from_db()
     try:
         from apps.accounts.ai_service import get_structured_ai_provider
 
@@ -100,6 +111,21 @@ def run_structured_analysis_batch_task(
             batch.status = AnalysisBatchStatus.BUDGET_EXCEEDED
             break
         if StructuredManualDisposition.objects.filter(content_id=content_id, status="EXCLUDED").exists():
+            # Record the skipped content in the batch failure-details view without
+            # changing any previous successful/current analysis for this content.
+            AnalysisRun.objects.create(
+                content_id=content_id,
+                batch=batch,
+                status=StructuredRunStatus.FAILED,
+                provider=batch.provider,
+                model=batch.model_name,
+                input_hash="",
+                configuration_hash="",
+                is_current=False,
+                error_code="SKIPPED_MANUAL_EXCLUDED",
+                error_message=("人工治理已排除: 本次未调用模型, 请先解除排除再重试。"),
+                completed_at=timezone.now(),
+            )
             batch.skipped_count += 1
             batch.save(update_fields=("skipped_count", "updated_at"))
             continue
@@ -107,7 +133,9 @@ def run_structured_analysis_batch_task(
         if wait_seconds > 0:
             time.sleep(wait_seconds)
         try:
-            run = analyze_content(content_id, provider, max_retries=max_retries, batch_id=batch.id)
+            run = analyze_content(
+                content_id, provider, force=force_reclassify, max_retries=max_retries, batch_id=batch.id
+            )
         except Exception as exc:
             logger.exception("structured_analysis_item_failed batch_id=%s content_id=%s", batch.id, content_id)
             batch.failed_count += 1
@@ -131,13 +159,30 @@ def run_structured_analysis_batch_task(
         ) / Decimal(1_000_000)
         batch.save()
     if batch.status == AnalysisBatchStatus.RUNNING:
-        batch.status = AnalysisBatchStatus.PARTIAL if batch.failed_count else AnalysisBatchStatus.SUCCESS
+        processed_count = batch.success_count + batch.failed_count + batch.skipped_count
+        batch.status = (
+            AnalysisBatchStatus.SUCCESS
+            if batch.failed_count == 0 and batch.skipped_count == 0 and processed_count == batch.requested_count
+            else AnalysisBatchStatus.PARTIAL
+        )
+        if processed_count != batch.requested_count:
+            batch.error_message = (
+                f"BATCH_COUNT_MISMATCH: processed={processed_count}, "
+                f"requested={batch.requested_count}, success={batch.success_count}, "
+                f"failed={batch.failed_count}, skipped={batch.skipped_count}"
+            )
     batch.finished_at = timezone.now()
     batch.save()
-    try:
-        dispatch_pending_structured_reviews.delay(batch.created_by_id, batch.product_id)
-    except Exception:
-        logger.exception("structured_followup_dispatch_failed batch_id=%s", batch.id)
+    if (
+        batch.corpus_version == "structured-reclass-v2"
+        and batch.status in (AnalysisBatchStatus.SUCCESS, AnalysisBatchStatus.PARTIAL)
+        and content_ids
+    ):
+        # Historical reclassification is continuous, unlike a manual batch.
+        # Cursor advances even when an item fails or is skipped: no repeat storm.
+        continue_historical_reclassification.delay(
+            batch.created_by_id, batch.requested_count, after_id=max(content_ids)
+        )
     return {"batch_id": batch.id, "status": batch.status, "success": batch.success_count, "failed": batch.failed_count}
 
 
@@ -154,6 +199,10 @@ def dispatch_pending_structured_reviews(user_id: int | None = None, product_id: 
     from apps.analysis.models import AnalysisRun
     from apps.reviews.services.final_corpus import final_corpus_reviews
 
+    # Disabled by default: legacy periodic dispatch can create unlimited empty batches.
+    # Explicit user actions must opt in to this scheduler.
+    if not getattr(settings, "STRUCTURED_AUTO_DISPATCH_ENABLED", False):
+        return {"queued": 0, "disabled": True}
     lock_key = f"structured-dispatch:{user_id or 'auto'}:{product_id or 'all'}"
     if not cache.add(lock_key, "1", timeout=240):
         return {"queued": 0, "locked": 1}
@@ -251,7 +300,7 @@ def recover_stale_structured_batches() -> int:
     """Mark orphaned batches interrupted; the next dispatch resumes pending corpus."""
     from datetime import timedelta
 
-    cutoff = timezone.now() - timedelta(hours=2)
+    cutoff = timezone.now() - timedelta(seconds=60 * 60 + int(getattr(settings, "CELERY_TASK_TIME_LIMIT", 7200)))
     stale = AnalysisBatch.objects.filter(
         prompt_version="structured_analysis_v1",
         status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
@@ -262,3 +311,56 @@ def recover_stale_structured_batches() -> int:
         error_message="WORKER_INTERRUPTED: batch did not report progress for two hours",
         finished_at=timezone.now(),
     )
+
+
+@shared_task(name="continue_historical_reclassification", max_retries=0)
+def continue_historical_reclassification(user_id: int, chunk_size: int = 100, after_id: int = 0) -> dict[str, Any]:
+    """Schedule the next bounded chunk, excluding every record already attempted in this campaign.
+
+    Per-item failures are recorded and excluded from this pass; later chunks continue.\n
+    Operators can explicitly retry failed items after the pass completes.
+    """
+    from django.db import transaction
+
+    from apps.reviews.services.final_corpus import final_corpus_reviews
+
+    if not 1 <= chunk_size <= 500:
+        return {"queued": 0, "error_code": "INVALID_CHUNK_SIZE"}
+    with transaction.atomic():
+        from django.contrib.auth import get_user_model
+
+        owner = get_user_model().objects.select_for_update().filter(pk=user_id, is_active=True).first()
+        if owner is None:
+            return {"queued": 0, "error_code": "OWNER_MISSING"}
+        active = AnalysisBatch.objects.filter(
+            prompt_version="structured_analysis_v1",
+            status__in=(AnalysisBatchStatus.PENDING, AnalysisBatchStatus.RUNNING),
+        )
+        if active.exists():
+            return {"queued": 0, "active_batch": active.values_list("id", flat=True).first()}
+        attempted = AnalysisRun.objects.filter(batch__corpus_version="structured-reclass-v2").values("content_id")
+        corpus = final_corpus_reviews().filter(pk__gt=after_id).exclude(pk__in=attempted).order_by("id")
+        first = corpus.first()
+        if first is None:
+            return {"queued": 0, "complete": True}
+        # Continue historical reclassification only; ordinary manual batches remain one-shot.
+        ids = list(corpus.values_list("id", flat=True)[:chunk_size])
+        batch = AnalysisBatch.objects.create(
+            created_by=owner,
+            product_id=first.product_id,
+            source_id=first.source_id,
+            corpus_version="structured-reclass-v2",
+            provider="USER_CONFIG",
+            model_name="USER_CONFIG",
+            prompt_version="structured_analysis_v1",
+            requested_count=len(ids),
+            dry_run=False,
+            max_concurrency=1,
+            requests_per_minute=10,
+            status=AnalysisBatchStatus.PENDING,
+            total_tokens=0,
+        )
+        transaction.on_commit(
+            lambda: run_structured_analysis_batch_task.delay(batch.id, ids, force_reclassify=True, max_retries=1)
+        )
+    return {"queued": len(ids), "batch_id": batch.id}

@@ -446,6 +446,16 @@ export const getStructuredBatchFailures = async (
     })
   ).data
 
+export const getStructuredBatchSkipped = async (
+  batchId: number,
+): Promise<PaginatedResponse<StructuredFailure>> =>
+  (
+    await apiClient.get<PaginatedResponse<StructuredFailure>>('/structured-runs/', {
+      params: { batch: batchId, skipped_only: 'true', page_size: 100 },
+      timeout: 30_000,
+    })
+  ).data
+
 export const getStructuredBatches = async (
   params: PageParams = {},
   options: StructuredRequestOptions = {},
@@ -512,6 +522,10 @@ export const createStructuredBatch = async (payload: {
     cost_estimate_reliable: boolean
   }
 }> => (await apiClient.post('/structured-batches/', payload)).data
+
+export const deleteStructuredBatch = async (id: number): Promise<void> => {
+  await apiClient.delete(`/structured-batches/${id}/`)
+}
 
 export const cancelStructuredBatch = async (id: number): Promise<StructuredBatch> =>
   (await apiClient.post<StructuredBatch>(`/structured-batches/${id}/cancel/`)).data
@@ -855,6 +869,14 @@ export const testAssistantModel = async (
     )
   ).data
 
+export const discoverAssistantModels = async (payload: {
+  provider: string
+  base_url: string
+  api_key?: string
+}): Promise<string[]> =>
+  (await apiClient.post<{ models: string[] }>('/assistant/models/discover-models/', payload)).data
+    .models
+
 export const getAssistantAvailableModels = async (id: number): Promise<string[]> =>
   (await apiClient.get<{ models: string[] }>(`/assistant/models/${id}/available-models/`)).data
     .models
@@ -1022,4 +1044,63 @@ export const savePagePreference = async (
   data: Record<string, unknown>,
 ): Promise<void> => {
   await apiClient.put(`/page-preferences/${page}/`, data)
+}
+
+export interface CommunicationDashboardData {
+  disclaimer: string
+  content_count: number
+  negative_content_count: number
+  categories: Array<{ topic_code: string; count: number }>
+  trend: Array<{ day: string; count: number }>
+  products: Array<{ analysis__content__product__name: string; count: number }>
+  evidence: Array<{
+    analysis__content_id: number
+    analysis__content__product__name: string
+    analysis__content__source_url: string
+    topic_code: string
+    severity: string
+    evidence_text: string
+    sentiment: string
+  }>
+}
+export const getCommunicationDashboard = async (
+  productId?: number,
+  topic?: string,
+  startDate?: string,
+  endDate?: string,
+): Promise<CommunicationDashboardData> =>
+  (
+    await apiClient.get<CommunicationDashboardData>('/structured-analyses/communication/', {
+      params: {
+        ...(productId ? { product: productId } : {}),
+        ...(topic ? { topic } : {}),
+        ...(startDate ? { start_date: startDate } : {}),
+        ...(endDate ? { end_date: endDate } : {}),
+      },
+      timeout: 60_000,
+    })
+  ).data
+
+export interface HistoricalReclassificationStatus {
+  total: number
+  attempted: number
+  remaining: number
+  successful_batches: number
+  failed_batches: number
+  active_batch_id: number | null
+  latest_batch: StructuredBatch | null
+}
+export async function getHistoricalReclassificationStatus(): Promise<HistoricalReclassificationStatus> {
+  return (
+    await apiClient.get<HistoricalReclassificationStatus>(
+      '/structured-batches/reclassification-status/',
+    )
+  ).data
+}
+export async function startHistoricalReclassification(
+  chunkSize = 100,
+): Promise<{ queued: boolean | number; complete?: boolean }> {
+  return (
+    await apiClient.post('/structured-batches/reclassification-start/', { chunk_size: chunkSize })
+  ).data
 }

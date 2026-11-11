@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Any
 
 from celery import shared_task
@@ -30,7 +30,7 @@ def generate_insight_reports(report_type: str) -> dict[str, Any]:
     if report_type not in ReportType.values:
         return {"status": "invalid_report_type", "report_type": report_type}
     current_timezone = timezone.get_current_timezone()
-    cutoff = timezone.make_aware(datetime.combine(timezone.localdate(), time.min), current_timezone)
+    cutoff = timezone.make_aware(datetime.combine(timezone.localdate() + timedelta(days=1), time.min), current_timezone)
     reports = [generate_report(report_type=report_type, product=None, source=None, period_end=cutoff)]
     for product in Product.objects.filter(is_active=True).order_by("id"):
         reports.append(generate_report(report_type=report_type, product=product, source=None, period_end=cutoff))

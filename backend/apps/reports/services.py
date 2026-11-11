@@ -43,7 +43,11 @@ def taxonomy_labels() -> tuple[dict[str, str], dict[str, str]]:
 def parse_range(params: Mapping[str, Any]) -> tuple[datetime, datetime, date, date]:
     today = timezone.localdate()
     try:
-        start_day = date.fromisoformat(str(params.get("start_date") or today - timedelta(days=29)))
+        start_day = (
+            date(1970, 1, 1)
+            if params.get("start_date") == "all"
+            else date.fromisoformat(str(params.get("start_date") or today - timedelta(days=29)))
+        )
         end_day = date.fromisoformat(str(params.get("end_date") or today))
     except ValueError as exc:
         raise ValueError("日期格式必须为 YYYY-MM-DD") from exc
@@ -69,7 +73,9 @@ def filtered_reviews(params: Mapping[str, Any]) -> QuerySet[ReviewRecord]:
     start, end, _, _ = parse_range(params)
     queryset = ReviewRecord.objects.annotate(
         metric_time=Coalesce("published_at", "collected_at", output_field=DateTimeField())
-    ).filter(metric_time__gte=start, metric_time__lt=end)
+    )
+    if params.get("start_date") != "all":
+        queryset = queryset.filter(metric_time__gte=start, metric_time__lt=end)
     if product_id := _integer(params, "product_id"):
         queryset = queryset.filter(product_id=product_id)
     if source_id := _integer(params, "source_id"):
@@ -494,12 +500,16 @@ def issue_detail(issue_id: str, params: Mapping[str, Any]) -> dict[str, Any]:
 def generate_report(
     *, report_type: str, product: Product | None, source: DataSource | None, period_end: datetime | None = None
 ) -> AggregateReport:
-    end = period_end or timezone.now()
+    if period_end is None:
+        tomorrow = timezone.localdate() + timedelta(days=1)
+        end = timezone.make_aware(datetime.combine(tomorrow, time.min), timezone.get_current_timezone())
+    else:
+        end = period_end
     days = 1 if report_type == ReportType.DAILY else 7
     start = end - timedelta(days=days)
     params: dict[str, Any] = {
         "start_date": timezone.localtime(start).date(),
-        "end_date": timezone.localtime(end).date(),
+        "end_date": timezone.localtime(end - timedelta(microseconds=1)).date(),
     }
     if product:
         params["product_id"] = product.id
@@ -523,7 +533,8 @@ def generate_report(
         "disclaimer": data["disclaimer"],
     }
     report_name = "每日摘要" if report_type == ReportType.DAILY else "最近 7 日趋势"
-    title = f"{product.name if product else '全部产品'} · {report_name}"
+    report_date = timezone.localtime(end - timedelta(microseconds=1)).date()
+    title = f"{product.name if product else '全部产品'} · {report_name} · {report_date:%Y-%m-%d}"
     with transaction.atomic():
         report, _ = AggregateReport.objects.update_or_create(
             product=product,

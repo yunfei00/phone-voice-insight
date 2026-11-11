@@ -49,7 +49,7 @@ function readPreference(): SavedDashboardFilters {
     const value = parsed as Record<string, unknown>
     const product_id = Number(value.product_id)
     const source_id = Number(value.source_id)
-    const preset = ['7', '30', '90', 'custom'].includes(String(value.preset))
+    const preset = ['all', '7', '30', '90', 'custom'].includes(String(value.preset))
       ? String(value.preset)
       : '30'
     const dates =
@@ -57,7 +57,9 @@ function readPreference(): SavedDashboardFilters {
       /^\d{4}-\d{2}-\d{2}$/.test(String(value.start_date || '')) &&
       /^\d{4}-\d{2}-\d{2}$/.test(String(value.end_date || ''))
         ? { start_date: String(value.start_date), end_date: String(value.end_date) }
-        : rollingDates(Number(preset === 'custom' ? '30' : preset))
+        : preset === 'all'
+          ? { start_date: 'all', end_date: '' }
+          : rollingDates(Number(preset === 'custom' ? '30' : preset))
     return {
       product_id: Number.isSafeInteger(product_id) && product_id > 0 ? product_id : undefined,
       source_id: Number.isSafeInteger(source_id) && source_id > 0 ? source_id : undefined,
@@ -95,17 +97,22 @@ function savePreference(value: FilterValues): void {
       const range = rollingDates(days)
       return range.start_date === value.start_date && range.end_date === value.end_date
     })
-    const preset = rolling
-      ? String(rolling)
-      : saved.preset !== 'custom' && !value.start_date && !value.end_date
-        ? '30'
-        : 'custom'
+    const preset =
+      value.start_date === 'all'
+        ? 'all'
+        : rolling
+          ? String(rolling)
+          : saved.preset !== 'custom' && !value.start_date && !value.end_date
+            ? '30'
+            : 'custom'
     window.localStorage.setItem(preferenceKey, JSON.stringify({ ...value, preset }))
     void saveDashboardPreference({
       product_id: value.product_id ?? null,
       source_id: value.source_id ?? null,
-      preset: preset as '7' | '30' | '90' | 'custom',
-      ...(preset === 'custom' ? { start_date: value.start_date, end_date: value.end_date } : {}),
+      preset: preset as 'all' | '7' | '30' | '90' | 'custom',
+      ...(preset === 'custom' || preset === 'all'
+        ? { start_date: value.start_date, end_date: value.end_date }
+        : {}),
     }).catch(() => {
       /* Keep the local fallback if the network is unavailable. */
     })
@@ -367,7 +374,9 @@ onMounted(() => {
           source_id: preference.source_id ?? undefined,
           ...(preference.preset === 'custom'
             ? { start_date: preference.start_date || '', end_date: preference.end_date || '' }
-            : rollingDates(Number(preference.preset))),
+            : preference.preset === 'all'
+              ? { start_date: 'all', end_date: '' }
+              : rollingDates(Number(preference.preset))),
         }
         // Explicit URL filters take precedence over stored user preferences.
         filters.value = {

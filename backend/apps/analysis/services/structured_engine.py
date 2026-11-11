@@ -47,6 +47,40 @@ def _prompt() -> str:
         "## 允许使用的一级标签与二级标签\n"
         f"{json.dumps(allowed_tags, ensure_ascii=False, separators=(',', ':'))}\n"
         "必须输出 Schema 顶层全部字段; aspects 中每个对象也必须输出全部必填字段。"
+        "\n通信问题必须依据原文证据区分功能、场景和现象：电梯/地下车库/地铁隧道是场景，"
+        "弱信号/无服务/断流/掉话/切换失败是现象，定位导航/蜂窝网络/通话/Wi-Fi/蓝牙是功能。"
+        "同一证据允许输出多个不重复的 NET 子类标签；没有明确证据不得推断场景。"
+    )
+
+
+def _taxonomy_retry_feedback(payload: dict[str, object]) -> str:
+    """Constrain invented model codes without guessing a semantic replacement."""
+    aspects = payload.get("aspects")
+    if not isinstance(aspects, list):
+        return ""
+    taxonomy = load_taxonomy()
+    invalid = sorted(
+        {
+            code
+            for aspect in aspects
+            if isinstance(aspect, dict)
+            for code in [aspect.get("topic_code")]
+            if isinstance(code, str) and code not in taxonomy.topic_parent_map
+        }
+    )
+    if not invalid:
+        return ""
+    allowed = {
+        domain.tag_id: [child.tag_id for child in domain.children if child.enabled]
+        for domain in taxonomy.domains
+        if domain.enabled
+    }
+    return (
+        "以下 topic_code 不存在："
+        + ", ".join(invalid)
+        + "。根据原文故障对象和证据重新选择，不得编造或拼接代码。"
+        + "跨域独立观点可分别标注；证据不足不得猜测。合法标签："
+        + json.dumps(allowed, ensure_ascii=False, separators=(",", ":"))
     )
 
 
@@ -185,10 +219,9 @@ def _create_run(
             and current.status in (StructuredRunStatus.SUCCEEDED, StructuredRunStatus.REVIEW_REQUIRED)
         ):
             return current, False
-        if current:
-            current.is_current = False
-            current.save(update_fields=("is_current", "updated_at"))
+        # Keep the previous published analysis until the replacement succeeds.
         run = AnalysisRun.objects.create(
+            is_current=False,
             content=review,
             batch_id=batch_id,
             status=StructuredRunStatus.RUNNING,
@@ -268,7 +301,7 @@ def _analyze_long_text(review: ReviewRecord, provider: AIProvider) -> tuple[Stru
                 feedback = f"INVALID_JSON:{exc}"
                 continue
             if not validated.valid or validated.payload is None:
-                feedback = "; ".join(validated.errors)
+                feedback = "; ".join(validated.errors) + "\n" + _taxonomy_retry_feedback(decoded)
                 continue
             data = validated.payload.model_dump()
             for aspect in data["aspects"]:
@@ -329,7 +362,7 @@ def analyze_content(
                 result = None
                 feedback = f"INVALID_JSON:{exc}"
             else:
-                feedback = "; ".join(result.errors)
+                feedback = "; ".join(result.errors) + "\n" + _taxonomy_retry_feedback(decoded)
             if result is not None and result.valid and result.payload is not None:
                 _persist_success(
                     run, result.payload, response.latency_ms, response.prompt_tokens, response.completion_tokens
@@ -353,6 +386,10 @@ def _persist_success(
     output_tokens: int | None,
 ) -> None:
     with transaction.atomic():
+        AnalysisRun.objects.filter(content_id=run.content_id, is_current=True).exclude(pk=run.pk).update(
+            is_current=False
+        )
+        run.is_current = True
         analysis = StructuredAnalysis.objects.create(
             run=run,
             content=run.content,
@@ -380,6 +417,9 @@ def _persist_success(
 
 def _persist_failure(run: AnalysisRun, code: str, message: str, *, response: AIProviderResponse | None = None) -> None:
     run.status = StructuredRunStatus.FAILED
+    run.is_current = (
+        not AnalysisRun.objects.filter(content_id=run.content_id, is_current=True).exclude(pk=run.pk).exists()
+    )
     run.error_code = code
     run.error_message = message[:1000]
     if response is not None:

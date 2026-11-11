@@ -1,0 +1,47 @@
+name: Communication dashboard CI
+on:
+  push:
+    branches: [feature/communication-dashboard]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.24"
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --group dev
+      - name: Check Python syntax
+        working-directory: backend
+        run: uv run python -m compileall -q apps ../ai
+      - name: Ruff
+        working-directory: backend
+        run: uv run ruff check apps/analysis/management/commands/reclassify_history.py apps/assistant/orchestrator.py apps/analysis/structured_views.py apps/analysis/services/structured_engine.py apps/analysis/tasks.py
+      - name: Django checks
+        working-directory: backend
+        run: uv run python manage.py check --settings=config.settings.test
+      - name: Regression tests
+        working-directory: backend
+        run: uv run pytest -q tests/test_assistant_relative_dates.py tests/test_communication_aggregation.py
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+
+
+

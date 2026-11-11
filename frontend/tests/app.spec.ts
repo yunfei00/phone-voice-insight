@@ -118,6 +118,7 @@ vi.mock('@/api', () => ({
 
 const expectedNavigationLabels = [
   '智能驾驶舱',
+  '通信智能看板',
   'AI智能助手',
   '产品对比中心',
   '用户问题洞察',
