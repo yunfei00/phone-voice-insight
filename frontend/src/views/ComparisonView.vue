@@ -30,9 +30,7 @@ const filters = ref<FilterValues>({
   source_id:
     route.query.source_id !== undefined ? Number(route.query.source_id) : previous.source_id,
   start_date:
-    typeof route.query.start_date === 'string'
-      ? route.query.start_date
-      : previous.start_date || '',
+    typeof route.query.start_date === 'string' ? route.query.start_date : previous.start_date || '',
   end_date:
     typeof route.query.end_date === 'string' ? route.query.end_date : previous.end_date || '',
 })
